@@ -180,7 +180,7 @@ export default function NotificationsPage() {
   // 鉴权未完成：显示加载态
   if (!authChecked || (userId && loading && notifications.length === 0)) {
     return (
-      <section className="view notifications-page">
+      <section className="notifications-page">
         <div className="notif-loading">
           <Loader2 size={22} className="notif-spin" />
           <span>加载通知中…</span>
@@ -190,7 +190,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <section className="view notifications-page">
+    <section className="notifications-page">
       {/* ============ 页头 ============ */}
       <div className="page-head">
         <div>

@@ -70,13 +70,14 @@ export default async function DashboardLayout({
   const quotaUsed = profile?.free_quota_used ?? 0;
   const quotaLimit = profile?.free_quota_limit ?? 10;
   const currentScript = scriptsTyped[0] ?? null;
-  // currentScript 为空时所有编辑器子功能链接指向新建剧本页，避免 /scripts/new/<sub> 404
+  // currentScript 为空时编辑器子功能链接指向 demo 路径（/editor/demo），
+  // 这样侧栏的时间线/逻辑校验/线索卡/人物关系/插画生成均可直接访问 Mock 展示。
+  // /editor/page.tsx 也会在无剧本时重定向到 /editor/demo。
   const editorBase = currentScript
     ? `/editor/${currentScript.id}`
-    : '/scripts/new';
-  /** 有 currentScript 时拼子路径；无则统一回退到 editorBase，避免访问不存在的子路由 */
-  const navHref = (sub: string) =>
-    currentScript ? `${editorBase}/${sub}` : editorBase;
+    : '/editor/demo';
+  /** 拼接编辑器子路径；无剧本时使用 /editor/demo 作为 scriptId，子页面均为 Mock 展示 */
+  const navHref = (sub: string) => `${editorBase}/${sub}`;
 
   return (
     <div className="app">

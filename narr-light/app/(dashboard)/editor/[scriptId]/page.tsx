@@ -385,7 +385,7 @@ export default function EditorPage({ params }: PageProps) {
   const versionB = versions[0]?.version ?? 'v1';
 
   return (
-    <section className="view editor-view" id="view-editor">
+    <section className="editor-view" id="view-editor">
       {/* ===== 页头 ===== */}
       <div className="page-head">
         <div>

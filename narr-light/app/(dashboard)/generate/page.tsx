@@ -9,13 +9,19 @@
  */
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Play, FileDown } from 'lucide-react';
 import { ParamForm } from '@/components/generate/param-form';
 import { GenPanel, type StreamLine } from '@/components/generate/gen-panel';
 import { ContentBlockedModal } from '@/components/common/content-blocked-modal';
 import { checkContentSafety } from '@/lib/utils/content-safety';
-import type { ScriptGenerationParams } from '@/lib/ai/prompts/script-generation';
+import type { ScriptGenre, ScriptDifficulty } from '@/types';
+import type {
+  AgeRating,
+  ScriptGenerationParams,
+  WritingStyle,
+} from '@/lib/ai/prompts/script-generation';
 import './generate.css';
 
 /** 默认参数（对齐原型默认值） */
@@ -70,7 +76,7 @@ const MOCK_LINES: StreamLine[] = [
 /** 模型标识 */
 const MODEL_TAG = 'deepseek-v4-pro';
 
-export default function GeneratePage() {
+function GeneratePageInner() {
   const [params, setParams] = useState<ScriptGenerationParams>(DEFAULT_PARAMS);
   const [isGenerating, setIsGenerating] = useState(false);
   const [percent, setPercent] = useState(0);
@@ -87,6 +93,9 @@ export default function GeneratePage() {
 
   const timerRef = useRef<number | null>(null);
 
+  // ===== query string 预填参数（来自 /scripts/new AI 模式跳转） =====
+  const searchParams = useSearchParams();
+
   useEffect(() => {
     return () => {
       if (timerRef.current !== null) {
@@ -94,6 +103,47 @@ export default function GeneratePage() {
       }
     };
   }, []);
+
+  // ===== 读取 query string 并合并到表单参数（仅当存在时覆盖默认值） =====
+  useEffect(() => {
+    const title = searchParams.get('title');
+    const genre = searchParams.get('genre') as ScriptGenre | null;
+    const players = searchParams.get('players');
+    const duration = searchParams.get('duration');
+    const difficulty = searchParams.get('difficulty') as ScriptDifficulty | null;
+    const ageRating = searchParams.get('ageRating') as AgeRating | null;
+    const writingStyle = searchParams.get('writingStyle') as WritingStyle | null;
+    const background = searchParams.get('background');
+    const theme = searchParams.get('theme');
+
+    // 无任何 query string 参数时保持默认值，不修改状态
+    if (
+      !title &&
+      !genre &&
+      !players &&
+      !duration &&
+      !difficulty &&
+      !ageRating &&
+      !writingStyle &&
+      !background &&
+      !theme
+    ) {
+      return;
+    }
+
+    const patch: Partial<ScriptGenerationParams> = {};
+    if (title) patch.title = title;
+    if (genre) patch.genre = genre;
+    if (players) patch.players = Number(players);
+    if (duration) patch.duration = Number(duration);
+    if (difficulty) patch.difficulty = difficulty;
+    if (ageRating) patch.ageRating = ageRating;
+    if (writingStyle) patch.writingStyle = writingStyle;
+    if (background) patch.background = background;
+    if (theme) patch.theme = theme;
+
+    setParams((prev) => ({ ...prev, ...patch }));
+  }, [searchParams, setParams]);
 
   const handleChange = (patch: Partial<ScriptGenerationParams>) => {
     setParams((prev) => ({ ...prev, ...patch }));
@@ -234,5 +284,17 @@ export default function GeneratePage() {
         suggestion={blocked.suggestion}
       />
     </>
+  );
+}
+
+/**
+ * 默认导出：用 Suspense 包裹 GeneratePageInner，满足 Next.js 对
+ * useSearchParams 的 Suspense 边界要求（避免 next build 报错）。
+ */
+export default function GeneratePage() {
+  return (
+    <Suspense fallback={null}>
+      <GeneratePageInner />
+    </Suspense>
   );
 }

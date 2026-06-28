@@ -296,3 +296,171 @@
     transform: rotate(360deg);
   }
 }
+
+/* ===================== 新建页（增强版 · T502） ===================== */
+.new-script-layout {
+  display: grid;
+  grid-template-columns: 480px 1fr;
+  gap: 18px;
+  align-items: start;
+}
+@media (max-width: 1280px) {
+  .new-script-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 创建方式卡片组 */
+.create-mode-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.create-mode-card {
+  flex: 1;
+  padding: 14px 16px;
+  background: rgba(253, 248, 240, 0.72);
+  border: 1px solid rgba(122, 92, 58, 0.22);
+  border-left: 3px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.create-mode-card:hover {
+  border-left-color: var(--gold);
+  box-shadow: var(--shadow-sm);
+}
+.create-mode-card.active {
+  border-left-color: var(--blood);
+  background: rgba(138, 28, 28, 0.06);
+  box-shadow: var(--shadow-sm);
+}
+.create-mode-card .cm-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(138, 28, 28, 0.1);
+  border-radius: 4px;
+  color: var(--blood);
+  margin-bottom: 8px;
+}
+.create-mode-card .cm-title {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.create-mode-card .cm-desc {
+  font-size: 12px;
+  color: var(--sepia);
+  line-height: 1.5;
+}
+
+/* 右栏提示面板 */
+.hint-panel {
+  position: relative;
+  padding: 20px;
+  background: rgba(253, 248, 240, 0.6);
+  border: 1px solid rgba(122, 92, 58, 0.18);
+  border-radius: 4px;
+}
+.hint-panel::before {
+  content: '拟';
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-family: 'Ma Shan Zheng', cursive;
+  font-size: 28px;
+  color: rgba(138, 28, 28, 0.15);
+  pointer-events: none;
+}
+.hint-panel h4 {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed rgba(122, 92, 58, 0.22);
+}
+.hint-divider {
+  text-align: center;
+  color: var(--gold);
+  font-size: 12px;
+  margin: 14px 0;
+  opacity: 0.6;
+}
+.hint-item {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(184, 132, 28, 0.08);
+  border-left: 2px solid var(--warn);
+  border-radius: 2px;
+  font-size: 12px;
+  color: var(--char);
+  line-height: 1.5;
+}
+.hint-item.hint-warn {
+  border-left-color: var(--blood);
+  background: rgba(138, 28, 28, 0.06);
+  color: var(--blood);
+}
+.hint-item svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* 参数汇总预览 */
+.param-preview {
+  margin-top: 14px;
+}
+.param-preview .pp-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dotted rgba(122, 92, 58, 0.15);
+  font-size: 12px;
+}
+.param-preview .pp-key {
+  font-family: 'Courier Prime', monospace;
+  color: var(--sepia);
+  letter-spacing: 0.04em;
+}
+.param-preview .pp-val {
+  font-family: 'Noto Serif SC', serif;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Toast 提示 */
+.new-script-toast {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 20px;
+  background: var(--ink);
+  color: var(--paper-light);
+  border-radius: 4px;
+  box-shadow: var(--shadow-md);
+  z-index: 100;
+  font-size: 13px;
+  animation: toast-in 0.3s ease;
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}

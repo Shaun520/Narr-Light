@@ -166,7 +166,7 @@ export default async function QuotaPage() {
   const isQuotaLow = !isPro && quotaInfo.remaining <= 2;
 
   return (
-    <section className="view quota-page">
+    <section className="quota-page">
       {/* ============ 页头 ============ */}
       <div className="page-head">
         <div>

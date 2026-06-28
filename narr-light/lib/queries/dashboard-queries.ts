@@ -32,13 +32,20 @@ interface ScriptRow {
   updated_at: string | null;
 }
 
-/** 缓存 `supabase.auth.getUser()`：JWT 本地验证，layout / 子页面共享结果 */
+/** 缓存 `supabase.auth.getUser()`：JWT 本地验证，layout / 子页面共享结果。
+ *  注意：fetch 失败时返回 null 而非抛错，避免 React `cache()` 状态被污染
+ *  导致后续渲染出现 "headCacheNode" / "Should not already be working" 等内部错误。
+ */
 export const getCachedUser = cache(async () => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user;
+  } catch {
+    return null;
+  }
 });
 
 /**

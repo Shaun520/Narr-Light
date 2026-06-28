@@ -2,10 +2,11 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Supabase Auth 中间件
+ * Supabase Auth 代理（原 middleware）
  * 保护需要认证的路由，刷新过期的会话 Token
+ * Next.js 16 起 middleware 约定已更名为 proxy，此函数被 proxy.ts 调用
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   });
@@ -31,10 +32,17 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // 刷新会话以保持活跃状态
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // 刷新会话以保持活跃状态。
+  // 网络异常（如代理证书错误）时降级为未登录，避免级联导致 React 内部错误。
+  let user: null | { id: string } = null;
+  try {
+    const {
+      data: { user: u },
+    } = await supabase.auth.getUser();
+    user = u as { id: string } | null;
+  } catch {
+    user = null;
+  }
 
   // 路由守卫逻辑：
   // 1. 公开路由：/、/auth/login、/auth/sign-up、/auth/forgot-password 等

@@ -49,7 +49,7 @@ export default function ScriptsPage() {
   const { scripts: list } = useDashboard();
 
   return (
-    <section className="view scripts-view">
+    <section className="scripts-view">
       {/* ===== 页头 ===== */}
       <div className="page-head">
         <div>

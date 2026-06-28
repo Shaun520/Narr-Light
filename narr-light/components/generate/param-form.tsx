@@ -16,6 +16,7 @@ import type {
   ScriptGenerationParams,
   WritingStyle,
 } from '@/lib/ai/prompts/script-generation';
+import { validateScriptParams } from '@/lib/utils/script-param-validation';
 
 /** 题材选项 */
 const GENRE_OPTIONS: Array<{ value: ScriptGenre; label: string }> = [
@@ -56,20 +57,14 @@ export interface ParamFormProps {
   isGenerating: boolean;
 }
 
-/** 参数合理性校验：返回提示文案，null 表示通过 */
-function validateParams(p: ScriptGenerationParams): string | null {
-  if (!p.title.trim()) return '请填写剧本标题';
-  if (p.players <= 4 && p.genre === 'hardcore') {
-    return '提示：4 人硬核本推理密度高，线索分发空间有限，建议 5 人以上以保证体验均衡。';
-  }
-  if (p.players >= 7 && p.duration <= 2) {
-    return '提示：7 人以上剧本搭配 2 小时以内时长，单人物戏份可能偏少，建议延长至 3 小时以上。';
-  }
-  return null;
-}
-
 export function ParamForm({ params, onChange, onGenerate, isGenerating }: ParamFormProps) {
-  const hint = validateParams(params);
+  const hint = validateScriptParams({
+    title: params.title,
+    genre: params.genre,
+    players: params.players,
+    duration: params.duration,
+    difficulty: params.difficulty,
+  });
   const canGenerate = !isGenerating && params.title.trim().length > 0;
 
   return (

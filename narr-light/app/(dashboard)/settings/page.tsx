@@ -70,7 +70,7 @@ export default async function SettingsPage({
   const showSavedBanner = saved === '1';
 
   return (
-    <section className="view settings-page">
+    <section className="settings-page">
       {/* ============ 页头 ============ */}
       <div className="page-head">
         <div>
