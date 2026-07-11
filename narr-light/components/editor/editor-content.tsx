@@ -23,6 +23,7 @@ import {
   type ClueOverviewNode,
   type SimpleNode,
   type ScriptClue,
+  type ScriptNodeData,
 } from './script-data';
 
 interface EditorContentProps {
@@ -32,6 +33,7 @@ interface EditorContentProps {
   snapshots: Record<string, string>;
   /** 内容变更回调（contenteditable input 事件） */
   onInput?: () => void;
+  dataMap?: Record<string, ScriptNodeData>;
 }
 
 /**
@@ -137,11 +139,12 @@ export function EditorContent({
   nodeId,
   snapshots,
   onInput,
+  dataMap = SCRIPT_DATA,
 }: EditorContentProps) {
   const isEditing = useEditorStore((s) => s.isEditing);
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const data = SCRIPT_DATA[nodeId];
+  const data = dataMap[nodeId];
   const snapshot = snapshots[nodeId];
 
   // 进入编辑态时，光标移到末尾（对齐原型 enterEditMode）

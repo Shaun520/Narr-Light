@@ -5,7 +5,7 @@
  * - 骞跺彂鎺у埗锛氶樁娈?2 鍒嗘壒 Promise.all锛堟瘡鎵?4 涓級
  * - 纭闂搁棬锛氶樁娈?0 瀹屾垚鍚庢殏鍋滐紝绛夊緟鐢ㄦ埛纭璁惧畾鏈? * - 涓柇鍙栨秷锛欰bortController 缁堟褰撳墠 SSE 娴? * - 杩涘害鍥炶皟锛氭瘡闃舵 chunk/progress/completed/error 浜嬩欢閫忎紶缁?UI
  * - 缁紶鎭㈠锛歳esumeFromScript(scriptId) 妫€娴?7 琛ㄥ畬鎴愮姸鎬佸苟鎭㈠鍒板搴旈樁娈? */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { createSSEClient } from '@/lib/ai/stream/sse-handler';
 import type { ScriptGenerationParams } from '@/lib/ai/prompts/script-generation';
@@ -50,6 +50,9 @@ export interface PhaseState {
   subItems?: PhaseSubItem[];
   /** 鑰楁椂锛堢锛?*/
   durationSeconds?: number;
+  mode?: 'mock' | 'real';
+  provider?: string;
+  model?: string;
 }
 
 /** 缂栨帓鍣ㄦ暣浣撶姸鎬?*/
@@ -202,6 +205,11 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
   const abortControllerRef = useRef<AbortController | null>(null);
   const paramsRef = useRef<ScriptGenerationParams | null>(null);
   const scriptIdRef = useRef<string | null>(null);
+  const stateRef = useRef<PhasedGenerationState>(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // ===== handleSSEEvent锛氭牴鎹?SSE 浜嬩欢鐨?event 瀛楁鍒嗗彂鐘舵€佹洿鏂?=====
   const handleSSEEvent = useCallback(
@@ -215,7 +223,13 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
 
       switch (eventType) {
         case 'start':
-          // 宸叉湁 running 鐘舵€侊紝鏃犻渶棰濆鏇存柊
+          setState((prev) =>
+            updatePhase(prev, phaseId, {
+              mode: parsed.mode === 'real' || parsed.mode === 'mock' ? parsed.mode : undefined,
+              provider: typeof parsed.provider === 'string' ? parsed.provider : undefined,
+              model: typeof parsed.model === 'string' ? parsed.model : undefined,
+            }),
+          );
           break;
 
         case 'chunk': {
@@ -328,9 +342,20 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       if (!scriptId) throw new Error('scriptId 未设置');
 
       const url = `/api/generate/${phaseId.replace(/_/g, '-')}`;
+      const storyBible = phaseId !== 'story_bible' ? state.storyBible : undefined;
+      const latestState = stateRef.current;
+      const phaseContext =
+        phaseId !== 'story_bible'
+          ? {
+              storyBible: latestState.storyBible,
+              characterProfiles: latestState.phases.character_profiles.result,
+              actStructure: latestState.phases.act_structure.result,
+              clues: latestState.phases.clues.result,
+            }
+          : {};
       const body = options?.characterId
-        ? { scriptId, characterId: options.characterId, params }
-        : { scriptId, params };
+        ? { scriptId, characterId: options.characterId, params, storyBible, ...phaseContext }
+        : { scriptId, params, storyBible, ...phaseContext };
 
       // 鍒涘缓 AbortController 骞跺瓨鍌ㄥ埌 ref
       const controller = new AbortController();
@@ -420,7 +445,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         });
       });
     },
-    [handleSSEEvent],
+    [handleSSEEvent, state.storyBible],
   );
 
   // ===== runCharacterScriptSubTask锛氬崟涓鑹插墽鏈瓙浠诲姟 =====
@@ -447,7 +472,14 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       if (!scriptId) throw new Error('scriptId 未设置');
 
       const url = '/api/generate/character-script';
-      const body = { scriptId, characterId, params };
+      const body = {
+        scriptId,
+        characterId,
+        params,
+        storyBible: stateRef.current.storyBible,
+        characterProfiles: stateRef.current.phases.character_profiles.result,
+        actStructure: stateRef.current.phases.act_structure.result,
+      };
 
       const controller = new AbortController();
       abortControllerRef.current = controller;

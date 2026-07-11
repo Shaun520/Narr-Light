@@ -2,19 +2,91 @@ import { NextRequest } from 'next/server';
 import { DeepSeekProvider, parseJSONWithTolerance } from '@/lib/ai/providers/deepseek-provider';
 import { buildStoryBiblePrompt, type StoryBibleJson } from '@/lib/ai/prompts/story-bible';
 import type { ScriptGenerationParams } from '@/lib/ai/prompts/script-generation';
-import type { CharacterProfilesJson } from '@/lib/ai/prompts/character-profiles';
-import type { ActStructureJson } from '@/lib/ai/prompts/act-structure';
+import {
+  buildCharacterProfilesPrompt,
+  type CharacterProfilesJson,
+} from '@/lib/ai/prompts/character-profiles';
+import {
+  buildActStructurePrompt,
+  type ActStructureJson,
+} from '@/lib/ai/prompts/act-structure';
+import {
+  buildCharacterScriptPrompt,
+  type CharacterScriptJson,
+} from '@/lib/ai/prompts/character-script';
+import type { CharacterProfile } from '@/lib/ai/prompts/character-profiles';
+import { buildCluesPrompt, type CluesJson } from '@/lib/ai/prompts/clues';
+import {
+  buildOrganizerManualPrompt,
+  type OrganizerManualJson,
+} from '@/lib/ai/prompts/organizer-manual';
+import {
+  buildTruthReviewPrompt,
+  type TruthReviewJson,
+} from '@/lib/ai/prompts/truth-review';
 import { createClient } from '@/lib/supabase/server';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const GENERATION_MODE = process.env.AI_GENERATION_MODE ?? 'mock';
+
+type GenerationMode = 'mock' | 'real';
 
 interface GenerateRequestBody {
   scriptId: string;
   params: ScriptGenerationParams;
+  characterId?: string;
+  storyBible?: StoryBibleJson;
+  characterProfiles?: CharacterProfilesJson;
+  actStructure?: ActStructureJson;
+  characterScripts?: CharacterScriptJson[];
+  clues?: CluesJson;
 }
 
 function buildError(message: string, status = 500): Response {
   return Response.json({ error: message }, { status });
+}
+
+function getGenerationMode(): GenerationMode {
+  if (GENERATION_MODE === 'real') return 'real';
+  if (GENERATION_MODE === 'mock') return 'mock';
+
+  console.warn(`Unknown AI_GENERATION_MODE "${GENERATION_MODE}", falling back to mock mode.`);
+  return 'mock';
+}
+
+function generationMeta() {
+  const mode = getGenerationMode();
+  return {
+    mode,
+    provider: mode === 'real' ? 'deepseek' : 'local',
+    model: mode === 'real' ? 'deepseek-chat' : 'mock',
+  };
+}
+
+async function parseOrRepairJson<T>(text: string, schemaHint: string): Promise<T> {
+  try {
+    return parseJSONWithTolerance<T>(text);
+  } catch (error) {
+    const provider = new DeepSeekProvider();
+    const repaired = await provider.generate({
+      systemPrompt:
+        'You repair malformed JSON. Return only valid JSON. Do not add markdown, comments, or explanation. Preserve the original meaning and fields.',
+      prompt: [
+        `Fix this malformed JSON for schema: ${schemaHint}.`,
+        'Rules: keep Chinese text as-is, escape quotes inside strings, add missing commas/brackets only when needed.',
+        'Malformed JSON:',
+        text,
+      ].join('\n\n'),
+      temperature: 0,
+    });
+
+    try {
+      return parseJSONWithTolerance<T>(repaired);
+    } catch {
+      if (error instanceof Error) throw error;
+      throw new Error('Failed to parse JSON from AI response');
+    }
+  }
 }
 
 function encodeSse(encoder: TextEncoder, event: string, data: unknown): Uint8Array {
@@ -262,6 +334,187 @@ function buildMockActStructure(params: ScriptGenerationParams, storyBible: Story
   };
 }
 
+async function getStoryBibleForPhase(body: GenerateRequestBody): Promise<StoryBibleJson> {
+  if (body.storyBible) {
+    return body.storyBible;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('story_bibles')
+    .select(
+      'murderer_character_name, murder_method, core_trick, motive_chain, character_skeleton, timeline_outline, truth_summary, foreshadowing_plan',
+    )
+    .eq('script_id', body.scriptId)
+    .single();
+
+  if (error || !data) {
+    throw new Error('Story bible is required for this phase');
+  }
+
+  return {
+    murdererName: data.murderer_character_name,
+    murderMethod: data.murder_method,
+    coreTrick: data.core_trick,
+    motiveChain: data.motive_chain,
+    characterSkeleton: data.character_skeleton,
+    timelineOutline: data.timeline_outline,
+    truthSummary: data.truth_summary,
+    foreshadowingPlan: data.foreshadowing_plan,
+  };
+}
+
+async function getCharacterProfilesForPhase(body: GenerateRequestBody): Promise<CharacterProfilesJson> {
+  if (body.characterProfiles?.characters?.length) {
+    return body.characterProfiles;
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('characters')
+    .select('name, role_identity, gender, age, personality, background_story, personal_task, is_murderer')
+    .eq('script_id', body.scriptId)
+    .order('sort_order');
+
+  if (error || !data?.length) {
+    throw new Error('Character profiles are required for character script generation');
+  }
+
+  const storyBible = await getStoryBibleForPhase(body);
+  return {
+    characters: data.map((row) => {
+      const bibleNode = storyBible.characterSkeleton.nodes.find((node) => node.name === row.name);
+      return {
+        name: row.name,
+        roleIdentity: row.role_identity,
+        gender: row.gender,
+        age: row.age,
+        personality: row.personality,
+        backgroundStory: row.background_story,
+        personalTask: row.personal_task,
+        isMurderer: row.is_murderer,
+        secretFromBible: bibleNode?.secret ?? '',
+      };
+    }),
+  };
+}
+
+async function getActStructureForPhase(body: GenerateRequestBody): Promise<ActStructureJson> {
+  if (body.actStructure?.acts?.length) {
+    return body.actStructure;
+  }
+
+  const supabase = await createClient();
+  const { data: acts, error } = await supabase
+    .from('acts')
+    .select('id, title, sort_order, content, scenes(title, location, content, sort_order)')
+    .eq('script_id', body.scriptId)
+    .order('sort_order');
+
+  if (error || !acts?.length) {
+    throw new Error('Act structure is required for character script generation');
+  }
+
+  return {
+    acts: acts.map((act) => ({
+      title: act.title,
+      sortOrder: act.sort_order,
+      content: act.content,
+      scenes: (act.scenes ?? []).map(
+        (scene: { title: string; location: string; content: string; sort_order: number }) => ({
+          title: scene.title,
+          location: scene.location,
+          content: scene.content,
+          sortOrder: scene.sort_order,
+        }),
+      ),
+      searchRounds: [],
+    })),
+  };
+}
+
+function getCharacterForScript(
+  body: GenerateRequestBody,
+  profiles: CharacterProfilesJson,
+): CharacterProfile {
+  if (!body.characterId) {
+    throw new Error('characterId is required');
+  }
+
+  const mockMatch = body.characterId.match(/^mock-character-(\d+)$/);
+  if (mockMatch) {
+    const index = Number(mockMatch[1]) - 1;
+    const character = profiles.characters[index];
+    if (character) return character;
+  }
+
+  const byName = profiles.characters.find((character) => character.name === body.characterId);
+  if (byName) return byName;
+
+  throw new Error(`Character not found for id ${body.characterId}`);
+}
+
+async function runJsonPhase<T>(
+  phase: string,
+  scriptId: string,
+  systemPrompt: string,
+  userPrompt: string,
+  temperature = 0.6,
+): Promise<Response> {
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      let accumulated = '';
+
+      try {
+        if (!process.env.DEEPSEEK_API_KEY) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message: 'AI_GENERATION_MODE=real requires DEEPSEEK_API_KEY',
+            }),
+          );
+          return;
+        }
+
+        const provider = new DeepSeekProvider();
+        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: `${phase}-init`, ...generationMeta() }));
+
+        for await (const chunk of provider.generateStream({
+          prompt: userPrompt,
+          systemPrompt,
+          temperature,
+          onChunk: (content) => {
+            accumulated += content;
+          },
+        })) {
+          if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (typeof chunk.progress === 'number') {
+            controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
+          }
+          if (chunk.done) break;
+        }
+
+        controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
+        const result = await parseOrRepairJson<T>(accumulated, phase);
+        controller.enqueue(encodeSse(encoder, 'completed', { scriptId, result }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        controller.enqueue(encodeSse(encoder, 'error', { message }));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
 async function persistCharacterProfiles(
   scriptId: string,
   params: ScriptGenerationParams,
@@ -377,7 +630,7 @@ async function handleMockPhase(
     async start(controller) {
       const encoder = new TextEncoder();
       try {
-        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: `${phase}-init` }));
+        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: `${phase}-init`, ...generationMeta() }));
 
         if (phase === 'character-profiles') {
           const json = buildMockCharacterProfiles(storyBible);
@@ -426,7 +679,7 @@ function handleGenericMockPhase(phase: string, body: GenerateRequestBody): Respo
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       const encoder = new TextEncoder();
-      controller.enqueue(encodeSse(encoder, 'start', { scriptId: body.scriptId, stage: `${phase}-mock` }));
+      controller.enqueue(encodeSse(encoder, 'start', { scriptId: body.scriptId, stage: `${phase}-mock`, ...generationMeta() }));
       controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'mock' }));
       controller.enqueue(
         encodeSse(encoder, 'completed', {
@@ -447,6 +700,333 @@ function handleGenericMockPhase(phase: string, body: GenerateRequestBody): Respo
   });
 }
 
+async function handleCharacterProfiles(body: GenerateRequestBody): Promise<Response> {
+  const { scriptId, params } = body;
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      let accumulated = '';
+
+      try {
+        if (!process.env.DEEPSEEK_API_KEY) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message: 'AI_GENERATION_MODE=real requires DEEPSEEK_API_KEY',
+            }),
+          );
+          return;
+        }
+
+        const storyBible = await getStoryBibleForPhase(body);
+        const { systemPrompt, userPrompt } = buildCharacterProfilesPrompt({ params, storyBible });
+        const provider = new DeepSeekProvider();
+
+        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: 'character-profiles-init', ...generationMeta() }));
+        for await (const chunk of provider.generateStream({
+          prompt: userPrompt,
+          systemPrompt,
+          temperature: 0.7,
+          onChunk: (content) => {
+            accumulated += content;
+          },
+        })) {
+          if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (typeof chunk.progress === 'number') {
+            controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
+          }
+          if (chunk.done) break;
+        }
+
+        controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
+        const json = await parseOrRepairJson<CharacterProfilesJson>(accumulated, 'CharacterProfilesJson');
+
+        if (!Array.isArray(json.characters) || json.characters.length === 0) {
+          controller.enqueue(encodeSse(encoder, 'error', { message: 'Character profiles result is empty' }));
+          return;
+        }
+
+        await persistCharacterProfiles(scriptId, params, json);
+        controller.enqueue(
+          encodeSse(encoder, 'completed', {
+            scriptId,
+            characterCount: json.characters.length,
+            result: json,
+          }),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        controller.enqueue(encodeSse(encoder, 'error', { message }));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
+async function handleActStructure(body: GenerateRequestBody): Promise<Response> {
+  const { scriptId, params } = body;
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      let accumulated = '';
+
+      try {
+        if (!process.env.DEEPSEEK_API_KEY) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message: 'AI_GENERATION_MODE=real requires DEEPSEEK_API_KEY',
+            }),
+          );
+          return;
+        }
+
+        const storyBible = await getStoryBibleForPhase(body);
+        const { systemPrompt, userPrompt } = buildActStructurePrompt({ params, storyBible });
+        const provider = new DeepSeekProvider();
+
+        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: 'act-structure-init', ...generationMeta() }));
+        for await (const chunk of provider.generateStream({
+          prompt: userPrompt,
+          systemPrompt,
+          temperature: 0.6,
+          onChunk: (content) => {
+            accumulated += content;
+          },
+        })) {
+          if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (typeof chunk.progress === 'number') {
+            controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
+          }
+          if (chunk.done) break;
+        }
+
+        controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
+        const json = await parseOrRepairJson<ActStructureJson>(accumulated, 'ActStructureJson');
+
+        if (!Array.isArray(json.acts) || json.acts.length === 0) {
+          controller.enqueue(encodeSse(encoder, 'error', { message: 'Act structure result is empty' }));
+          return;
+        }
+
+        const sceneCount = await persistActStructure(scriptId, params, json);
+        controller.enqueue(
+          encodeSse(encoder, 'completed', {
+            scriptId,
+            actCount: json.acts.length,
+            sceneCount,
+            result: json,
+          }),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        controller.enqueue(encodeSse(encoder, 'error', { message }));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
+async function persistCharacterScript(
+  body: GenerateRequestBody,
+  character: CharacterProfile,
+  json: CharacterScriptJson,
+): Promise<void> {
+  if (!body.characterId || body.characterId.startsWith('mock-character-')) {
+    return;
+  }
+
+  const supabase = await createClient();
+  const wordCount = JSON.stringify(json.actScripts).length;
+  const { error } = await supabase.from('character_scripts').upsert(
+    {
+      script_id: body.scriptId,
+      character_id: body.characterId,
+      act_scripts: json.actScripts,
+      personal_arc: json.personalArc,
+      visible_clue_titles: json.visibleClueTitles,
+      perspective_note: json.perspectiveNote,
+      is_murderer_script: character.isMurderer,
+      word_count: wordCount,
+      generation_status: 'completed',
+    },
+    { onConflict: 'script_id,character_id' },
+  );
+
+  if (error) {
+    console.warn(`Character script upsert failed; continuing without persistence: ${error.message}`);
+  }
+}
+
+async function handleCharacterScript(body: GenerateRequestBody): Promise<Response> {
+  const { scriptId, params } = body;
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      let accumulated = '';
+
+      try {
+        if (!process.env.DEEPSEEK_API_KEY) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message: 'AI_GENERATION_MODE=real requires DEEPSEEK_API_KEY',
+            }),
+          );
+          return;
+        }
+
+        const [storyBible, characterProfiles, actStructure] = await Promise.all([
+          getStoryBibleForPhase(body),
+          getCharacterProfilesForPhase(body),
+          getActStructureForPhase(body),
+        ]);
+        const character = getCharacterForScript(body, characterProfiles);
+        const { systemPrompt, userPrompt } = buildCharacterScriptPrompt({
+          params,
+          storyBible,
+          character,
+          actStructure,
+        });
+        const provider = new DeepSeekProvider();
+
+        controller.enqueue(
+          encodeSse(encoder, 'start', {
+            scriptId,
+            characterId: body.characterId,
+            stage: 'character-script-init',
+            ...generationMeta(),
+          }),
+        );
+
+        for await (const chunk of provider.generateStream({
+          prompt: userPrompt,
+          systemPrompt,
+          temperature: 0.7,
+          onChunk: (content) => {
+            accumulated += content;
+          },
+        })) {
+          if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (typeof chunk.progress === 'number') {
+            controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
+          }
+          if (chunk.done) break;
+        }
+
+        controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
+        let json: CharacterScriptJson;
+        try {
+          json = await parseOrRepairJson<CharacterScriptJson>(accumulated, 'CharacterScriptJson');
+        } catch (parseError) {
+          const parseMessage = parseError instanceof Error ? parseError.message : 'JSON parse failed';
+          json = {
+            characterName: character.name,
+            actScripts: actStructure.acts.map((act) => ({
+              actTitle: act.title,
+              content: `该角色剧本生成内容 JSON 格式异常，已保留流程继续。原始错误：${parseMessage}`,
+              scenes: act.scenes.map((scene) => ({
+                title: scene.title,
+                content: scene.content,
+              })),
+            })),
+            personalArc: character.personalTask,
+            visibleClueTitles: [],
+            perspectiveNote: `原始模型输出 JSON 格式异常，可重试该角色。错误：${parseMessage}`,
+          };
+        }
+
+        if (!Array.isArray(json.actScripts) || json.actScripts.length === 0) {
+          controller.enqueue(encodeSse(encoder, 'error', { message: 'Character script result is empty' }));
+          return;
+        }
+
+        await persistCharacterScript(body, character, json);
+        controller.enqueue(
+          encodeSse(encoder, 'completed', {
+            scriptId,
+            characterId: body.characterId,
+            result: json,
+          }),
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        controller.enqueue(encodeSse(encoder, 'error', { message }));
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
+}
+
+async function handleClues(body: GenerateRequestBody): Promise<Response> {
+  const [storyBible, actStructure] = await Promise.all([
+    getStoryBibleForPhase(body),
+    getActStructureForPhase(body),
+  ]);
+  const { systemPrompt, userPrompt } = buildCluesPrompt({
+    params: body.params,
+    storyBible,
+    actStructure,
+  });
+  return runJsonPhase<CluesJson>('clues', body.scriptId, systemPrompt, userPrompt, 0.6);
+}
+
+async function handleOrganizerManual(body: GenerateRequestBody): Promise<Response> {
+  const [storyBible, actStructure] = await Promise.all([
+    getStoryBibleForPhase(body),
+    getActStructureForPhase(body),
+  ]);
+  const { systemPrompt, userPrompt } = buildOrganizerManualPrompt({
+    params: body.params,
+    storyBible,
+    actStructure,
+  });
+  return runJsonPhase<OrganizerManualJson>('organizer-manual', body.scriptId, systemPrompt, userPrompt, 0.5);
+}
+
+async function handleTruthReview(body: GenerateRequestBody): Promise<Response> {
+  const [storyBible, actStructure] = await Promise.all([
+    getStoryBibleForPhase(body),
+    getActStructureForPhase(body),
+  ]);
+  const clues = body.clues ?? { clues: [] };
+  const { systemPrompt, userPrompt } = buildTruthReviewPrompt({
+    params: body.params,
+    storyBible,
+    actStructure,
+    characterScripts: body.characterScripts ?? [],
+    clues,
+  });
+  return runJsonPhase<TruthReviewJson>('truth-review', body.scriptId, systemPrompt, userPrompt, 0.5);
+}
+
 async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
   const { scriptId, params } = body;
   const { systemPrompt, userPrompt } = buildStoryBiblePrompt(params);
@@ -459,9 +1039,9 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
       const startedAt = new Date();
 
       try {
-        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: 'story-bible-init' }));
+        controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: 'story-bible-init', ...generationMeta() }));
 
-        if (!process.env.DEEPSEEK_API_KEY) {
+        if (getGenerationMode() === 'mock') {
           const json = buildMockStoryBible(params);
           const storyBibleId = await persistStoryBible(scriptId, params, json, startedAt);
           controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'mock' }));
@@ -470,6 +1050,15 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
               scriptId,
               storyBibleId,
               result: json,
+            }),
+          );
+          return;
+        }
+
+        if (!process.env.DEEPSEEK_API_KEY) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message: 'AI_GENERATION_MODE=real requires DEEPSEEK_API_KEY',
             }),
           );
           return;
@@ -495,7 +1084,7 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
         }
 
         controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
-        const json = parseJSONWithTolerance<StoryBibleJson>(accumulated);
+        const json = await parseOrRepairJson<StoryBibleJson>(accumulated, 'StoryBibleJson');
         const validationErrors = validateStoryBible(json, params.players);
         if (validationErrors.length > 0) {
           controller.enqueue(encodeSse(encoder, 'error', { message: validationErrors.join('; ') }));
@@ -529,6 +1118,43 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
   });
 }
 
+async function proxySupabaseGenerate(
+  request: NextRequest,
+  phase: string,
+  body: GenerateRequestBody,
+): Promise<Response> {
+  const authorization = request.headers.get('authorization');
+  const apikey = request.headers.get('apikey') ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!authorization) {
+    return buildError('Missing authorization header', 401);
+  }
+
+  if (!apikey) {
+    return buildError('Missing Supabase anon key', 500);
+  }
+
+  const upstream = await fetch(`${SUPABASE_URL}/functions/v1/generate/${phase}`, {
+    method: 'POST',
+    headers: {
+      Authorization: authorization,
+      apikey,
+      'Content-Type': 'application/json',
+      Accept: request.headers.get('accept') ?? 'text/event-stream',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return new Response(upstream.body, {
+    status: upstream.status,
+    statusText: upstream.statusText,
+    headers: {
+      'Content-Type': upstream.headers.get('content-type') ?? 'text/event-stream; charset=utf-8',
+      'Cache-Control': upstream.headers.get('cache-control') ?? 'no-cache, no-transform',
+    },
+  });
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ phase: string }> },
@@ -551,6 +1177,12 @@ export async function POST(
     if (!validateBody(body)) {
       return buildError('Invalid parameters', 400);
     }
+    if (getGenerationMode() === 'real') {
+      if (phase === 'character-profiles') {
+        return handleCharacterProfiles(body);
+      }
+      return handleActStructure(body);
+    }
     return handleMockPhase(phase, body);
   }
 
@@ -564,38 +1196,24 @@ export async function POST(
     if (!validateBody(body)) {
       return buildError('Invalid parameters', 400);
     }
+    if (getGenerationMode() === 'real') {
+      if (phase === 'character-script') {
+        return handleCharacterScript(body);
+      }
+      if (phase === 'clues') {
+        return handleClues(body);
+      }
+      if (phase === 'organizer-manual') {
+        return handleOrganizerManual(body);
+      }
+      return handleTruthReview(body);
+    }
     return handleGenericMockPhase(phase, body);
   }
 
-  const authorization = request.headers.get('authorization');
-  const apikey = request.headers.get('apikey') ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!authorization) {
-    return buildError('Missing authorization header', 401);
+  const body: unknown = await request.json().catch(() => null);
+  if (!validateBody(body)) {
+    return buildError('Invalid parameters', 400);
   }
-
-  if (!apikey) {
-    return buildError('Missing Supabase anon key', 500);
-  }
-
-  const upstream = await fetch(`${SUPABASE_URL}/functions/v1/generate/${phase}`, {
-    method: 'POST',
-    headers: {
-      Authorization: authorization,
-      apikey,
-      'Content-Type': request.headers.get('content-type') ?? 'application/json',
-      Accept: request.headers.get('accept') ?? 'text/event-stream',
-    },
-    body: request.body,
-    duplex: 'half',
-  } as RequestInit);
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: {
-      'Content-Type': upstream.headers.get('content-type') ?? 'text/event-stream; charset=utf-8',
-      'Cache-Control': upstream.headers.get('cache-control') ?? 'no-cache, no-transform',
-    },
-  });
+  return proxySupabaseGenerate(request, phase, body);
 }

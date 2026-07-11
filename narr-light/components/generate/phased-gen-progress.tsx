@@ -112,6 +112,13 @@ function PhaseRow({
         {phase.status === 'completed' && phase.durationSeconds && (
           <span className="phased-phase-meta">· {phase.durationSeconds}s</span>
         )}
+        {phase.mode && (
+          <span className="phased-phase-meta">
+            {' '}
+            {phase.mode}
+            {phase.model ? ` ${phase.model}` : ''}
+          </span>
+        )}
         {phase.status === 'failed' && (
           <button
             className="btn btn-ghost btn-xs"

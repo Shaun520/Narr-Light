@@ -38,9 +38,13 @@ import {
   SCRIPT_DATA,
   DEFAULT_NODE_ID,
   type CharacterNode,
+  type CharacterPage,
   type SimpleNode,
   type ClueOverviewNode,
+  type ScriptNodeData,
+  type TreeGroup,
 } from '@/components/editor/script-data';
+import { createClient } from '@/lib/supabase/client';
 import { exportEditorPdf } from '@/lib/export/editor-pdf-export';
 import './editor.css';
 
@@ -67,6 +71,152 @@ const DEFAULT_VERSIONS: VersionItem[] = [
     note: 'AI 初版全本生成',
   },
 ];
+
+interface EditorDataBundle {
+  dataMap: Record<string, ScriptNodeData>;
+  groups: TreeGroup[];
+  labels: Record<string, string>;
+  defaultNodeId: string;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function paragraphsFromText(value: unknown): string[] {
+  const text = String(value ?? '').trim();
+  if (!text) return ['No content yet.'];
+  return text
+    .split(/\n{2,}|\r?\n/)
+    .map((line) => escapeHtml(line.trim()))
+    .filter(Boolean);
+}
+
+function htmlBlock(title: string, value: unknown): string {
+  return `<h2><span class="act-num">Full</span>${escapeHtml(title)}</h2>${paragraphsFromText(value)
+    .map((p) => `<p>${p}</p>`)
+    .join('')}`;
+}
+
+async function loadEditorData(scriptId: string): Promise<EditorDataBundle | null> {
+  const supabase = createClient();
+  const [{ data: characters }, { data: characterScripts }, { data: clues }, { data: truthRows }] =
+    await Promise.all([
+      supabase
+        .from('characters')
+        .select('id, name, role_identity, is_murderer, sort_order')
+        .eq('script_id', scriptId)
+        .order('sort_order'),
+      supabase
+        .from('character_scripts')
+        .select('character_id, act_scripts, personal_arc, perspective_note')
+        .eq('script_id', scriptId),
+      supabase
+        .from('clues')
+        .select('title, clue_type, search_round, location, is_distractor, is_key')
+        .eq('script_id', scriptId)
+        .order('search_round'),
+      supabase
+        .from('truth_reviews')
+        .select('full_summary, method_detail, motive_detail, timeline_full')
+        .eq('script_id', scriptId)
+        .limit(1),
+    ]);
+
+  if (!characters?.length && !characterScripts?.length && !clues?.length && !truthRows?.length) {
+    return null;
+  }
+
+  const dataMap: Record<string, ScriptNodeData> = {};
+  const labels: Record<string, string> = {};
+  const charNodeIds: string[] = [];
+  const scriptsByCharacter = new Map<string, Record<string, unknown>>();
+  for (const row of (characterScripts ?? []) as Array<Record<string, unknown>>) {
+    scriptsByCharacter.set(String(row.character_id), row);
+  }
+
+  const colors = ['#8a1c1c', '#b08d57', '#4a7c59', '#3a5a7a', '#7a5c3a', '#6a4a8a', '#8a4a6a'];
+  for (const [index, character] of ((characters ?? []) as Array<Record<string, unknown>>).entries()) {
+    const nodeId = `char-${character.id}`;
+    const script = scriptsByCharacter.get(String(character.id));
+    const actScripts = Array.isArray(script?.act_scripts) ? (script.act_scripts as Array<Record<string, unknown>>) : [];
+    const pages: CharacterPage[] = actScripts.length
+      ? actScripts.map((act, actIndex) => ({
+          act: String(act.actTitle ?? `Act ${actIndex + 1}`),
+          title: String(act.actTitle ?? `Act ${actIndex + 1}`),
+          subtitle: String(script?.perspective_note ?? ''),
+          paragraphs: paragraphsFromText(act.content),
+        }))
+      : [
+          {
+            act: 'Full',
+            title: 'Profile',
+            subtitle: String(character.role_identity ?? ''),
+            paragraphs: paragraphsFromText(script?.personal_arc ?? character.role_identity ?? 'No character script yet.'),
+          },
+        ];
+
+    dataMap[nodeId] = {
+      type: 'character',
+      id: nodeId,
+      name: String(character.name ?? `Character ${index + 1}`),
+      role: `${character.is_murderer ? 'Murderer' : 'Character'} · ${String(character.role_identity ?? '')}`,
+      color: colors[index % colors.length],
+      pages,
+    };
+    labels[nodeId] = `${String(character.name ?? `Character ${index + 1}`)}${character.is_murderer ? ' (murderer)' : ''}`;
+    charNodeIds.push(nodeId);
+  }
+
+  const clueItems = ((clues ?? []) as Array<Record<string, unknown>>).map((clue, index) => ({
+    no: `#${String(index + 1).padStart(3, '0')}`,
+    title: String(clue.title ?? `Clue ${index + 1}`),
+    tag: clue.is_key ? 'Key' : clue.is_distractor ? 'Red herring' : String(clue.clue_type ?? 'Clue'),
+    tagType: clue.is_key ? ('blood' as const) : clue.is_distractor ? ('ok' as const) : undefined,
+    loc: String(clue.location ?? ''),
+  }));
+
+  dataMap['clues-overview'] = {
+    type: 'clue-overview',
+    id: 'clues-overview',
+    title: 'Clues',
+    actNum: `${clueItems.length}`,
+    fullTitle: `Clues · ${clueItems.length}`,
+    clues: clueItems,
+  };
+  labels['clues-overview'] = 'Clues';
+
+  const truth = (truthRows?.[0] ?? {}) as Record<string, unknown>;
+  dataMap.truth = {
+    type: 'simple',
+    id: 'truth',
+    title: 'Truth',
+    actNum: 'Final',
+    fullTitle: 'Truth Review',
+    html: [
+      htmlBlock('Summary', truth.full_summary),
+      htmlBlock('Method', truth.method_detail),
+      htmlBlock('Motive', truth.motive_detail),
+      htmlBlock('Timeline', truth.timeline_full),
+    ].join(''),
+  };
+  labels.truth = 'Truth Review';
+
+  return {
+    dataMap,
+    labels,
+    groups: [
+      { group: 'chars', label: 'Character Scripts', children: charNodeIds },
+      { group: 'clues-overview', label: 'Clues', children: ['clues-overview'] },
+      { group: 'truth', label: 'Truth Review', children: ['truth'] },
+    ],
+    defaultNodeId: charNodeIds[0] ?? 'clues-overview',
+  };
+}
 
 /** Toast 提示状态 */
 interface ToastState {
@@ -136,6 +286,7 @@ export default function EditorPage({ params }: PageProps) {
   const [snapshots, setSnapshots] = useState<Record<string, string>>({});
   const [showCompare, setShowCompare] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
+  const [editorData, setEditorData] = useState<EditorDataBundle | null>(null);
   const [toast, setToast] = useState<ToastState>({
     visible: false,
     message: '',
@@ -146,13 +297,31 @@ export default function EditorPage({ params }: PageProps) {
   // ===== 高亮跳转参数（来自 IssueLocator 漏洞定位） =====
   const searchParams = useSearchParams();
   const highlightInitialized = useRef(false);
+  const activeDataMap = editorData?.dataMap ?? SCRIPT_DATA;
+  const activeDefaultNodeId = editorData?.defaultNodeId ?? DEFAULT_NODE_ID;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadEditorData(scriptId)
+      .then((data) => {
+        if (cancelled) return;
+        setEditorData(data);
+        if (data?.defaultNodeId) setCurrentNode(data.defaultNodeId);
+      })
+      .catch((error) => {
+        console.warn(`Failed to load editor data for ${scriptId}:`, error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scriptId, setCurrentNode]);
 
   // ===== 初始化默认节点 =====
   useEffect(() => {
     if (!currentNodeId) {
-      setCurrentNode(DEFAULT_NODE_ID);
+      setCurrentNode(activeDefaultNodeId);
     }
-  }, [currentNodeId, setCurrentNode]);
+  }, [activeDefaultNodeId, currentNodeId, setCurrentNode]);
 
   // ===== 高亮跳转（消费 sessionStorage payload，切换幕次/角色并滚动高亮） =====
   useEffect(() => {
@@ -205,7 +374,7 @@ export default function EditorPage({ params }: PageProps) {
   }, [searchParams, setActIdx, setCurrentNode]);
 
   // ===== 当前节点数据 =====
-  const currentNode = currentNodeId ? SCRIPT_DATA[currentNodeId] : null;
+  const currentNode = currentNodeId ? activeDataMap[currentNodeId] : null;
 
   // ===== 计算工具栏标签（对齐原型 editorTbLabel） =====
   useEffect(() => {
@@ -377,9 +546,15 @@ export default function EditorPage({ params }: PageProps) {
     if (!currentNodeId) return { a: '', b: '' };
     return {
       a: getNodePlainText(currentNodeId),
-      b: snapshots[currentNodeId] ?? getNodePlainText(currentNodeId),
+      b:
+        snapshots[currentNodeId] ??
+        (activeDataMap[currentNodeId]
+          ? activeDataMap[currentNodeId].type === 'simple'
+            ? (activeDataMap[currentNodeId] as SimpleNode).html.replace(/<[^>]+>/g, ' ')
+            : getNodePlainText(currentNodeId)
+          : ''),
     };
-  }, [currentNodeId, snapshots]);
+  }, [activeDataMap, currentNodeId, snapshots]);
 
   const versionA = versions[1]?.version ?? 'v1';
   const versionB = versions[0]?.version ?? 'v1';
@@ -393,7 +568,7 @@ export default function EditorPage({ params }: PageProps) {
             剧本编辑器 <span className="seal">结构化</span>
           </h1>
           <div className="page-desc">
-            // 按模块分区域表单式编辑 · 修改自动触发关联校验 · 当前{' '}
+            ??????????? ? ?????????? ? ??{' '}
             {versions[0]?.version ?? 'v1'}
           </div>
         </div>
@@ -402,7 +577,7 @@ export default function EditorPage({ params }: PageProps) {
             type="button"
             className="btn btn-ghost"
             onClick={() => setShowOutline(true)}
-            title="章节跳转与搜索"
+            title="Jump search"
           >
             <Search size={14} />
             跳转搜索
@@ -442,6 +617,8 @@ export default function EditorPage({ params }: PageProps) {
             <ChapterTree
               activeNodeId={currentNodeId}
               onSelect={handleSelectNode}
+              groups={editorData?.groups}
+              labels={editorData?.labels}
             />
           )}
         </div>
@@ -469,6 +646,7 @@ export default function EditorPage({ params }: PageProps) {
                 nodeId={currentNodeId}
                 snapshots={snapshots}
                 onInput={handleContentInput}
+                dataMap={activeDataMap}
               />
             )}
           </div>

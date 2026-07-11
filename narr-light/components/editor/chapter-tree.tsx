@@ -23,13 +23,15 @@ import {
   Clock,
   type LucideIcon,
 } from 'lucide-react';
-import { NODE_LABELS, TREE_GROUPS } from './script-data';
+import { NODE_LABELS, TREE_GROUPS, type TreeGroup } from './script-data';
 
 interface ChapterTreeProps {
   /** 当前选中节点 ID */
   activeNodeId: string;
   /** 节点点击回调 */
   onSelect: (nodeId: string) => void;
+  groups?: TreeGroup[];
+  labels?: Record<string, string>;
 }
 
 /** 分组 → 图标映射 */
@@ -59,7 +61,12 @@ const INITIAL_EXPANDED: Record<string, boolean> = {
 /**
  * 章节树
  */
-export function ChapterTree({ activeNodeId, onSelect }: ChapterTreeProps) {
+export function ChapterTree({
+  activeNodeId,
+  onSelect,
+  groups = TREE_GROUPS,
+  labels = NODE_LABELS,
+}: ChapterTreeProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>(
     INITIAL_EXPANDED,
   );
@@ -80,10 +87,10 @@ export function ChapterTree({ activeNodeId, onSelect }: ChapterTreeProps) {
 
   return (
     <div className="tree" role="tree" aria-label="章节树">
-      {TREE_GROUPS.map((group) => {
+      {groups.map((group) => {
         const Icon = GROUP_ICON[group.group] ?? List;
         const isExpanded = expanded[group.group] ?? true;
-        const count = GROUP_COUNT[group.group] ?? group.children.length;
+        const count = group.children.length || GROUP_COUNT[group.group] || 0;
 
         return (
           <div key={group.group}>
@@ -92,6 +99,7 @@ export function ChapterTree({ activeNodeId, onSelect }: ChapterTreeProps) {
               data-group={group.group}
               role="treeitem"
               aria-expanded={isExpanded}
+              aria-selected={false}
               tabIndex={0}
               onClick={() => toggleGroup(group.group)}
               onKeyDown={(e) => handleKeyDown(e, () => toggleGroup(group.group))}
@@ -125,7 +133,7 @@ export function ChapterTree({ activeNodeId, onSelect }: ChapterTreeProps) {
                     handleKeyDown(e, () => onSelect(nodeId))
                   }
                 >
-                  {NODE_LABELS[nodeId] ?? nodeId}
+                  {labels[nodeId] ?? nodeId}
                 </div>
               ))}
             </div>
