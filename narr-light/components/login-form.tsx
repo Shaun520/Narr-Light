@@ -59,11 +59,14 @@ export function LoginForm({
     const supabase = createClient();
     setLoading(true);
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data: signInData, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
       if (signInError) throw signInError;
+      // 登录成功后同步 public.users 记录（scripts.author_id 外键依赖此表）
+      await syncPublicUser(supabase, signInData.user ?? null, email);
       window.location.assign("/dashboard");
     } catch (err: unknown) {
       setError(mapAuthError(err));
@@ -97,6 +100,12 @@ export function LoginForm({
         setError("登录失败，未获取到会话");
         return;
       }
+      // 登录成功后同步 public.users 记录（scripts.author_id 外键依赖此表）
+      await syncPublicUser(
+        supabase,
+        sessionData.session.user,
+        sessionData.session.user.email ?? email
+      );
       window.location.assign("/dashboard");
     } catch (err: unknown) {
       setError(mapAuthError(err));
@@ -104,6 +113,29 @@ export function LoginForm({
       setLoading(false);
     }
   };
+
+/**
+ * 将 Supabase Auth 用户同步到 public.users 表。
+ * scripts.author_id 外键引用 public.users(id)，登录后需确保记录存在。
+ */
+async function syncPublicUser(
+  supabase: ReturnType<typeof createClient>,
+  user: { id: string; email?: string | null } | null,
+  fallbackEmail: string
+): Promise<void> {
+  if (!user) return;
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (existing) return;
+  await supabase.from("users").insert({
+    id: user.id,
+    email: user.email ?? fallbackEmail,
+    nickname: "",
+  });
+}
 
 /**
  * 将 Supabase Auth 常见英文错误提示映射为中文

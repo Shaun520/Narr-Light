@@ -22,6 +22,12 @@ import {
 } from '@/lib/ai/prompts/script-generation';
 import { ScriptImportService } from '@/lib/services/script-import-service';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 /** 入参体 */
 interface GenerateRequestBody {
   scriptId: string;
@@ -50,10 +56,17 @@ function validateBody(body: unknown): body is GenerateRequestBody {
 
 /** 主处理函数 */
 async function handleRequest(request: Request): Promise<Response> {
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders,
+    });
+  }
+
   if (request.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method Not Allowed' }), {
       status: 405,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -63,14 +76,14 @@ async function handleRequest(request: Request): Promise<Response> {
   } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
   if (!validateBody(body)) {
     return new Response(JSON.stringify({ error: 'Invalid parameters' }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
@@ -135,6 +148,7 @@ async function handleRequest(request: Request): Promise<Response> {
 
   return new Response(stream, {
     headers: {
+      ...corsHeaders,
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
@@ -142,5 +156,5 @@ async function handleRequest(request: Request): Promise<Response> {
   });
 }
 
-// @ts-ignore - Deno 全局仅在 Supabase Edge Function (Deno) 运行时可用
+// @ts-expect-error - Deno 全局仅在 Supabase Edge Function (Deno) 运行时可用
 Deno.serve(handleRequest);

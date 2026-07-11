@@ -54,17 +54,13 @@ interface FieldConfig {
   displayOnly?: boolean;
 }
 
-/** 题材选项 */
+/** 题材选项（值对齐 scripts.genre CHECK 约束） */
 const GENRE_OPTIONS: { label: string; value: string }[] = [
-  { label: "悬疑", value: "suspense" },
+  { label: "硬核", value: "hardcore" },
   { label: "情感", value: "emotion" },
   { label: "恐怖", value: "horror" },
-  { label: "欢乐", value: "happy" },
+  { label: "欢乐", value: "funny" },
   { label: "机制", value: "mechanism" },
-  { label: "阵营", value: "camp" },
-  { label: "古风", value: "ancient" },
-  { label: "现代", value: "modern" },
-  { label: "科幻", value: "scifi" },
 ];
 
 /** 人数选项（4-12 人） */

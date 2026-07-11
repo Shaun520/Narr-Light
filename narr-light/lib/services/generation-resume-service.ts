@@ -23,6 +23,29 @@ export interface ResumableState {
   resumable: boolean;
 }
 
+/** 分阶段续传：各阶段完成状态 */
+export interface PhasedResumeState {
+  scriptId: string;
+  /** 各阶段是否已有产出记录（true=已完成） */
+  phaseCompletion: {
+    story_bible: boolean;
+    character_profiles: boolean;
+    act_structure: boolean;
+    character_script: boolean;
+    clues: boolean;
+    organizer_manual: boolean;
+    truth_review: boolean;
+  };
+  /** 设定本是否已确认（story_bibles.confirmed=true） */
+  storyBibleConfirmed: boolean;
+  /** 已完成阶段数 */
+  completedCount: number;
+  /** 总阶段数（7） */
+  totalCount: number;
+  /** 是否可恢复（至少阶段 0 已完成） */
+  resumable: boolean;
+}
+
 /** generation_tasks 原始行 */
 interface TaskRow {
   id: string;
@@ -151,6 +174,64 @@ export class GenerationResumeService {
       startedAt: row.started_at,
       completedAt: row.completed_at,
       createdAt: row.created_at,
+    };
+  }
+
+  /**
+   * 检测分阶段生成的完成状态。
+   * 通过查询各阶段产出表是否已有 scriptId 关联记录来判断。
+   * @param scriptId 剧本 ID
+   */
+  async detectPhasedCompletion(scriptId: string): Promise<PhasedResumeState> {
+    const supabase = await createClient();
+
+    // 并行查询 7 张表
+    const [
+      storyBibleRes,
+      charactersRes,
+      actsRes,
+      characterScriptsRes,
+      cluesRes,
+      organizerManualRes,
+      truthReviewRes,
+    ] = await Promise.all([
+      supabase.from('story_bibles').select('id, confirmed').eq('script_id', scriptId).maybeSingle(),
+      supabase.from('characters').select('id', { count: 'exact', head: true }).eq('script_id', scriptId),
+      supabase.from('acts').select('id', { count: 'exact', head: true }).eq('script_id', scriptId),
+      supabase.from('character_scripts').select('id', { count: 'exact', head: true }).eq('script_id', scriptId),
+      supabase.from('clues').select('id', { count: 'exact', head: true }).eq('script_id', scriptId),
+      supabase.from('organizer_manuals').select('id').eq('script_id', scriptId).maybeSingle(),
+      supabase.from('truth_reviews').select('id').eq('script_id', scriptId).maybeSingle(),
+    ]);
+
+    const storyBibleExists = !!storyBibleRes.data;
+    const storyBibleConfirmed = storyBibleRes.data?.confirmed === true;
+    const charactersExists = (charactersRes.count ?? 0) > 0;
+    const actsExists = (actsRes.count ?? 0) > 0;
+    const characterScriptsExists = (characterScriptsRes.count ?? 0) > 0;
+    const cluesExists = (cluesRes.count ?? 0) > 0;
+    const organizerManualExists = !!organizerManualRes.data;
+    const truthReviewExists = !!truthReviewRes.data;
+
+    const phaseCompletion = {
+      story_bible: storyBibleExists,
+      character_profiles: charactersExists,
+      act_structure: actsExists,
+      character_script: characterScriptsExists,
+      clues: cluesExists,
+      organizer_manual: organizerManualExists,
+      truth_review: truthReviewExists,
+    };
+
+    const completedCount = Object.values(phaseCompletion).filter(Boolean).length;
+
+    return {
+      scriptId,
+      phaseCompletion,
+      storyBibleConfirmed,
+      completedCount,
+      totalCount: 7,
+      resumable: storyBibleExists,  // 至少阶段 0 完成才可恢复
     };
   }
 }

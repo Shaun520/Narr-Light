@@ -1,27 +1,37 @@
 /**
- * 剧本 AI 生成页（视图2）
+ * 剧本 AI 生成页（分阶段编排版）
  *
- * 客户端组件，useState 管理表单参数与生成状态。
- * 左侧 ParamForm 创作参数，右侧 GenPanel 流式输出。
- * 流式生成先用 Mock（setInterval 模拟），真实 Provider 调用留接口。
- * 合规预检开启时，对每个 chunk 调用 checkContentSafety，命中即中断并弹窗。
- * 对齐原型 #view-generate 结构。
+ * 客户端组件，useState 管理表单参数。
+ * 左侧 ParamForm 创作参数，右侧根据编排器状态显示：
+ *   - idle：占位提示
+ *   - running（阶段 0）：进度看板
+ *   - paused_at_gate：设定本确认闸门
+ *   - running（阶段 1-3）：进度看板
+ *   - completed：完成提示
+ *   - failed：错误提示 + 重试按钮
+ *
+ * 编排器：usePhasedGeneration hook 调度 7 个阶段 Edge Function。
+ * 中断续传：进入页面时检测 ?scriptId=xxx 是否有未完成阶段。
  */
 'use client';
 
-import React, { Suspense, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Play, FileDown } from 'lucide-react';
+import { Loader2, Play, FileDown, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react';
 import { ParamForm } from '@/components/generate/param-form';
-import { GenPanel, type StreamLine } from '@/components/generate/gen-panel';
-import { ContentBlockedModal } from '@/components/common/content-blocked-modal';
-import { checkContentSafety } from '@/lib/utils/content-safety';
+import { usePhasedGeneration } from '@/lib/hooks/use-phased-generation';
+import { PhasedGenProgress } from '@/components/generate/phased-gen-progress';
+import { StoryBibleGate } from '@/components/generate/story-bible-gate';
 import type { ScriptGenre, ScriptDifficulty } from '@/types';
 import type {
   AgeRating,
   ScriptGenerationParams,
   WritingStyle,
 } from '@/lib/ai/prompts/script-generation';
+
+/** 数据库 CHECK 约束允许的合法值 */
+const VALID_GENRES: ScriptGenre[] = ['hardcore', 'emotion', 'horror', 'funny', 'mechanism'];
+const VALID_DIFFICULTIES: ScriptDifficulty[] = ['beginner', 'intermediate', 'advanced', 'expert'];
 import './generate.css';
 
 /** 默认参数（对齐原型默认值） */
@@ -39,69 +49,23 @@ const DEFAULT_PARAMS: ScriptGenerationParams = {
   extraReq: '含叙述性诡计，第二幕设置公共搜证环节，凶手具备反侦察意识。',
 };
 
-/** Mock 流式输出内容（真实场景由 Edge Function SSE 推送） */
-const MOCK_LINES: StreamLine[] = [
-  { type: 'label', text: '【人物剧本 · 沈墨白 / 死者视角】' },
-  {
-    type: 'content',
-    text: '光绪二十六年，霜降。江南的雨下了整七日，青石板路泛着冷光。我推开沈宅大门时，堂前那盏纸灯笼正被风吹得摇摇欲坠。',
-  },
-  {
-    type: 'content',
-    text: '"墨白，你终于回来了。"二弟沈墨尘立于廊下，语气平静得不像时隔三年重逢。',
-  },
-  {
-    type: 'content',
-    text: '我没答话。怀中那封匿名信烫得胸口发疼——"沈家秘宝现世，廿六夜，古镇祠堂。"落款是一枚朱砂印，正是当年父亲失踪前惯用的私章。',
-  },
-  { type: 'label', text: '【第二幕 · 公共搜证】' },
-  {
-    type: 'content',
-    text: 'DM 提示：本环节全员可前往以下三处地点搜证，每处限时 8 分钟。',
-  },
-  {
-    type: 'content',
-    text: '› 祠堂东侧厢房：发现一封被火焚毁大半的族谱残页，记载"过继"二字。',
-  },
-  {
-    type: 'content',
-    text: '› 沈宅书房暗格：一只铜锁木匣，内藏三张不同笔迹的借据，债主皆为沈墨白。',
-  },
-  {
-    type: 'content',
-    text: '› 古镇药铺后院：三包未贴标签的草药，经辨认含乌头碱痕迹。',
-  },
-];
-
-/** 模型标识 */
-const MODEL_TAG = 'deepseek-v4-pro';
-
 function GeneratePageInner() {
   const [params, setParams] = useState<ScriptGenerationParams>(DEFAULT_PARAMS);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [percent, setPercent] = useState(0);
-  const [stage, setStage] = useState('待机');
-  const [wordCount, setWordCount] = useState(0);
-  const [eta, setEta] = useState('--');
-  const [checklist, setChecklist] = useState('⏳ 人物剧本　⏳ 组织者手册　⏳ 线索卡　⏳ 真相复盘');
-  const [lines, setLines] = useState<StreamLine[]>([]);
-  const [blocked, setBlocked] = useState<{ open: boolean; reason: string; suggestion: string }>({
-    open: false,
-    reason: '',
-    suggestion: '',
-  });
+  const { state, start, confirmStoryBible, regenerateStoryBible, retryPhase, abort, reset, resumeFromScript } =
+    usePhasedGeneration();
 
-  const timerRef = useRef<number | null>(null);
-
-  // ===== query string 预填参数（来自外部跳转，如概览页快捷入口） =====
   const searchParams = useSearchParams();
 
+  // ===== 中断续传：进入页面时检测 ?scriptId=xxx 是否有未完成阶段 =====
+  // 仅在 mount 时执行一次，避免重复触发。检测到设定本存在则恢复到 paused_at_gate 或 completed。
   useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) {
-        window.clearInterval(timerRef.current);
-      }
-    };
+    const scriptId = searchParams.get('scriptId');
+    if (!scriptId) return;
+    // 异步检测，不阻塞渲染
+    resumeFromScript(scriptId, params).catch((err) => {
+      console.warn('恢复生成状态失败:', err);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ===== 读取 query string 并合并到表单参数（仅当存在时覆盖默认值） =====
@@ -133,10 +97,10 @@ function GeneratePageInner() {
 
     const patch: Partial<ScriptGenerationParams> = {};
     if (title) patch.title = title;
-    if (genre) patch.genre = genre;
+    if (genre && VALID_GENRES.includes(genre)) patch.genre = genre;
     if (players) patch.players = Number(players);
     if (duration) patch.duration = Number(duration);
-    if (difficulty) patch.difficulty = difficulty;
+    if (difficulty && VALID_DIFFICULTIES.includes(difficulty)) patch.difficulty = difficulty;
     if (ageRating) patch.ageRating = ageRating;
     if (writingStyle) patch.writingStyle = writingStyle;
     if (background) patch.background = background;
@@ -149,88 +113,36 @@ function GeneratePageInner() {
     setParams((prev) => ({ ...prev, ...patch }));
   };
 
-  const stopTimer = () => {
-    if (timerRef.current !== null) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  /** 启动 Mock 流式生成 */
-  const handleGenerate = () => {
-    if (isGenerating) return;
+  /** 启动分阶段生成 */
+  const handleGenerate = async () => {
+    if (
+      state.orchestrationStatus !== 'idle' &&
+      state.orchestrationStatus !== 'failed' &&
+      state.orchestrationStatus !== 'completed'
+    )
+      return;
     if (!params.title.trim()) return;
-
-    stopTimer();
-    setIsGenerating(true);
-    setLines([]);
-    setPercent(0);
-    setWordCount(0);
-    setStage('正在生成：人物剧本');
-    setChecklist('⏳ 人物剧本　⏳ 组织者手册　⏳ 线索卡　⏳ 真相复盘');
-    setEta('计算中…');
-
-    let idx = 0;
-    const total = MOCK_LINES.length;
-
-    timerRef.current = window.setInterval(() => {
-      if (idx >= total) {
-        stopTimer();
-        setPercent(100);
-        setStage('生成完成');
-        setChecklist('✓ 人物剧本　✓ 组织者手册　✓ 线索卡　✓ 真相复盘');
-        setEta('0s');
-        setIsGenerating(false);
-        return;
-      }
-
-      const line = MOCK_LINES[idx];
-
-      // 合规预检：开启时对每行内容做敏感词检查，命中即中断
-      if (params.switches.compliancePreCheck) {
-        const safety = checkContentSafety(line.text);
-        if (!safety.safe) {
-          stopTimer();
-          setIsGenerating(false);
-          setStage('内容违规，已中断');
-          setBlocked({
-            open: true,
-            reason: `命中敏感词：${safety.flaggedWords.join('、')}`,
-            suggestion: '请调整附加要求、降低适龄分级或关闭合规预检后重试。',
-          });
-          return;
-        }
-      }
-
-      setLines((prev) => [...prev, line]);
-      setWordCount((prev) => prev + line.text.length);
-      const p = Math.min(99, Math.round(((idx + 1) / total) * 100));
-      setPercent(p);
-      setStage(idx < 4 ? '正在生成：人物剧本' : '正在生成：第二幕 · 公共搜证');
-      setChecklist(
-        idx < 4
-          ? '⏳ 人物剧本　⏳ 组织者手册　⏳ 线索卡　⏳ 真相复盘'
-          : idx < 6
-            ? '✓ 人物剧本　⏳ 组织者手册　⏳ 线索卡　⏳ 真相复盘'
-            : '✓ 人物剧本　✓ 组织者手册　⏳ 线索卡　⏳ 真相复盘',
-      );
-      setEta(`${Math.max(1, (total - idx) * 3)}s`);
-      idx++;
-    }, 360);
+    if (state.orchestrationStatus !== 'idle') {
+      reset();
+    }
+    await start(params);
   };
 
   /** 载入草稿：重置为默认参数 */
   const handleLoadDraft = () => {
-    stopTimer();
-    setIsGenerating(false);
+    reset();
     setParams(DEFAULT_PARAMS);
-    setLines([]);
-    setPercent(0);
-    setWordCount(0);
-    setStage('待机');
-    setEta('--');
-    setChecklist('⏳ 人物剧本　⏳ 组织者手册　⏳ 线索卡　⏳ 真相复盘');
   };
+
+  /** 中断生成 */
+  const handleAbort = () => {
+    abort();
+  };
+
+  const isGenerating =
+    state.orchestrationStatus === 'running' ||
+    state.orchestrationStatus === 'paused_at_gate';
+  const canGenerate = !isGenerating && params.title.trim().length > 0;
 
   return (
     <>
@@ -239,22 +151,33 @@ function GeneratePageInner() {
           <h1 className="page-title">
             剧本 AI 生成 <span className="seal">P1 核心</span>
           </h1>
-          <div className="page-desc">// 设定参数 → 一键生成结构化全本 · 支持中断续传</div>
+          <div className="page-desc">// 设定参数 → 分阶段生成 · 设定本确认 → 全本产出 · 支持中断续传</div>
         </div>
         <div className="page-actions">
-          <button type="button" className="btn btn-ghost" onClick={handleLoadDraft}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleLoadDraft}
+            disabled={isGenerating}
+          >
             <FileDown size={14} />
             载入草稿
           </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleGenerate}
-            disabled={isGenerating || !params.title.trim()}
-          >
-            <Play size={14} />
-            开始生成
-          </button>
+          {isGenerating ? (
+            <button type="button" className="btn btn-ghost" onClick={handleAbort}>
+              中断生成
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={handleGenerate}
+              disabled={!canGenerate}
+            >
+              <Play size={14} />
+              {state.orchestrationStatus === 'completed' ? '重新生成' : '开始生成'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -265,24 +188,116 @@ function GeneratePageInner() {
           onGenerate={handleGenerate}
           isGenerating={isGenerating}
         />
-        <GenPanel
-          isGenerating={isGenerating}
-          model={MODEL_TAG}
-          percent={percent}
-          stage={stage}
-          wordCount={wordCount}
-          eta={eta}
-          checklist={checklist}
-          lines={lines}
-        />
-      </div>
 
-      <ContentBlockedModal
-        open={blocked.open}
-        onClose={() => setBlocked((prev) => ({ ...prev, open: false }))}
-        reason={blocked.reason}
-        suggestion={blocked.suggestion}
-      />
+        <div className="gen-panel">
+          <div className="gen-panel-head">
+            <div className="gen-dots">
+              <span />
+              <span />
+              <span />
+            </div>
+            <span>generate · deepseek-v4-pro · 分阶段编排</span>
+            <span style={{ marginLeft: 'auto', color: 'var(--blood-soft)' }}>
+              ● {isGenerating ? 'LIVE' : 'IDLE'}
+            </span>
+          </div>
+
+          {/* 根据编排器状态渲染不同内容 */}
+          {state.orchestrationStatus === 'idle' && (
+            <div className="gen-stream">
+              <span className="content-line" style={{ opacity: 0.5 }}>
+                // 点击「开始生成」启动 AI 分阶段创作，设定本生成后将暂停等待确认…
+              </span>
+              {state.globalError && (
+                <div className="phased-global-error" style={{ marginTop: 16 }}>
+                  {state.globalError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {state.orchestrationStatus === 'paused_at_gate' && state.storyBible && (
+            <>
+              <StoryBibleGate
+                storyBible={state.storyBible}
+                onConfirm={confirmStoryBible}
+                onRegenerate={regenerateStoryBible}
+                isRegenerating={state.phases.story_bible.status === 'running'}
+              />
+              {/* 续传恢复时：部分阶段已完成，同时显示进度看板供查看完成情况 */}
+              {Object.values(state.phases).some((p) => p.status === 'completed' && p.id !== 'story_bible') && (
+                <PhasedGenProgress state={state} onRetryPhase={retryPhase} />
+              )}
+            </>
+          )}
+
+          {(state.orchestrationStatus === 'running' ||
+            state.orchestrationStatus === 'completed') && (
+            <PhasedGenProgress state={state} onRetryPhase={retryPhase} />
+          )}
+
+          {/* failed 状态：若已有阶段进入 running/completed 则显示进度看板，否则只显示错误面板 */}
+          {state.orchestrationStatus === 'failed' &&
+            Object.values(state.phases).some((p) => p.status === 'running' || p.status === 'completed') && (
+            <PhasedGenProgress state={state} onRetryPhase={retryPhase} />
+          )}
+
+          {state.orchestrationStatus === 'failed' && (
+            <div
+              style={{
+                padding: '20px',
+                textAlign: 'center',
+              }}
+            >
+              <AlertCircle
+                size={32}
+                style={{ margin: '0 auto 10px', color: '#e8a0a0' }}
+              />
+              <div style={{ fontSize: 14, marginBottom: 12, color: '#e8dfd1' }}>
+                生成失败
+              </div>
+              {state.globalError && (
+                <div
+                  className="phased-global-error"
+                  style={{
+                    maxWidth: 480,
+                    margin: '0 auto 16px',
+                    textAlign: 'left',
+                  }}
+                >
+                  {state.globalError}
+                </div>
+              )}
+              <button type="button" className="btn btn-primary" onClick={handleGenerate}>
+                <RefreshCw size={14} />
+                重试生成
+              </button>
+            </div>
+          )}
+
+          {state.orchestrationStatus === 'completed' && (
+            <div style={{ padding: '16px', textAlign: 'center' }}>
+              <CheckCircle2
+                size={32}
+                style={{ color: '#8abf8a', margin: '0 auto 8px' }}
+              />
+              <div style={{ fontSize: 14, color: '#e8dfd1' }}>全本生成完成，共 7 阶段</div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ marginTop: 12 }}
+                onClick={() =>
+                  (window.location.href = state.scriptId
+                    ? `/editor/${state.scriptId}`
+                    : '/dashboard')
+                }
+              >
+                进入编辑器
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }

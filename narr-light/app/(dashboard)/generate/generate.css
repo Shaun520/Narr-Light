@@ -372,3 +372,216 @@
     flex-direction: column;
   }
 }
+
+/* ===== 设定本确认闸门 ===== */
+.story-bible-gate {
+  background: var(--paper, #faf8f3);
+  border: 1px solid var(--border, rgba(0,0,0,0.1));
+  border-radius: 8px;
+  padding: 20px;
+  margin: 12px 0;
+}
+.story-bible-gate-title {
+  font-size: 16px;
+  font-weight: bold;
+  margin-bottom: 16px;
+  color: var(--ink, #333);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.story-bible-gate-title::before {
+  content: '❖';
+  color: var(--blood-soft, #c54848);
+}
+.story-bible-gate-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.story-bible-gate-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.story-bible-gate-field-label {
+  font-size: 12px;
+  color: var(--ink-soft, #888);
+  font-weight: 600;
+}
+.story-bible-gate-field-value {
+  font-size: 13px;
+  color: var(--ink, #333);
+  line-height: 1.6;
+}
+.story-bible-gate-field-full {
+  grid-column: 1 / -1;
+}
+.story-bible-gate-section {
+  margin-top: 16px;
+}
+.story-bible-gate-section-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--ink, #333);
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed var(--border, rgba(0,0,0,0.1));
+}
+.story-bible-gate-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.story-bible-gate-list-item {
+  font-size: 12px;
+  color: var(--ink-soft, #666);
+  line-height: 1.6;
+  padding-left: 12px;
+  position: relative;
+}
+.story-bible-gate-list-item::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: var(--blood-soft, #c54848);
+}
+.story-bible-gate-hidden-tag {
+  display: inline-block;
+  padding: 0 4px;
+  font-size: 10px;
+  background: rgba(160, 40, 40, 0.1);
+  color: var(--blood, #a02828);
+  border-radius: 2px;
+  margin-left: 4px;
+}
+.story-bible-gate-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border, rgba(0,0,0,0.08));
+}
+
+/* ===== 分阶段生成进度看板 ===== */
+
+/* 在深色 gen-panel 内强制使用浅色文字，保证对比度 */
+.gen-panel .phased-gen-progress {
+  padding: 16px;
+  color: var(--noir-text, #e8dfd1);
+}
+.gen-panel .phased-gen-progress .phased-phase-row {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.gen-panel .phased-gen-progress .phased-phase-label {
+  color: var(--noir-text, #e8dfd1);
+}
+.gen-panel .phased-gen-progress .phased-phase-count,
+.gen-panel .phased-gen-progress .phased-phase-meta,
+.gen-panel .phased-gen-progress .phased-subitem {
+  color: rgba(232, 223, 209, 0.7);
+}
+.gen-panel .phased-gen-progress .phased-stream-preview {
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(232, 223, 209, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+/* 深色 gen-panel 内所有全局错误提示统一提亮 */
+.gen-panel .phased-global-error {
+  background: rgba(160, 40, 40, 0.2);
+  color: #e8a0a0;
+  border: 1px solid rgba(255, 160, 160, 0.25);
+}
+
+/* 默认/浅色容器样式 */
+.phased-gen-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 0;
+}
+.phased-phase-row {
+  border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  padding: 8px 0;
+}
+.phased-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.phased-phase-icon {
+  width: 16px;
+  text-align: center;
+  font-weight: bold;
+}
+.phased-phase-label {
+  flex: 1;
+  color: var(--ink, #333);
+}
+.phased-phase-count {
+  color: var(--ink-soft, #888);
+  font-size: 12px;
+}
+.phased-phase-percent {
+  color: var(--blood-soft, #c54848);
+  font-weight: bold;
+  min-width: 40px;
+  text-align: right;
+}
+.phased-phase-meta {
+  color: var(--ink-soft, #888);
+  font-size: 12px;
+}
+.phased-phase-error {
+  color: var(--blood, #a02828);
+  font-size: 12px;
+  padding: 4px 0 4px 24px;
+  word-break: break-all;
+}
+.phased-subitems {
+  padding: 4px 0 4px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.phased-subitem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-soft, #666);
+}
+.phased-subitem-error {
+  color: var(--blood, #a02828);
+  margin-left: 8px;
+}
+.phased-stream-preview {
+  margin: 4px 0 0 24px;
+  padding: 8px;
+  background: var(--bg-soft, rgba(0, 0, 0, 0.03));
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink-soft, #666);
+}
+.phased-global-error {
+  color: var(--blood, #a02828);
+  padding: 8px 12px;
+  background: rgba(160, 40, 40, 0.08);
+  border-radius: 4px;
+  font-size: 13px;
+  margin-top: 8px;
+}
+.btn-xs {
+  padding: 2px 8px;
+  font-size: 11px;
+}
