@@ -13,6 +13,8 @@ Thumbs.db
 .cursor/
 .trae/
 UI/
+!narr-light/components/ui/
+!narr-light/components/ui/**
 coverage/
 *.tsbuildinfo
 backend/uploads/
