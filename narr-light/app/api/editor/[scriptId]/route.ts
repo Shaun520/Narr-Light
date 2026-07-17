@@ -1,10 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { VersionService } from '@/lib/services/version-service';
 import type {
   CharacterPage,
   ScriptNodeData,
   TreeGroup,
 } from '@/components/editor/script-data';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface EditorDataBundle {
   dataMap: Record<string, ScriptNodeData>;
@@ -13,6 +15,15 @@ interface EditorDataBundle {
   defaultNodeId: string;
   /** 剧本标题（从 scripts 表查询，供时间线校验页等下游模块复用） */
   scriptTitle: string;
+  versions: EditorVersionItem[];
+}
+
+interface EditorVersionItem {
+  version: string;
+  versionNumber: number;
+  time: string;
+  note: string;
+  isCurrent?: boolean;
 }
 
 function escapeHtml(value: unknown): string {
@@ -74,11 +85,58 @@ async function loadFallbackTasks(scriptId: string) {
     .filter(isRecord);
 }
 
+function formatVersionTime(createdAt: string): string {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  const time = new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+
+  if (sameDay) return `${time} 今日`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `昨日 ${time}`;
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
+async function loadVersions(supabase: SupabaseClient, scriptId: string): Promise<EditorVersionItem[]> {
+  try {
+    const snapshots = await new VersionService(supabase).getSnapshots(scriptId);
+    return snapshots.map((snapshot, index) => ({
+      version: `v${snapshot.versionNumber}`,
+      versionNumber: snapshot.versionNumber,
+      time: formatVersionTime(snapshot.createdAt),
+      note: snapshot.changeSummary || snapshot.operationType,
+      isCurrent: index === 0,
+    }));
+  } catch (error) {
+    console.warn(
+      `Editor version query failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return [];
+  }
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ scriptId: string }> }) {
   const { scriptId } = await params;
-  const supabase = createAdminClient();
+  const supabase = createAdminClient() as unknown as SupabaseClient;
 
-  const [characters, characterScripts, clues, organizerRows, truthRows, fallbacks, scriptRows] = await Promise.all([
+  const [characters, characterScripts, clues, organizerRows, truthRows, fallbacks, scriptRows, versions] = await Promise.all([
     safeQuery(
       supabase
         .from('characters')
@@ -121,6 +179,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ scr
         .eq('id', scriptId)
         .limit(1),
     ),
+    loadVersions(supabase, scriptId),
   ]);
 
   // 提取剧本标题（容错：查询失败或无记录时回退为空字符串）
@@ -303,6 +362,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ scr
     groups,
     defaultNodeId: groups.find((group) => group.group === 'organizer')?.children[0] ?? charNodeIds[0] ?? 'clues-overview',
     scriptTitle,
+    versions,
   };
 
   if (!Object.keys(dataMap).length) {

@@ -36,6 +36,7 @@ import { VersionDiff } from '@/components/editor/version-diff';
 import { ScriptOutline } from '@/components/editor/script-outline';
 import {
   type CharacterNode,
+  type CharacterPage,
   type SimpleNode,
   type ClueOverviewNode,
   type ScriptNodeData,
@@ -48,31 +49,12 @@ interface PageProps {
   params: Promise<{ scriptId: string }>;
 }
 
-/** 默认版本列表（对齐原型 4287-4299 行） */
-const DEFAULT_VERSIONS: VersionItem[] = [
-  {
-    version: 'v3',
-    time: '14:32 今日',
-    note: '第二幕新增公共搜证环节',
-    isCurrent: true,
-  },
-  {
-    version: 'v2',
-    time: '昨日 21:08',
-    note: '补全柳如烟童年背景，强化动机',
-  },
-  {
-    version: 'v1',
-    time: '2 天前',
-    note: 'AI 初版全本生成',
-  },
-];
-
 interface EditorDataBundle {
   dataMap: Record<string, ScriptNodeData>;
   groups: TreeGroup[];
   labels: Record<string, string>;
   defaultNodeId: string;
+  versions: VersionItem[];
 }
 
 async function loadEditorData(scriptId: string): Promise<EditorDataBundle | null> {
@@ -86,11 +68,35 @@ async function loadEditorData(scriptId: string): Promise<EditorDataBundle | null
   return (await response.json()) as EditorDataBundle;
 }
 
+async function postJson<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new Error(String(data.error ?? `Request failed: ${response.status}`));
+  }
+  return data as T;
+}
+
 /** Toast 提示状态 */
 interface ToastState {
   visible: boolean;
   message: string;
   icon: string;
+}
+
+interface SaveEditorNodeRequest {
+  nodeId: string;
+  nodeType: 'character' | 'simple' | 'clue-overview';
+  title: string;
+  html: string;
+  plainText: string;
+  pages?: CharacterPage[];
+  sections?: Array<{ actNum: string; title: string; text: string }>;
+  clues?: Array<{ no: string; title: string; tag: string; loc: string }>;
 }
 
 /** 格式化 HH:MM */
@@ -132,6 +138,145 @@ function findCharacterNodeId(name: string, dataMap: Record<string, ScriptNodeDat
   return null;
 }
 
+function stripHtml(value: string): string {
+  if (typeof document === 'undefined') {
+    return value.replace(/<[^>]+>/g, ' ');
+  }
+  const template = document.createElement('template');
+  template.innerHTML = value;
+  return template.content.textContent ?? '';
+}
+
+function getText(el: { textContent?: string } | null | undefined): string {
+  return (el?.textContent ?? '').trim();
+}
+
+function parseCharacterPages(contentEl: HTMLElement, fallback: CharacterNode): CharacterPage[] {
+  const sections = Array.from(contentEl.querySelectorAll('.act-section'));
+  if (!sections.length) {
+    return fallback.pages;
+  }
+
+  return sections.map((section, index) => {
+    const heading = section.querySelector('h2');
+    const act = getText(section.querySelector('.act-num')) || fallback.pages[index]?.act || `第${index + 1}幕`;
+    const title = heading
+      ? getText(heading).replace(act, '').trim()
+      : fallback.pages[index]?.title || `第${index + 1}幕`;
+    const meta = getText(section.querySelector('.page-meta'));
+    const subtitle = meta.split(' · ').slice(2).join(' · ') || fallback.pages[index]?.subtitle || '';
+    const paragraphs = Array.from(section.querySelectorAll('p'))
+      .map((p) => stripHtml(p.innerHTML).trim())
+      .filter(Boolean);
+
+    return {
+      act,
+      title: title || act,
+      subtitle,
+      paragraphs,
+    };
+  });
+}
+
+function parseSimpleSections(contentEl: HTMLElement, fallback: SimpleNode): Array<{ actNum: string; title: string; text: string }> {
+  const sections: Array<{ actNum: string; title: string; text: string }> = [];
+  let current: { actNum: string; title: string; textParts: string[] } | null = null;
+
+  for (const child of Array.from(contentEl.children)) {
+    if (child.tagName === 'H2') {
+      const actNum = getText(child.querySelector('.act-num'));
+      const heading = getText(child);
+      const title = actNum ? heading.replace(actNum, '').trim() : heading.trim();
+      if (current) {
+        sections.push({ actNum: current.actNum, title: current.title, text: current.textParts.join('\n').trim() });
+      }
+      current = {
+        actNum: actNum || fallback.actNum,
+        title: title || fallback.title,
+        textParts: [],
+      };
+      continue;
+    }
+
+    if (!current) continue;
+    const text = stripHtml((child as HTMLElement).innerHTML).trim();
+    if (text) current.textParts.push(text);
+  }
+
+  if (current) {
+    sections.push({ actNum: current.actNum, title: current.title, text: current.textParts.join('\n').trim() });
+  }
+
+  if (!sections.length) {
+    sections.push({ actNum: fallback.actNum, title: fallback.title, text: stripHtml(fallback.html).trim() });
+  }
+
+  return sections;
+}
+
+function parseClues(contentEl: HTMLElement, fallback: ClueOverviewNode): Array<{ no: string; title: string; tag: string; loc: string }> {
+  const items = Array.from(contentEl.querySelectorAll('.clue-overview-item'));
+  if (!items.length) {
+    return fallback.clues.map((clue) => ({
+      no: clue.no,
+      title: clue.title,
+      tag: clue.tag,
+      loc: clue.loc,
+    }));
+  }
+
+  return items.map((item, index) => {
+    const no = getText(item.querySelector('.co-no')).split(' · ')[0] || fallback.clues[index]?.no || `#${String(index + 1).padStart(3, '0')}`;
+    const loc = getText(item.querySelector('.co-no')).split(' · ')[1] || fallback.clues[index]?.loc || '';
+    const title = getText(item.querySelector('.co-title')) || fallback.clues[index]?.title || `线索 ${index + 1}`;
+    const tag = getText(item.querySelector('.co-tag')) || fallback.clues[index]?.tag || '线索';
+    return { no, title, tag, loc };
+  });
+}
+
+function buildSavePayload(
+  currentNode: ScriptNodeData,
+  currentNodeId: string,
+  contentEl: HTMLElement,
+): SaveEditorNodeRequest {
+  const html = contentEl.innerHTML;
+  if (currentNode.type === 'character') {
+    return {
+      nodeId: currentNodeId,
+      nodeType: 'character',
+      title: currentNode.name,
+      html,
+      plainText: parseCharacterPages(contentEl, currentNode)
+        .map((page) => [page.act, page.title, page.subtitle, ...page.paragraphs].filter(Boolean).join('\n'))
+        .join('\n\n'),
+      pages: parseCharacterPages(contentEl, currentNode),
+    };
+  }
+
+  if (currentNode.type === 'clue-overview') {
+    return {
+      nodeId: currentNodeId,
+      nodeType: 'clue-overview',
+      title: currentNode.title,
+      html,
+      plainText: parseClues(contentEl, currentNode)
+        .map((clue) => `${clue.no} ${clue.title} ${clue.tag} ${clue.loc}`)
+        .join('\n'),
+      clues: parseClues(contentEl, currentNode),
+    };
+  }
+
+  const sections = parseSimpleSections(contentEl, currentNode);
+  return {
+    nodeId: currentNodeId,
+    nodeType: 'simple',
+    title: currentNode.title,
+    html,
+    plainText: sections.map((section) => section.text).join('\n\n'),
+    sections,
+  };
+}
+
 /**
  * 剧本编辑器页
  */
@@ -150,11 +295,13 @@ export default function EditorPage({ params }: PageProps) {
   const markSaved = useEditorStore((s) => s.markSaved);
 
   // ===== 本地状态 =====
-  const [versions, setVersions] = useState<VersionItem[]>(DEFAULT_VERSIONS);
+  const [versions, setVersions] = useState<VersionItem[]>([]);
   const [snapshots, setSnapshots] = useState<Record<string, string>>({});
   const [showCompare, setShowCompare] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [editorData, setEditorData] = useState<EditorDataBundle | null>();
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRollingBack, setIsRollingBack] = useState(false);
   const [toast, setToast] = useState<ToastState>({
     visible: false,
     message: '',
@@ -176,6 +323,7 @@ export default function EditorPage({ params }: PageProps) {
       .then((data) => {
         if (cancelled) return;
         setEditorData(data);
+        setVersions(data?.versions ?? []);
         if (data?.defaultNodeId) setCurrentNode(data.defaultNodeId);
       })
       .catch((error) => {
@@ -318,64 +466,89 @@ export default function EditorPage({ params }: PageProps) {
   };
 
   // ===== 保存版本（对齐原型 saveVersion） =====
-  const handleSaveVersion = () => {
-    if (!currentNode || !currentNodeId) return;
+  const handleSaveVersion = async () => {
+    if (!currentNode || !currentNodeId || isSaving) return;
     const contentEl = document.getElementById('editorContent');
     if (!contentEl) return;
 
-    // 保存整段 HTML 快照
-    setSnapshots((prev) => ({
-      ...prev,
-      [currentNodeId]: contentEl.innerHTML,
-    }));
+    setIsSaving(true);
+    try {
+      const payload = buildSavePayload(currentNode, currentNodeId, contentEl);
+      const result = await postJson<{ snapshot: { versionNumber: number } }>(
+        `/api/editor/${scriptId}/save`,
+        payload,
+      );
 
-    markSaved();
-    const ts = formatNow();
-    const labelPrefix =
-      currentNode.type === 'character'
-        ? `人物剧本 · ${(currentNode as CharacterNode).name}`
-        : (currentNode as SimpleNode | ClueOverviewNode).fullTitle;
-    setToolbarLabel(`${labelPrefix} · 已保存于 ${ts}`);
-
-    // 在版本历史中追加一条（对齐原型 prepend 逻辑）
-    setVersions((prev) => {
-      const nextVersion = `v${prev.length + 1}`;
-      const newItem: VersionItem = {
-        version: nextVersion,
-        time: `${ts} 刚刚`,
-        note: `手动保存 · ${
-          currentNode.type === 'character'
-            ? (currentNode as CharacterNode).name
-            : (currentNode as SimpleNode | ClueOverviewNode).title
-        }`,
-        isCurrent: true,
-      };
-      return [
-        newItem,
-        ...prev.map((v) => ({ ...v, isCurrent: false })),
-      ];
-    });
-
-    if (isEditing) exitEditMode();
-    showToast(`版本已保存 · v${versions.length + 1}`, '✓');
-  };
-
-  // ===== 版本回退 =====
-  const handleRollback = (version: string) => {
-    // 清除当前节点快照（回到默认数据）
-    if (currentNodeId) {
       setSnapshots((prev) => {
         const next = { ...prev };
         delete next[currentNodeId];
         return next;
       });
+
+      const fresh = await loadEditorData(scriptId);
+      if (fresh) {
+        setEditorData(fresh);
+        setVersions(fresh.versions ?? []);
+        if (fresh.dataMap[currentNodeId]) {
+          setCurrentNode(currentNodeId);
+        } else if (fresh.defaultNodeId) {
+          setCurrentNode(fresh.defaultNodeId);
+        }
+      }
+
+      markSaved();
+      const ts = formatNow();
+      const labelPrefix =
+        currentNode.type === 'character'
+          ? `人物剧本 · ${(currentNode as CharacterNode).name}`
+          : (currentNode as SimpleNode | ClueOverviewNode).fullTitle;
+      setToolbarLabel(`${labelPrefix} · 已保存于 ${ts}`);
+
+      if (isEditing) exitEditMode();
+      showToast(`版本已保存 · v${result.snapshot.versionNumber}`, '✓');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '保存失败', '!');
+    } finally {
+      setIsSaving(false);
     }
-    markSaved();
-    setVersions((prev) =>
-      prev.map((v) => ({ ...v, isCurrent: v.version === version })),
-    );
-    if (isEditing) exitEditMode();
-    showToast(`已回退到 ${version}`, '⇄');
+  };
+
+  // ===== 版本回退 =====
+  const handleRollback = async (version: string) => {
+    if (isRollingBack) return;
+    const target = versions.find((item) => item.version === version);
+    if (!target?.versionNumber) {
+      showToast(`找不到版本 ${version}`, '!');
+      return;
+    }
+
+    setIsRollingBack(true);
+    try {
+      await postJson<{ snapshot: { versionNumber: number } }>(
+        `/api/editor/${scriptId}/rollback`,
+        { versionNumber: target.versionNumber },
+      );
+
+      setSnapshots({});
+      const fresh = await loadEditorData(scriptId);
+      if (fresh) {
+        setEditorData(fresh);
+        setVersions(fresh.versions ?? []);
+        if (currentNodeId && fresh.dataMap[currentNodeId]) {
+          setCurrentNode(currentNodeId);
+        } else if (fresh.defaultNodeId) {
+          setCurrentNode(fresh.defaultNodeId);
+        }
+      }
+
+      markSaved();
+      if (isEditing) exitEditMode();
+      showToast(`已回退到 ${version}`, '⇄');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '回滚失败', '!');
+    } finally {
+      setIsRollingBack(false);
+    }
   };
 
   // ===== PDF 导出 =====
@@ -472,9 +645,10 @@ export default function EditorPage({ params }: PageProps) {
             type="button"
             className="btn btn-primary"
             onClick={handleSaveVersion}
+            disabled={isSaving || isRollingBack}
           >
             <Save size={14} />
-            保存版本
+            {isSaving ? '保存中' : '保存版本'}
           </button>
         </div>
       </div>

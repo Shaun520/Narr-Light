@@ -12,6 +12,8 @@
 export interface VersionItem {
   /** 版本号，如 "v3" */
   version: string;
+  /** 数字版本号，用于服务端回滚 */
+  versionNumber?: number;
   /** 时间标签，如 "14:32 今日" */
   time: string;
   /** 变更摘要 */

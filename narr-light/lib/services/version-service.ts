@@ -10,6 +10,7 @@
 import { createClient } from '@/lib/supabase/server';
 import type { Json } from '@/lib/supabase/types';
 import type { OperationType, VersionDiffResult, VersionSnapshot } from '@/types';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface VersionSnapshotRow {
   id: string;
@@ -31,6 +32,9 @@ interface SnapshotPayload {
   clues?: unknown[];
   character_relations?: unknown[];
   timeline_events?: unknown[];
+  character_scripts?: unknown[];
+  organizer_manuals?: unknown[];
+  truth_reviews?: unknown[];
   [key: string]: unknown;
 }
 
@@ -49,6 +53,12 @@ const SCRIPT_WRITABLE_FIELDS = [
 ] as const;
 
 export class VersionService {
+  constructor(private readonly client?: SupabaseClient) {}
+
+  private async getClient(): Promise<SupabaseClient> {
+    return this.client ?? ((await createClient()) as unknown as SupabaseClient);
+  }
+
   /**
    * 创建版本快照
    * @param scriptId       剧本 ID
@@ -63,7 +73,7 @@ export class VersionService {
     operationType: OperationType,
     snapshotData: Record<string, unknown>,
   ): Promise<VersionSnapshot> {
-    const supabase = await createClient();
+    const supabase = await this.getClient();
 
     // version_number 自增：取当前最大版本号 + 1
     const { data: latest, error: maxErr } = await supabase
@@ -100,7 +110,7 @@ export class VersionService {
    * 获取剧本的版本快照列表（按版本号倒序）
    */
   async getSnapshots(scriptId: string): Promise<VersionSnapshot[]> {
-    const supabase = await createClient();
+    const supabase = await this.getClient();
     const { data, error } = await supabase
       .from('version_snapshots')
       .select('*')
@@ -115,7 +125,7 @@ export class VersionService {
    * 获取单个版本快照
    */
   async getSnapshot(snapshotId: string): Promise<VersionSnapshot | null> {
-    const supabase = await createClient();
+    const supabase = await this.getClient();
     const { data, error } = await supabase
       .from('version_snapshots')
       .select('*')
@@ -134,7 +144,7 @@ export class VersionService {
    * @returns 新创建的回滚版本快照
    */
   async rollback(scriptId: string, versionNumber: number): Promise<VersionSnapshot> {
-    const supabase = await createClient();
+    const supabase = await this.getClient();
 
     // 1. 获取目标版本快照
     const { data: target, error: targetErr } = await supabase
@@ -170,7 +180,7 @@ export class VersionService {
     versionA: number,
     versionB: number,
   ): Promise<VersionDiffResult> {
-    const supabase = await createClient();
+    const supabase = await this.getClient();
 
     const [aRes, bRes] = await Promise.all([
       supabase
@@ -203,7 +213,7 @@ export class VersionService {
    * 顺序：script → characters → acts（级联 scenes）→ scenes → clues → relations → timeline
    */
   private async applySnapshot(scriptId: string, payload: SnapshotPayload): Promise<void> {
-    const supabase = await createClient();
+    const supabase = await this.getClient();
 
     // 1. 覆盖剧本主表（仅更新可写字段）
     if (payload.script && typeof payload.script === 'object') {
@@ -228,6 +238,19 @@ export class VersionService {
         }));
         const { error } = await supabase.from('characters').insert(rows);
         if (error) throw new Error(`覆盖人物失败: ${error.message}`);
+      }
+    }
+
+    // 2.1. 覆盖 character_scripts（依赖 characters，需在 characters 之后恢复）
+    if (Array.isArray(payload.character_scripts)) {
+      await supabase.from('character_scripts').delete().eq('script_id', scriptId);
+      if (payload.character_scripts.length > 0) {
+        const rows = payload.character_scripts.map((row) => ({
+          ...(row as Record<string, unknown>),
+          script_id: scriptId,
+        }));
+        const { error } = await supabase.from('character_scripts').insert(rows);
+        if (error) throw new Error(`覆盖角色剧本失败: ${error.message}`);
       }
     }
 
@@ -286,6 +309,32 @@ export class VersionService {
         }));
         const { error } = await supabase.from('timeline_events').insert(rows);
         if (error) throw new Error(`覆盖时间线失败: ${error.message}`);
+      }
+    }
+
+    // 8. 覆盖组织者手册
+    if (Array.isArray(payload.organizer_manuals)) {
+      await supabase.from('organizer_manuals').delete().eq('script_id', scriptId);
+      if (payload.organizer_manuals.length > 0) {
+        const rows = payload.organizer_manuals.map((row) => ({
+          ...(row as Record<string, unknown>),
+          script_id: scriptId,
+        }));
+        const { error } = await supabase.from('organizer_manuals').insert(rows);
+        if (error) throw new Error(`覆盖组织者手册失败: ${error.message}`);
+      }
+    }
+
+    // 9. 覆盖真相复盘
+    if (Array.isArray(payload.truth_reviews)) {
+      await supabase.from('truth_reviews').delete().eq('script_id', scriptId);
+      if (payload.truth_reviews.length > 0) {
+        const rows = payload.truth_reviews.map((row) => ({
+          ...(row as Record<string, unknown>),
+          script_id: scriptId,
+        }));
+        const { error } = await supabase.from('truth_reviews').insert(rows);
+        if (error) throw new Error(`覆盖真相复盘失败: ${error.message}`);
       }
     }
   }
