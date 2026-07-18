@@ -741,6 +741,12 @@ export default function EditorPage({ params }: PageProps) {
           }
           return updated;
         });
+        // 已持久化，清除可能残留的脏快照，避免 EditorContent 优先渲染旧快照
+        setSnapshots((prev) => {
+          const next = { ...prev };
+          delete next[currentNodeId];
+          return next;
+        });
       }
 
       markSaved();
