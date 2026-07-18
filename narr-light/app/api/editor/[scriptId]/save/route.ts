@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { VersionService } from '@/lib/services/version-service';
 import type { Json } from '@/lib/supabase/types';
-import type { OperationType, VersionSnapshot } from '@/types';
+import type { OperationType } from '@/types';
 
 type EditorNodeType = 'character' | 'simple' | 'clue-overview';
 
@@ -475,20 +475,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ scr
     const supabase = createAdminClient() as unknown as SupabaseClient;
     await ensureScriptExists(supabase, scriptId);
     await saveEditorNode(supabase, scriptId, body);
+
+    // 编辑保存（不生成版本）：只更新字数，跳过校验清理等重操作，保证快速响应
+    if (body.createVersion === false) {
+      const wordCountValue = wordCount(body.plainText);
+      await supabase
+        .from('scripts')
+        .update({ word_count: wordCountValue, updated_at: new Date().toISOString() })
+        .eq('id', scriptId);
+      return NextResponse.json({ saved: true });
+    }
+
+    // 版本保存：重算字数 + 清理旧校验 + 生成版本快照
     const script = await refreshScriptMetadata(supabase, scriptId);
     const invalidated = await invalidateValidationResults(supabase, scriptId);
 
-    let snapshot: VersionSnapshot | null = null;
-    if (body.createVersion !== false) {
-      const snapshotData = await buildSnapshotData(supabase, scriptId, body);
-      const versionService = new VersionService(supabase);
-      snapshot = await versionService.createSnapshot(
-        scriptId,
-        `手动保存 · ${body.title || body.nodeId}`,
-        mapOperationType(body.nodeType),
-        snapshotData,
-      );
-    }
+    const snapshotData = await buildSnapshotData(supabase, scriptId, body);
+    const versionService = new VersionService(supabase);
+    const snapshot = await versionService.createSnapshot(
+      scriptId,
+      `手动保存 · ${body.title || body.nodeId}`,
+      mapOperationType(body.nodeType),
+      snapshotData,
+    );
 
     return NextResponse.json({ snapshot, script, invalidated });
   } catch (error) {

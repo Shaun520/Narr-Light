@@ -712,21 +712,39 @@ export default function EditorPage({ params }: PageProps) {
         { ...payload, createVersion },
       );
 
+      // 清除当前节点的本地快照（已持久化到数据库）
       setSnapshots((prev) => {
         const next = { ...prev };
         delete next[currentNodeId];
         return next;
       });
 
-      const fresh = await loadEditorData(scriptId);
-      if (fresh) {
-        setEditorData(fresh);
-        setVersions(fresh.versions ?? []);
-        if (fresh.dataMap[currentNodeId]) {
-          setCurrentNode(currentNodeId);
-        } else if (fresh.defaultNodeId) {
-          setCurrentNode(fresh.defaultNodeId);
-        }
+      // 编辑保存：用当前 DOM 内容更新本地 dataMap，避免退出编辑态后内容回退
+      if (!createVersion) {
+        setEditorData((prev) => {
+          if (!prev) return prev;
+          const updated = { ...prev, dataMap: { ...prev.dataMap } };
+          const node = updated.dataMap[currentNodeId];
+          if (!node) return prev;
+          if (node.type === 'character') {
+            const pages = parseCharacterPages(contentEl, node as CharacterNode);
+            updated.dataMap[currentNodeId] = {
+              ...node,
+              pages,
+            } as ScriptNodeData;
+          } else if (node.type === 'simple') {
+            updated.dataMap[currentNodeId] = {
+              ...node,
+              html: contentEl.innerHTML,
+            } as ScriptNodeData;
+          } else if (node.type === 'clue-overview') {
+            updated.dataMap[currentNodeId] = {
+              ...node,
+              clues: parseClues(contentEl, node as ClueOverviewNode),
+            } as ScriptNodeData;
+          }
+          return updated;
+        });
       }
 
       markSaved();
@@ -739,9 +757,25 @@ export default function EditorPage({ params }: PageProps) {
 
       if (createVersion && isEditing) exitEditMode();
 
-      if (createVersion && result.snapshot) {
-        showToast(`版本已保存 · v${result.snapshot.versionNumber}`, '✓');
+      if (createVersion) {
+        // 版本保存：重新加载编辑器数据以刷新版本列表
+        const fresh = await loadEditorData(scriptId);
+        if (fresh) {
+          setEditorData(fresh);
+          setVersions(fresh.versions ?? []);
+          if (fresh.dataMap[currentNodeId]) {
+            setCurrentNode(currentNodeId);
+          } else if (fresh.defaultNodeId) {
+            setCurrentNode(fresh.defaultNodeId);
+          }
+        }
+        if (result.snapshot) {
+          showToast(`版本已保存 · v${result.snapshot.versionNumber}`, '✓');
+        } else {
+          showToast('版本已保存', '✓');
+        }
       } else {
+        // 编辑保存：不重新加载全部数据，避免内容闪烁
         showToast('内容已保存', '✓');
       }
     } catch (error) {
