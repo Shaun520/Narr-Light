@@ -1,114 +1,106 @@
 /**
- * 线索 CRUD / 标记 / 跨模块同步服务（T164）
+ * 线索 CRUD / 标记服务。
  *
- * 管理线索卡完整生命周期：查询、创建、更新、删除、标记干扰项/关键线索、
- * 同步至剧本正文（FR-012 / FR-013）。
- *
- * 服务端使用，通过动态导入 @/lib/supabase/server 获取带会话的客户端，
- * 避免 next/headers 被打包进客户端 bundle。
- *
- * 依赖数据库表：
- *   - clues（id / script_id / act / phase / type / title / text / code / location /
- *     owner / is_distractor / is_key / related_characters(json) / related_truth /
- *     unlock_level / requires(json) / sort_order / synced_at / created_at / updated_at）
- *
- * 注：clues 表尚未在 lib/supabase/types.ts 中声明，本服务以行接口显式定义，
- *     待迁移脚本创建表后再同步至 supabase/types.ts。
+ * 这里以当前 Supabase `clues` 表为准：
+ * title / content / clue_type / search_round / related_character_ids /
+ * is_distractor / is_key_clue / unlock_condition / sort_order。
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ApiError } from '@/lib/api/response';
-import type { Json } from '@/lib/supabase/types';
-import type {
-  ClueAct,
-  CluePhase,
-  ClueType,
+import { createAdminClient } from '@/lib/supabase/admin';
+import type { Database } from '@/lib/supabase/types';
+import {
+  ACT_LABELS,
+  CLUE_TYPE_LABELS,
+  PHASE_LABELS,
+  toChineseOrdinal,
+  type Clue,
+  type ClueAct,
+  type CluePhase,
+  type ClueType,
 } from '@/components/clue-card/clue-card';
 
-/** clues 表行结构（snake_case） */
-interface ClueRow {
+type ClueRow = Database['public']['Tables']['clues']['Row'];
+type ClueInsert = Database['public']['Tables']['clues']['Insert'];
+type ClueUpdate = Database['public']['Tables']['clues']['Update'];
+
+interface CharacterRow {
   id: string;
-  script_id: string;
-  act: ClueAct;
-  phase: CluePhase;
-  type: ClueType;
-  title: string;
-  text: string;
-  code: string;
-  location: string;
-  owner: string | null;
-  is_distractor: boolean;
-  is_key: boolean;
-  related_characters: string[] | null;
-  related_truth: string | null;
-  unlock_level: number | null;
-  requires: string[] | null;
-  sort_order: number;
-  synced_at: string | null;
-  created_at: string;
-  updated_at: string;
+  name: string;
 }
 
-/** 服务层返回的线索结构（蛇形转驼峰） */
-export interface ClueDTO {
-  id: string;
+export interface ClueDTO extends Clue {
   scriptId: string;
-  act: ClueAct;
-  phase: CluePhase;
-  type: ClueType;
-  title: string;
-  text: string;
-  code: string;
-  location: string;
-  owner: string | null;
-  isDistractor: boolean;
-  isKey: boolean;
-  relatedCharacters: string[];
-  relatedTruth: string | null;
-  unlockLevel: number;
-  requires: string[];
+  searchRound: number;
+  unlockCondition: string;
   sortOrder: number;
-  syncedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-/** 创建线索入参 */
 export interface CreateClueInput {
   scriptId: string;
-  act: ClueAct;
-  phase: CluePhase;
   type: ClueType;
   title: string;
   text: string;
-  code: string;
   location: string;
-  owner?: string;
+  searchRound?: number;
+  relatedCharacterIds?: string[];
   isDistractor?: boolean;
   isKey?: boolean;
-  relatedCharacters?: string[];
-  relatedTruth?: string;
-  unlockLevel?: number;
-  requires?: string[];
+  unlockCondition?: string;
   sortOrder?: number;
 }
 
-/** 更新线索补丁 */
 export type UpdateCluePatch = Partial<Omit<CreateClueInput, 'scriptId'>>;
 
+const ACT_BY_SEARCH_ROUND: Record<number, ClueAct> = {
+  1: 'act1',
+  2: 'act2',
+  3: 'act3',
+};
+
+function toAct(searchRound: number | null): ClueAct {
+  return ACT_BY_SEARCH_ROUND[searchRound ?? 1] ?? 'truth';
+}
+
+function toSearchRound(act?: ClueAct): number | undefined {
+  if (!act) return undefined;
+  if (act === 'act1') return 1;
+  if (act === 'act2') return 2;
+  if (act === 'act3') return 3;
+  return 4;
+}
+
+function toPhase(row: Pick<ClueRow, 'is_key_clue' | 'is_distractor'>): CluePhase {
+  if (row.is_key_clue) return 'key';
+  if (row.is_distractor) return 'trap';
+  return 'public';
+}
+
+function buildTag(phase: CluePhase, act: ClueAct, owner?: string): string {
+  if (phase === 'key') return PHASE_LABELS.key;
+  if (phase === 'trap') return PHASE_LABELS.trap;
+  if (phase === 'private' && owner) return `${owner}私有`;
+  return `${PHASE_LABELS.public} · ${ACT_LABELS[act].split(' · ')[0]}`;
+}
+
+function buildCode(row: Pick<ClueRow, 'sort_order' | 'is_key_clue'>): string {
+  const prefix = row.is_key_clue ? 'K' : 'C';
+  return `#${prefix}-${String((row.sort_order ?? 0) + 1).padStart(2, '0')}`;
+}
+
+function parseRequires(unlockCondition: string): string[] {
+  return Array.from(unlockCondition.matchAll(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi))
+    .map((match) => match[0]);
+}
+
 /**
- * 线索管理服务
- *
- * 通过 ClueService 单例方法操作 clues 表。
- * 所有方法均为服务端方法，依赖带会话的 Supabase 客户端。
+ * 线索管理服务。
  */
 export class ClueService {
-  /**
-   * 获取剧本的全部线索，按 sort_order 升序返回。
-   * @param scriptId 剧本 ID
-   * @throws {ApiError} DB_QUERY_ERROR 当查询失败时抛出 (500)
-   */
   async getClues(scriptId: string): Promise<ClueDTO[]> {
-    const supabase = await this.getServerClient();
+    const supabase = this.getAdminClient();
     const { data, error } = await supabase
       .from('clues')
       .select('*')
@@ -118,17 +110,18 @@ export class ClueService {
     if (error) {
       throw new ApiError('DB_QUERY_ERROR', `获取线索列表失败: ${error.message}`, 500);
     }
-    return (data ?? []).map((row) => this.mapRow(row as unknown as ClueRow));
+
+    const characterNameById = await this.getCharacterNameMap(
+      supabase,
+      scriptId,
+      data ?? [],
+    );
+
+    return (data ?? []).map((row, index) => this.mapRow(row, index, characterNameById));
   }
 
-  /**
-   * 获取单条线索。
-   * @param clueId 线索 ID
-   * @throws {ApiError} NOT_FOUND 当线索不存在时抛出 (404)
-   * @throws {ApiError} DB_QUERY_ERROR 当查询失败时抛出 (500)
-   */
   async getClue(clueId: string): Promise<ClueDTO> {
-    const supabase = await this.getServerClient();
+    const supabase = this.getAdminClient();
     const { data, error } = await supabase
       .from('clues')
       .select('*')
@@ -141,47 +134,32 @@ export class ClueService {
     if (!data) {
       throw new ApiError('NOT_FOUND', `线索 ${clueId} 不存在`, 404);
     }
-    return this.mapRow(data as unknown as ClueRow);
+
+    const row = data as unknown as ClueRow;
+    const characterNameById = await this.getCharacterNameMap(supabase, row.script_id, [row]);
+    return this.mapRow(row, row.sort_order ?? 0, characterNameById);
   }
 
-  /**
-   * 创建线索。
-   * 校验必填字段（title / text / code / location），缺失时抛出 INVALID_CLUE (400)。
-   * @param input 创建入参
-   * @throws {ApiError} INVALID_CLUE 当必填字段缺失时抛出 (400)
-   * @throws {ApiError} DB_UPDATE_ERROR 当写入失败时抛出 (500)
-   */
   async createClue(input: CreateClueInput): Promise<ClueDTO> {
-    if (!input.title?.trim() || !input.text?.trim() || !input.code?.trim() || !input.location?.trim()) {
-      throw new ApiError(
-        'INVALID_CLUE',
-        '线索必填字段缺失（title / text / code / location）',
-        400,
-      );
+    if (!input.title?.trim() || !input.text?.trim()) {
+      throw new ApiError('INVALID_CLUE', '线索标题和正文不能为空', 400);
     }
-    const supabase = await this.getServerClient();
-    const now = new Date().toISOString();
-    const row: Partial<ClueRow> = {
+
+    const supabase = this.getAdminClient();
+    const row: ClueInsert = {
       script_id: input.scriptId,
-      act: input.act,
-      phase: input.phase,
-      type: input.type,
-      title: input.title,
-      text: input.text,
-      code: input.code,
-      location: input.location,
-      owner: input.owner ?? null,
+      title: input.title.trim(),
+      content: input.text.trim(),
+      clue_type: input.type,
+      search_round: input.searchRound ?? 1,
+      location: input.location?.trim() ?? '',
+      related_character_ids: input.relatedCharacterIds ?? [],
       is_distractor: input.isDistractor ?? false,
-      is_key: input.isKey ?? false,
-      related_characters: input.relatedCharacters ?? [],
-      related_truth: input.relatedTruth ?? null,
-      unlock_level: input.unlockLevel ?? 0,
-      requires: input.requires ?? [],
+      is_key_clue: input.isKey ?? false,
+      unlock_condition: input.unlockCondition ?? '',
       sort_order: input.sortOrder ?? 0,
-      synced_at: null,
-      created_at: now,
-      updated_at: now,
     };
+
     const { data, error } = await supabase
       .from('clues')
       .insert(row as never)
@@ -191,46 +169,38 @@ export class ClueService {
     if (error) {
       throw new ApiError('DB_UPDATE_ERROR', `创建线索失败: ${error.message}`, 500);
     }
-    return this.mapRow(data as unknown as ClueRow);
+
+    const created = data as unknown as ClueRow;
+    const characterNameById = await this.getCharacterNameMap(supabase, input.scriptId, [created]);
+    return this.mapRow(created, created.sort_order ?? 0, characterNameById);
   }
 
-  /**
-   * 更新线索。仅更新补丁中提供的字段。
-   * @param clueId 线索 ID
-   * @param patch  更新补丁
-   * @throws {ApiError} NOT_FOUND 当线索不存在时抛出 (404)
-   * @throws {ApiError} DB_UPDATE_ERROR 当更新失败时抛出 (500)
-   */
-  async updateClue(clueId: string, patch: UpdateCluePatch): Promise<ClueDTO> {
-    const supabase = await this.getServerClient();
-    const { data: existing, error: existErr } = await supabase
-      .from('clues')
-      .select('id')
-      .eq('id', clueId)
-      .maybeSingle();
-    if (existErr) {
-      throw new ApiError('DB_QUERY_ERROR', `校验线索存在性失败: ${existErr.message}`, 500);
-    }
-    if (!existing) {
-      throw new ApiError('NOT_FOUND', `线索 ${clueId} 不存在`, 404);
-    }
+  async updateClue(clueId: string, patch: UpdateCluePatch & { act?: ClueAct; phase?: CluePhase }): Promise<ClueDTO> {
+    const supabase = this.getAdminClient();
+    const update: ClueUpdate = {};
 
-    const update: Partial<ClueRow> & { updated_at: string } = { updated_at: new Date().toISOString() };
-    if (patch.act !== undefined) update.act = patch.act;
-    if (patch.phase !== undefined) update.phase = patch.phase;
-    if (patch.type !== undefined) update.type = patch.type;
-    if (patch.title !== undefined) update.title = patch.title;
-    if (patch.text !== undefined) update.text = patch.text;
-    if (patch.code !== undefined) update.code = patch.code;
-    if (patch.location !== undefined) update.location = patch.location;
-    if (patch.owner !== undefined) update.owner = patch.owner;
+    if (patch.title !== undefined) update.title = patch.title.trim();
+    if (patch.text !== undefined) update.content = patch.text.trim();
+    if (patch.type !== undefined) update.clue_type = patch.type;
+    if (patch.location !== undefined) update.location = patch.location.trim();
+    if (patch.searchRound !== undefined) update.search_round = patch.searchRound;
+    if (patch.act !== undefined) update.search_round = toSearchRound(patch.act);
+    if (patch.relatedCharacterIds !== undefined) update.related_character_ids = patch.relatedCharacterIds;
     if (patch.isDistractor !== undefined) update.is_distractor = patch.isDistractor;
-    if (patch.isKey !== undefined) update.is_key = patch.isKey;
-    if (patch.relatedCharacters !== undefined) update.related_characters = patch.relatedCharacters;
-    if (patch.relatedTruth !== undefined) update.related_truth = patch.relatedTruth;
-    if (patch.unlockLevel !== undefined) update.unlock_level = patch.unlockLevel;
-    if (patch.requires !== undefined) update.requires = patch.requires;
+    if (patch.isKey !== undefined) update.is_key_clue = patch.isKey;
+    if (patch.unlockCondition !== undefined) update.unlock_condition = patch.unlockCondition;
     if (patch.sortOrder !== undefined) update.sort_order = patch.sortOrder;
+
+    if (patch.phase === 'key') {
+      update.is_key_clue = true;
+      update.is_distractor = false;
+    } else if (patch.phase === 'trap') {
+      update.is_distractor = true;
+      update.is_key_clue = false;
+    } else if (patch.phase === 'public' || patch.phase === 'private') {
+      update.is_key_clue = false;
+      update.is_distractor = false;
+    }
 
     const { data, error } = await supabase
       .from('clues')
@@ -242,128 +212,100 @@ export class ClueService {
     if (error) {
       throw new ApiError('DB_UPDATE_ERROR', `更新线索失败: ${error.message}`, 500);
     }
-    return this.mapRow(data as unknown as ClueRow);
+
+    const updated = data as unknown as ClueRow;
+    const characterNameById = await this.getCharacterNameMap(supabase, updated.script_id, [updated]);
+    return this.mapRow(updated, updated.sort_order ?? 0, characterNameById);
   }
 
-  /**
-   * 删除线索。删除后逻辑校验模块将不再识别该条线索。
-   * @param clueId 线索 ID
-   * @throws {ApiError} NOT_FOUND 当线索不存在时抛出 (404)
-   * @throws {ApiError} DB_UPDATE_ERROR 当删除失败时抛出 (500)
-   */
   async deleteClue(clueId: string): Promise<void> {
-    const supabase = await this.getServerClient();
-    const { data: existing, error: existErr } = await supabase
-      .from('clues')
-      .select('id')
-      .eq('id', clueId)
-      .maybeSingle();
-    if (existErr) {
-      throw new ApiError('DB_QUERY_ERROR', `校验线索存在性失败: ${existErr.message}`, 500);
-    }
-    if (!existing) {
-      throw new ApiError('NOT_FOUND', `线索 ${clueId} 不存在`, 404);
-    }
+    const supabase = this.getAdminClient();
     const { error } = await supabase.from('clues').delete().eq('id', clueId);
     if (error) {
       throw new ApiError('DB_UPDATE_ERROR', `删除线索失败: ${error.message}`, 500);
     }
   }
 
-  /**
-   * 标记干扰项（FR-013）。干扰项计入难度评估的干扰项占比。
-   * @param clueId       线索 ID
-   * @param isDistractor 是否为干扰项
-   * @throws {ApiError} NOT_FOUND 当线索不存在时抛出 (404)
-   * @throws {ApiError} DB_UPDATE_ERROR 当更新失败时抛出 (500)
-   */
   async markDistractor(clueId: string, isDistractor: boolean): Promise<ClueDTO> {
-    return this.updateClue(clueId, { isDistractor });
+    return this.updateClue(clueId, {
+      isDistractor,
+      isKey: isDistractor ? false : undefined,
+    });
   }
 
-  /**
-   * 标记关键线索（FR-013）。关键线索在校验、复盘关联中优先展示，
-   * 不被判定为无效干扰项。
-   * @param clueId 线索 ID
-   * @param isKey  是否为关键线索
-   * @throws {ApiError} NOT_FOUND 当线索不存在时抛出 (404)
-   * @throws {ApiError} DB_UPDATE_ERROR 当更新失败时抛出 (500)
-   */
   async markKeyClue(clueId: string, isKey: boolean): Promise<ClueDTO> {
-    return this.updateClue(clueId, { isKey });
+    return this.updateClue(clueId, {
+      isKey,
+      isDistractor: isKey ? false : undefined,
+    });
   }
 
-  /**
-   * 跨模块同步到剧本（FR-012）。
-   * 将线索的最新文案回写至剧本正文与复盘对应解释，标记 synced_at 时间戳。
-   * 注：实际正文合并由 script-import / version 服务承载，本方法完成同步握手
-   *     （置位 synced_at 并返回最新线索），触发后续版本快照。
-   * @param clueId 线索 ID
-   * @throws {ApiError} NOT_FOUND 当线索不存在时抛出 (404)
-   * @throws {ApiError} DB_UPDATE_ERROR 当同步失败时抛出 (500)
-   */
-  async syncToScript(clueId: string): Promise<ClueDTO> {
-    const supabase = await this.getServerClient();
-    const { data: existing, error: existErr } = await supabase
-      .from('clues')
-      .select('id')
-      .eq('id', clueId)
-      .maybeSingle();
-    if (existErr) {
-      throw new ApiError('DB_QUERY_ERROR', `校验线索存在性失败: ${existErr.message}`, 500);
-    }
-    if (!existing) {
-      throw new ApiError('NOT_FOUND', `线索 ${clueId} 不存在`, 404);
-    }
+  private getAdminClient(): SupabaseClient {
+    return createAdminClient() as unknown as SupabaseClient;
+  }
+
+  private async getCharacterNameMap(
+    supabase: SupabaseClient,
+    scriptId: string,
+    clueRows: ClueRow[],
+  ): Promise<Map<string, string>> {
+    const ids = Array.from(new Set(clueRows.flatMap((row) => row.related_character_ids ?? [])));
+    if (ids.length === 0) return new Map();
+
     const { data, error } = await supabase
-      .from('clues')
-      .update({ synced_at: new Date().toISOString(), updated_at: new Date().toISOString() } as never)
-      .eq('id', clueId)
-      .select('*')
-      .single();
+      .from('characters')
+      .select('id, name')
+      .eq('script_id', scriptId)
+      .in('id', ids);
+
     if (error) {
-      throw new ApiError('DB_UPDATE_ERROR', `同步线索至剧本失败: ${error.message}`, 500);
+      throw new ApiError('DB_QUERY_ERROR', `获取线索关联人物失败: ${error.message}`, 500);
     }
-    return this.mapRow(data as unknown as ClueRow);
+
+    return new Map(((data ?? []) as CharacterRow[]).map((character) => [character.id, character.name]));
   }
 
-  // ===== 内部工具方法 =====
+  private mapRow(
+    row: ClueRow,
+    index: number,
+    characterNameById: Map<string, string>,
+  ): ClueDTO {
+    const act = toAct(row.search_round);
+    const phase = toPhase(row);
+    const relatedCharacters = (row.related_character_ids ?? [])
+      .map((id) => characterNameById.get(id))
+      .filter((name): name is string => Boolean(name));
+    const owner = phase === 'private' ? relatedCharacters[0] : undefined;
 
-  /** 动态导入服务端 Supabase Client（避免 next/headers 进入客户端 bundle） */
-  private async getServerClient(): Promise<SupabaseClient> {
-    const { createClient } = await import('@/lib/supabase/server');
-    return createClient();
-  }
-
-  /** 将 clues 行映射为 DTO */
-  private mapRow(row: ClueRow): ClueDTO {
     return {
       id: row.id,
       scriptId: row.script_id,
-      act: row.act,
-      phase: row.phase,
-      type: row.type,
+      act,
+      phase,
+      type: row.clue_type,
+      corner: toChineseOrdinal(index + 1),
+      tag: buildTag(phase, act, owner),
       title: row.title,
-      text: row.text,
-      code: row.code,
-      location: row.location,
-      owner: row.owner,
+      text: row.content,
+      code: buildCode(row),
+      location: row.location || '未标注',
+      owner,
       isDistractor: row.is_distractor,
-      isKey: row.is_key,
-      relatedCharacters: row.related_characters ?? [],
-      relatedTruth: row.related_truth,
-      unlockLevel: row.unlock_level ?? 0,
-      requires: row.requires ?? [],
-      sortOrder: row.sort_order,
-      syncedAt: row.synced_at,
+      isKey: row.is_key_clue,
+      relatedCharacters,
+      relatedTruth: undefined,
+      unlockLevel: row.unlock_condition ? 1 : 0,
+      requires: parseRequires(row.unlock_condition ?? ''),
+      searchRound: row.search_round ?? 1,
+      unlockCondition: row.unlock_condition ?? '',
+      sortOrder: row.sort_order ?? index,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
   }
 }
 
-/** 服务单例（无状态，可直接复用） */
 export const clueService = new ClueService();
 
-/** 兼容 Json 类型导入（避免未使用告警） */
-export type { Json };
+export type { Clue };
+export { CLUE_TYPE_LABELS };

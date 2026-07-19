@@ -7,7 +7,7 @@
  * 节点类型：
  *   - character     人物剧本（每人 3 幕，长卷排版）
  *   - simple        组织者手册 / 真相复盘（预渲染 HTML）
- *   - clue-overview 线索卡总览（42 张）
+ *   - clue-overview 线索卡总览
  */
 
 /** 单幕页内容（人物剧本） */
@@ -537,52 +537,9 @@ export const SCRIPT_DATA: Record<string, ScriptNodeData> = {
     type: 'clue-overview',
     id: 'clues-overview',
     title: '线索卡总览',
-    actNum: '42 张',
-    fullTitle: '线索卡总览 · 全本 42 张',
-    clues: [
-      { no: '#001', title: '族谱残页', tag: '关键', tagType: 'blood', loc: '祠堂东厢' },
-      { no: '#002', title: '三张借据', tag: '关键', tagType: 'blood', loc: '书房暗格' },
-      { no: '#003', title: '乌头草药包', tag: '关键', tagType: 'blood', loc: '药铺后院' },
-      { no: '#004', title: '朱砂私章', tag: '关键', tagType: 'blood', loc: '沈墨白信件' },
-      { no: '#005', title: '君山银针茶罐', tag: '物证', loc: '书房' },
-      { no: '#006', title: '蜜渍蜜饯残渣', tag: '物证', loc: '书房茶盏' },
-      { no: '#007', title: '钥匙串', tag: '物证', loc: '沈墨尘腰间' },
-      { no: '#008', title: '铜锁木匣', tag: '物证', loc: '书房暗格' },
-      { no: '#009', title: '药铺旧账本', tag: '物证', loc: '药铺柜台' },
-      { no: '#010', title: '客栈伙计证词', tag: '口供', loc: 'NPC' },
-      { no: '#011', title: '祠堂管事证词', tag: '口供', loc: 'NPC' },
-      { no: '#012', title: '小翠丑时见闻', tag: '口供', loc: '玩家' },
-      { no: '#013', title: '柳如烟祠堂目击', tag: '口供', loc: '玩家' },
-      { no: '#014', title: '陈守义族议陈述', tag: '口供', loc: '玩家' },
-      { no: '#015', title: '周半仙药铺打烊记录', tag: '口供', loc: '玩家' },
-      { no: '#016', title: '雨夜伞痕', tag: '物证', loc: '祠堂外' },
-      { no: '#017', title: '墨白临终笔迹', tag: '关键', tagType: 'blood', loc: '书房案上' },
-      { no: '#018', title: '过继族谱旧稿', tag: '关键', tagType: 'blood', loc: '周半仙自首' },
-      { no: '#019', title: '药铺后院门锁', tag: '物证', loc: '药铺后院' },
-      { no: '#020', title: '小翠改口证词', tag: '伪线索', tagType: 'ok', loc: 'DM 释放' },
-      { no: '#021', title: '沈家账册', tag: '物证', loc: '书房' },
-      { no: '#022', title: '墨尘雨中观望', tag: '口供', loc: '陈守义' },
-      { no: '#023', title: '安神药包', tag: '物证', loc: '柳如烟袖中' },
-      { no: '#024', title: '茶盏残温', tag: '物证', loc: '书房' },
-      { no: '#025', title: '族中长老陈词', tag: '口供', loc: 'NPC' },
-      { no: '#026', title: '药铺坐诊记录', tag: '物证', loc: '药铺' },
-      { no: '#027', title: '柴房灯火', tag: '环境', loc: '药铺后院' },
-      { no: '#028', title: '雨势时辰记录', tag: '环境', loc: 'DM' },
-      { no: '#029', title: '沈宅仆役名册', tag: '物证', loc: '沈宅' },
-      { no: '#030', title: '墨白归乡车票', tag: '物证', loc: '沈墨白行李' },
-      { no: '#031', title: '墨尘私人物品', tag: '物证', loc: '书房' },
-      { no: '#032', title: '祠堂祭器清单', tag: '物证', loc: '祠堂' },
-      { no: '#033', title: '药铺蜜渍配方', tag: '关键', tagType: 'blood', loc: '周半仙自首' },
-      { no: '#034', title: '过继日期勘误', tag: '关键', tagType: 'blood', loc: '族谱旧稿' },
-      { no: '#035', title: '柳如烟童年信物', tag: '情感', loc: '药铺' },
-      { no: '#036', title: '沈父遗书', tag: '关键', tagType: 'blood', loc: '书房暗匣' },
-      { no: '#037', title: '客栈住宿登记', tag: '物证', loc: '客栈' },
-      { no: '#038', title: '雨夜更夫证词', tag: '口供', loc: 'NPC' },
-      { no: '#039', title: '药铺账本对照', tag: '关键', tagType: 'blood', loc: '药铺' },
-      { no: '#040', title: '沈墨白日记残页', tag: '情感', loc: '书房' },
-      { no: '#041', title: '族中议长印章', tag: '物证', loc: '陈守义' },
-      { no: '#042', title: '终局投票卡', tag: '机制', loc: 'DM' },
-    ],
+    actNum: '0 张',
+    fullTitle: '线索卡总览 · 暂无数据',
+    clues: [],
   },
 
   // ===== 真相复盘 =====
