@@ -55,6 +55,32 @@
   flex-shrink: 0;
 }
 
+.illust-style-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(58, 50, 42, 0.22);
+  border-left: 3px solid var(--gold-soft);
+  background: rgba(253, 248, 240, 0.58);
+  color: var(--sepia);
+  font-size: 12px;
+}
+
+.illust-style-strip .style-label {
+  font-family: 'Courier Prime', monospace;
+  letter-spacing: 0.14em;
+  color: var(--sepia-soft);
+}
+
+.illust-style-strip strong {
+  margin-left: auto;
+  color: var(--blood);
+  font-weight: 700;
+}
+
 /* ===================== 通用按钮（全局，抽屉 Portal 在 .illust-page 之外也需生效） ===================== */
 .btn {
   display: inline-flex;
@@ -1257,4 +1283,58 @@
 .batch-progress-meta .bpm-count {
   color: var(--blood);
   font-weight: 700;
+}
+
+.market-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-card {
+  min-height: 132px;
+  padding: 12px;
+  border: 1px solid var(--noir-line);
+  border-radius: 2px;
+  background: var(--paper-lighter);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.16s, box-shadow 0.16s, transform 0.12s;
+}
+
+.market-card:hover {
+  border-color: var(--blood);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.market-card strong {
+  font-family: 'Noto Serif SC', serif;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.market-card span {
+  font-size: 12px;
+  color: var(--sepia);
+}
+
+.market-card small {
+  color: var(--sepia-soft);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.market-card .market-type {
+  width: max-content;
+  padding: 2px 7px;
+  border: 1px solid rgba(139, 38, 38, 0.26);
+  color: var(--blood);
+  background: rgba(139, 38, 38, 0.06);
+  font-family: 'Courier Prime', monospace;
+  letter-spacing: 0.08em;
 }

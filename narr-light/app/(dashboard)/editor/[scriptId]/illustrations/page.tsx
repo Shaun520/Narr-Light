@@ -1,8 +1,8 @@
 'use client';
 
-import { use, useEffect, useMemo, useState } from 'react';
+import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import { App as AntdApp, Modal as AntModal, Progress } from 'antd';
-import { Sparkles } from 'lucide-react';
+import { Library, Play, Sparkles } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import {
   AssetList,
@@ -13,21 +13,21 @@ import {
 import { GalleryPanel, type GenerateConfig } from '@/components/illust/gallery-panel';
 import { NewTaskDrawer, type NewTaskFormData } from '@/components/illust/new-task-drawer';
 import {
-  buildCharacterConsistencyPrompt,
-  type CharacterConsistencyInput,
-} from '@/lib/ai/prompts/illustration-style';
-import {
-  generateIllustrationAssetAction,
-  getIllustrationCharactersAction,
-  getIllustrationAssetsAction,
-  type IllustrationCharacterView,
+  createCustomIllustrationTaskAction,
+  createIllustrationTaskFromMarketAction,
+  getIllustrationWorkspaceAction,
+  runIllustrationTaskAction,
   type IllustrationAssetView,
+  type IllustrationWorkspaceView,
 } from './actions';
 import './illustrations.css';
 
 interface PageProps {
   params: Promise<{ scriptId: string }>;
 }
+
+type MarketItemView = IllustrationWorkspaceView['marketItems'][number];
+type TaskView = IllustrationWorkspaceView['tasks'][number];
 
 function normalizeAssetFilter(value: string | null): AssetFilter {
   if (
@@ -43,46 +43,47 @@ function normalizeAssetFilter(value: string | null): AssetFilter {
   return 'all';
 }
 
-function buildPrompt(asset: IllustrationAssetView, prompt: string): string {
-  const trimmed = prompt.trim();
-  if (trimmed) return trimmed;
-  return `${asset.title}，水墨古风，暗调暖光，留白构图，悬疑氛围，突出线索主体细节。`;
+function taskToAsset(task: TaskView): IllustrationAssetView {
+  return {
+    id: task.id,
+    type: task.taskType,
+    title: task.title,
+    sub: task.subtitle || (task.status === 'completed' ? '已生成' : '待生成'),
+    status: task.assetStatus,
+    thumb: task.thumb,
+    progress: task.progressPercent,
+    sourceType: task.sourceType,
+    sourceId: task.sourceId,
+    taskId: task.id,
+    taskPrompt: task.prompt,
+  };
 }
 
-function normalizeMatchText(text: string): string {
-  return text.replace(/\s+/g, '').toLowerCase();
+function replaceTask(
+  workspace: IllustrationWorkspaceView,
+  task: TaskView,
+): IllustrationWorkspaceView {
+  return {
+    ...workspace,
+    tasks: workspace.tasks.map((item) => (item.id === task.id ? task : item)),
+    assets: workspace.assets.map((item) => (item.id === task.id ? taskToAsset(task) : item)),
+  };
 }
 
-function findCharacterForAsset(
-  asset: IllustrationAssetView | undefined,
-  characters: IllustrationCharacterView[],
-): IllustrationCharacterView | undefined {
-  if (!asset || asset.type !== 'char') return undefined;
-
-  const sourceMatch = characters.find(
-    (character) =>
-      asset.sourceId === character.id &&
-      (asset.sourceType === 'character' || asset.sourceType === 'char'),
+function markTaskRunning(
+  workspace: IllustrationWorkspaceView,
+  taskId: string,
+): IllustrationWorkspaceView {
+  const tasks = workspace.tasks.map((task) =>
+    task.id === taskId
+      ? { ...task, status: 'running' as const, assetStatus: 'active' as const, progressPercent: 12 }
+      : task,
   );
-  if (sourceMatch) return sourceMatch;
-
-  const normalizedTitle = normalizeMatchText(asset.title);
-  return characters.find((character) =>
-    normalizedTitle.includes(normalizeMatchText(character.name)),
-  );
-}
-
-function buildAssetPrompt(
-  asset: IllustrationAssetView,
-  prompt: string,
-  character?: CharacterConsistencyInput,
-): string {
-  const trimmed = prompt.trim();
-  if (trimmed) return trimmed;
-  if (asset.type === 'char' && character) {
-    return buildCharacterConsistencyPrompt(character);
-  }
-  return buildPrompt(asset, prompt);
+  return {
+    ...workspace,
+    tasks,
+    assets: tasks.map(taskToAsset),
+  };
 }
 
 export default function IllustrationsPage({ params }: PageProps) {
@@ -95,9 +96,9 @@ export default function IllustrationsPage({ params }: PageProps) {
     normalizeAssetFilter(searchParams.get('type')),
   );
   const [selectedAssetId, setSelectedAssetId] = useState('');
+  const [workspace, setWorkspace] = useState<IllustrationWorkspaceView | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [assets, setAssets] = useState<IllustrationAssetView[]>([]);
-  const [characters, setCharacters] = useState<IllustrationCharacterView[]>([]);
+  const [marketOpen, setMarketOpen] = useState(false);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
 
   const [batchOpen, setBatchOpen] = useState(false);
@@ -107,16 +108,22 @@ export default function IllustrationsPage({ params }: PageProps) {
   const [batchMessage, setBatchMessage] = useState('');
   const [batchStatus, setBatchStatus] = useState<'running' | 'completed' | 'failed'>('running');
 
+  const assets = useMemo(() => workspace?.assets ?? [], [workspace]);
+  const tasks = useMemo(() => workspace?.tasks ?? [], [workspace]);
+  const marketItems = useMemo(() => workspace?.marketItems ?? [], [workspace]);
   const { counts, total, done } = useMemo(() => countAssetsByType(assets), [assets]);
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
-  const selectedCharacter = useMemo(
-    () => findCharacterForAsset(selectedAsset, characters),
-    [characters, selectedAsset],
-  );
-  const selectedGeneratedPrompt = useMemo(() => {
-    if (!selectedAsset || selectedAsset.type !== 'char' || !selectedCharacter) return undefined;
-    return buildCharacterConsistencyPrompt(selectedCharacter);
-  }, [selectedAsset, selectedCharacter]);
+  const selectedTask = tasks.find((task) => task.id === selectedAssetId);
+  const visualTone = workspace?.styleProfile.visualTone;
+
+  const loadWorkspace = useCallback(async () => {
+    const data = await getIllustrationWorkspaceAction(scriptId);
+    setWorkspace(data);
+    const sourceMatch = sourceId
+      ? data.assets.find((asset) => asset.sourceType === 'clue' && asset.sourceId === sourceId)
+      : undefined;
+    setSelectedAssetId((prev) => prev || sourceMatch?.id || data.assets[0]?.id || '');
+  }, [scriptId, sourceId]);
 
   useEffect(() => {
     setActiveType(normalizeAssetFilter(searchParams.get('type')));
@@ -124,132 +131,166 @@ export default function IllustrationsPage({ params }: PageProps) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      getIllustrationAssetsAction(scriptId),
-      getIllustrationCharactersAction(scriptId),
-    ])
-      .then(([items, characterItems]) => {
-        if (cancelled) return;
-        setAssets(items);
-        setCharacters(characterItems);
-        const sourceMatch = sourceId
-          ? items.find((asset) => asset.sourceType === 'clue' && asset.sourceId === sourceId)
-          : undefined;
-        setSelectedAssetId(sourceMatch?.id ?? items[0]?.id ?? '');
-      })
-      .catch((error) => {
-        console.error('Failed to load illustration assets:', error);
-        message.error('读取插画资产失败');
-      });
-
+    loadWorkspace().catch((error) => {
+      if (cancelled) return;
+      console.error('Failed to load illustration workspace:', error);
+      message.error('读取插画任务失败');
+    });
     return () => {
       cancelled = true;
     };
-  }, [message, scriptId, sourceId]);
+  }, [loadWorkspace, message]);
 
-  const generateForAsset = async (
-    assetId: string,
-    config: GenerateConfig,
-  ): Promise<void> => {
-    if (generatingIds.has(assetId)) {
-      message.warning('该资产正在生成中，请稍候');
+  const runTask = async (taskId: string, config?: GenerateConfig): Promise<void> => {
+    if (generatingIds.has(taskId)) {
+      message.warning('该任务正在生成中，请稍候');
       return;
     }
 
-    const asset = assets.find((item) => item.id === assetId);
-    if (!asset) return;
-
-    setGeneratingIds((prev) => new Set(prev).add(assetId));
-    setAssets((prev) =>
-      prev.map((item) =>
-        item.id === assetId
-          ? { ...item, status: 'active', progress: 10, sub: '生成中' }
-          : item,
-      ),
-    );
+    setGeneratingIds((prev) => new Set(prev).add(taskId));
+    setWorkspace((prev) => (prev ? markTaskRunning(prev, taskId) : prev));
 
     try {
-      const result = await generateIllustrationAssetAction({
-        scriptId,
-        assetId,
-        prompt: buildAssetPrompt(
-          asset,
-          config.prompt,
-          findCharacterForAsset(asset, characters),
-        ),
-        model: config.model,
-        ratio: config.ratio,
-        count: config.count,
+      const result = await runIllustrationTaskAction(taskId, {
+        prompt: config?.prompt,
+        model: config?.model,
+        ratio: config?.ratio,
+        count: config?.count,
       });
-
-      setAssets((prev) =>
-        prev.map((item) =>
-          item.id === assetId
-            ? {
-                ...item,
-                status: 'done',
-                progress: 100,
-                sub: `已生成 · ${result.model}`,
-                thumb: result.imageUrl,
-              }
-            : item,
-        ),
-      );
-      message.success(`「${asset.title}」生成完成`);
+      setWorkspace((prev) => (prev ? replaceTask(prev, result) : prev));
+      message.success(`「${result.title}」生成完成`);
     } catch (error) {
-      console.error('Generate illustration failed:', error);
-      const errorMessage = error instanceof Error ? error.message : '生成失败，请重试';
-      setAssets((prev) =>
-        prev.map((item) =>
-          item.id === assetId
-            ? { ...item, status: 'pending', progress: 0, sub: '生成失败，请重试' }
-            : item,
-        ),
-      );
-      message.error(errorMessage);
+      console.error('Generate illustration task failed:', error);
+      await loadWorkspace();
+      message.error(error instanceof Error ? error.message : '生成失败，请重试');
     } finally {
       setGeneratingIds((prev) => {
         const next = new Set(prev);
-        next.delete(assetId);
+        next.delete(taskId);
         return next;
       });
     }
   };
 
   const handleGenerate = (config: GenerateConfig) => {
-    if (!selectedAsset) {
+    if (!selectedTask) {
       message.warning('请先在左侧选择一个插画任务');
       return;
     }
-    void generateForAsset(selectedAsset.id, config);
+    void runTask(selectedTask.id, config);
   };
 
   const handleQuickGenerate = (asset: IllustrationAssetView) => {
     setSelectedAssetId(asset.id);
-    void generateForAsset(asset.id, {
-      prompt: '',
+    void runTask(asset.id, {
+      prompt: asset.taskPrompt ?? '',
       model: 'openai',
       ratio: '16:9',
       count: 1,
     });
   };
 
-  const handleAdopt = async (assetId: string) => {
-    const asset = assets.find((item) => item.id === assetId);
-    if (!asset) return;
-    setAssets((prev) =>
-      prev.map((item) =>
-        item.id === assetId ? { ...item, status: 'done', progress: 100, sub: '已采用' } : item,
-      ),
-    );
-    message.success(`已采用「${asset.title}」`);
+  const handleBatchExecute = async () => {
+    const pendingTasks = tasks.filter((task) => task.status === 'pending' || task.status === 'failed');
+    if (pendingTasks.length === 0) {
+      message.info('当前没有待执行的插画任务');
+      return;
+    }
+
+    setBatchTotal(pendingTasks.length);
+    setBatchDone(0);
+    setBatchPercent(0);
+    setBatchStatus('running');
+    setBatchMessage('开始批量执行插画任务');
+    setBatchOpen(true);
+
+    let failed = 0;
+    for (let i = 0; i < pendingTasks.length; i += 1) {
+      const task = pendingTasks[i];
+      setBatchDone(i);
+      setBatchPercent(Math.round((i / pendingTasks.length) * 100));
+      setBatchMessage(`正在生成 ${i + 1}/${pendingTasks.length}：${task.title}`);
+      try {
+        await runTask(task.id, {
+          prompt: task.prompt,
+          model: task.selectedModel,
+          ratio: task.selectedRatio,
+          count: task.selectedCount,
+        });
+      } catch {
+        failed += 1;
+      }
+    }
+
+    setBatchDone(pendingTasks.length);
+    setBatchPercent(100);
+    setBatchStatus(failed > 0 ? 'failed' : 'completed');
+    setBatchMessage(failed > 0 ? `批量执行完成，失败 ${failed} 项` : '批量执行完成');
+    if (failed > 0) {
+      message.warning(`批量执行完成，失败 ${failed} 项`);
+    } else {
+      message.success(`批量执行完成，共生成 ${pendingTasks.length} 项`);
+    }
+  };
+
+  const handleCreateFromMarket = async (item: MarketItemView) => {
+    try {
+      const task = await createIllustrationTaskFromMarketAction(scriptId, item.id);
+      setWorkspace((prev) => {
+        if (!prev) return prev;
+        const exists = prev.tasks.some((old) => old.id === task.id);
+        const tasksNext = exists
+          ? prev.tasks.map((old) => (old.id === task.id ? task : old))
+          : [...prev.tasks, task].sort((a, b) => a.sortOrder - b.sortOrder);
+        return {
+          ...prev,
+          tasks: tasksNext,
+          assets: tasksNext.map(taskToAsset),
+        };
+      });
+      setSelectedAssetId(task.id);
+      setMarketOpen(false);
+      message.success(`已加入任务：${task.title}`);
+    } catch (error) {
+      console.error('Create task from market failed:', error);
+      message.error(error instanceof Error ? error.message : '创建市场任务失败');
+    }
+  };
+
+  const handleTaskSubmit = async (data: NewTaskFormData) => {
+    try {
+      const task = await createCustomIllustrationTaskAction(scriptId, {
+        title: data.taskName,
+        taskType: data.type,
+        prompt: data.prompt,
+        sourceLabel: data.bindTarget,
+        ratio: data.ratio,
+        count: data.count,
+      });
+      setWorkspace((prev) => {
+        if (!prev) return prev;
+        const tasksNext = [...prev.tasks, task].sort((a, b) => a.sortOrder - b.sortOrder);
+        return {
+          ...prev,
+          tasks: tasksNext,
+          assets: tasksNext.map(taskToAsset),
+        };
+      });
+      setSelectedAssetId(task.id);
+      message.success(`已创建任务：${task.title}`);
+    } catch (error) {
+      console.error('Create custom illustration task failed:', error);
+      message.error(error instanceof Error ? error.message : '创建任务失败');
+    }
+  };
+
+  const handleAdopt = async () => {
+    message.info('采纳状态已由任务完成结果自动记录');
   };
 
   const handleRegenerate = (assetId: string) => {
-    const asset = assets.find((item) => item.id === assetId);
-    if (!asset) return;
-    void generateForAsset(assetId, {
-      prompt: '',
+    void runTask(assetId, {
+      prompt: tasks.find((task) => task.id === assetId)?.prompt ?? '',
       model: 'openai',
       ratio: '16:9',
       count: 1,
@@ -260,50 +301,6 @@ export default function IllustrationsPage({ params }: PageProps) {
     message.info('高清放大能力尚未接入真实模型');
   };
 
-  const handleBatchRegenerate = async () => {
-    const doneAssets = assets.filter((asset) => asset.status === 'done');
-    if (doneAssets.length === 0) {
-      message.warning('没有已完成的资产可重绘');
-      return;
-    }
-
-    setBatchTotal(doneAssets.length);
-    setBatchDone(0);
-    setBatchPercent(0);
-    setBatchMessage('开始批量重绘');
-    setBatchStatus('running');
-    setBatchOpen(true);
-
-    try {
-      for (let i = 0; i < doneAssets.length; i += 1) {
-        const asset = doneAssets[i];
-        setBatchDone(i);
-        setBatchPercent(Math.round((i / doneAssets.length) * 100));
-        setBatchMessage(`正在重绘 ${i + 1}/${doneAssets.length}`);
-        await generateForAsset(asset.id, {
-          prompt: '',
-          model: 'openai',
-          ratio: '16:9',
-          count: 1,
-        });
-      }
-      setBatchDone(doneAssets.length);
-      setBatchPercent(100);
-      setBatchStatus('completed');
-      setBatchMessage('批量重绘完成');
-      message.success(`批量重绘完成，共更新 ${doneAssets.length} 项资产`);
-    } catch (error) {
-      console.error('Batch regenerate failed:', error);
-      setBatchStatus('failed');
-      setBatchMessage('批量重绘失败');
-      message.error('批量重绘失败，请重试');
-    }
-  };
-
-  const handleTaskSubmit = (data: NewTaskFormData) => {
-    void data;
-  };
-
   return (
     <div className="illust-page">
       <div className="page-head">
@@ -312,18 +309,29 @@ export default function IllustrationsPage({ params }: PageProps) {
             插画生成 <span className="seal">{done} / {total}</span>
           </h1>
           <div className="page-desc">
-            剧本封面 / 场景 / 线索卡 / 公共线 / 人物立绘 / 海报 · 多模型对比 · 自动套用视觉基调
+            {workspace?.script.title ?? '当前剧本'} / 自动任务 / 统一风格 / 市场素材 / 批量执行
           </div>
         </div>
         <div className="page-actions">
-          <button type="button" className="btn btn-ghost" onClick={handleBatchRegenerate}>
-            批量重绘
+          <button type="button" className="btn btn-ghost" onClick={() => setMarketOpen(true)}>
+            <Library size={15} />
+            素材市场
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={handleBatchExecute}>
+            <Play size={15} />
+            批量执行
           </button>
           <button type="button" className="btn btn-primary" onClick={() => setDrawerOpen(true)}>
             <Sparkles size={15} />
             新建生成任务
           </button>
         </div>
+      </div>
+
+      <div className="illust-style-strip">
+        <span className="style-label">统一风格</span>
+        <span>{workspace?.styleProfile.styleName ?? '正在读取风格档案'}</span>
+        <strong>{visualTone ?? '待生成'}</strong>
       </div>
 
       <div className="illust-filter">
@@ -352,12 +360,12 @@ export default function IllustrationsPage({ params }: PageProps) {
         />
         <GalleryPanel
           asset={selectedAsset}
-          generatedPrompt={selectedGeneratedPrompt}
+          generatedPrompt={selectedTask?.taskPromptSeed ?? selectedAsset?.taskPrompt}
           onGenerate={handleGenerate}
           onAdopt={handleAdopt}
           onRegenerate={handleRegenerate}
           onUpscale={handleUpscale}
-          visualTone="水墨古风 / 暗调暖光 / 留白构图 / 雨夜氛围"
+          visualTone={visualTone}
         />
       </div>
 
@@ -365,12 +373,37 @@ export default function IllustrationsPage({ params }: PageProps) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onSubmit={handleTaskSubmit}
-        visualTone="水墨古风 / 暗调暖光 / 留白构图 / 雨夜氛围"
+        visualTone={visualTone}
+        scriptTitle={workspace?.script.title}
       />
 
       <AntModal
+        open={marketOpen}
+        title="插画市场"
+        width={720}
+        footer={null}
+        onCancel={() => setMarketOpen(false)}
+      >
+        <div className="market-grid">
+          {marketItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="market-card"
+              onClick={() => void handleCreateFromMarket(item)}
+            >
+              <span className="market-type">{item.taskType}</span>
+              <strong>{item.title}</strong>
+              <span>{item.subtitle}</span>
+              <small>{item.promptHint}</small>
+            </button>
+          ))}
+        </div>
+      </AntModal>
+
+      <AntModal
         open={batchOpen}
-        title="批量重绘插画"
+        title="批量执行插画任务"
         width={420}
         footer={null}
         closable={batchStatus !== 'running'}

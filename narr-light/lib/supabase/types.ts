@@ -291,6 +291,80 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["difficulty_assessments"]["Row"]>;
       };
+      illustration_market_items: {
+        Row: {
+          id: string;
+          title: string;
+          task_type: "cover" | "scene" | "clue" | "public" | "char" | "poster";
+          subtitle: string;
+          prompt_hint: string;
+          visual_tone: string;
+          thumb_url: string;
+          sort_order: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["illustration_market_items"]["Row"], "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["illustration_market_items"]["Row"]>;
+      };
+      illustration_style_profiles: {
+        Row: {
+          id: string;
+          script_id: string;
+          style_name: string;
+          visual_tone: string;
+          master_prompt: string;
+          reference_notes: string;
+          market_item_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["illustration_style_profiles"]["Row"], "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["illustration_style_profiles"]["Row"]>;
+      };
+      illustration_tasks: {
+        Row: {
+          id: string;
+          script_id: string;
+          style_profile_id: string;
+          asset_id: string | null;
+          market_item_id: string | null;
+          task_key: string;
+          task_type: "cover" | "scene" | "clue" | "public" | "char" | "poster";
+          source_type: string;
+          source_id: string;
+          title: string;
+          subtitle: string;
+          prompt: string;
+          status: "pending" | "running" | "completed" | "failed" | "cancelled";
+          progress_percent: number;
+          sort_order: number;
+          selected_model: string;
+          selected_ratio: string;
+          selected_count: number;
+          result_image_url: string;
+          error_message: string;
+          started_at: string | null;
+          completed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["illustration_tasks"]["Row"], "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["illustration_tasks"]["Row"]>;
+      };
     };
   };
 }

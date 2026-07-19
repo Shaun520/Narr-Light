@@ -58,6 +58,68 @@ export interface GenerationTask {
   createdAt: string;
 }
 
+/** 插画任务类型 */
+export type IllustrationTaskType = 'cover' | 'scene' | 'clue' | 'public' | 'char' | 'poster';
+
+/** 插画任务状态 */
+export type IllustrationTaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+/** 插画风格档案 */
+export interface IllustrationStyleProfile {
+  id: string;
+  scriptId: string;
+  styleName: string;
+  visualTone: string;
+  masterPrompt: string;
+  referenceNotes: string;
+  marketItemId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 插画任务 */
+export interface IllustrationTask {
+  id: string;
+  scriptId: string;
+  styleProfileId: string;
+  assetId: string | null;
+  marketItemId: string | null;
+  taskKey: string;
+  taskType: IllustrationTaskType;
+  sourceType: string;
+  sourceId: string;
+  title: string;
+  subtitle: string;
+  prompt: string;
+  status: IllustrationTaskStatus;
+  progressPercent: number;
+  sortOrder: number;
+  selectedModel: string;
+  selectedRatio: string;
+  selectedCount: number;
+  resultImageUrl: string;
+  errorMessage: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 插画市场素材 */
+export interface IllustrationMarketItem {
+  id: string;
+  title: string;
+  taskType: IllustrationTaskType;
+  subtitle: string;
+  promptHint: string;
+  visualTone: string;
+  thumbUrl: string;
+  sortOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 版本对比结果 */
 export interface VersionDiffResult {
   added: string[];

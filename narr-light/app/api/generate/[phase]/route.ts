@@ -29,6 +29,7 @@ import {
   type TimelineStructureJson,
   type TimelineStructureEvent,
 } from '@/lib/ai/prompts/timeline-structure';
+import { illustrationWorkflowService } from '@/lib/services/illustration-workflow-service';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 
@@ -1238,6 +1239,13 @@ async function persistTimelineEvents(
   });
 
   if (taskError) console.warn(`Timeline structure task insert failed; continuing: ${taskError.message}`);
+
+  try {
+    await illustrationWorkflowService.ensureScriptWorkspace(scriptId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`Illustration workspace bootstrap failed for ${scriptId}: ${message}`);
+  }
 }
 
 async function handleCharacterScript(body: GenerateRequestBody): Promise<Response> {

@@ -59,6 +59,7 @@ interface NewTaskDrawerProps {
   onSubmit?: (data: NewTaskFormData) => void;
   /** AUTO-INJECT 视觉基调文案 */
   visualTone?: string;
+  scriptTitle?: string;
 }
 
 /** 任务类型卡配置 */
@@ -119,7 +120,7 @@ const INITIAL_DATA: NewTaskFormData = {
 /**
  * 新建任务抽屉组件
  */
-export function NewTaskDrawer({ open, onClose, onSubmit, visualTone }: NewTaskDrawerProps) {
+export function NewTaskDrawer({ open, onClose, onSubmit, visualTone, scriptTitle }: NewTaskDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [step, setStep] = useState(1);
   const [data, setData] = useState<NewTaskFormData>(INITIAL_DATA);
@@ -197,7 +198,7 @@ export function NewTaskDrawer({ open, onClose, onSubmit, visualTone }: NewTaskDr
         aria-hidden={!open}
         aria-modal={open ? 'true' : undefined}
         role="dialog"
-        aria-label="新建生成任务"
+        aria-label={`新建生成任务${scriptTitle ? ` · ${scriptTitle}` : ''}`}
         tabIndex={-1}
         {...trapProps}
       >
