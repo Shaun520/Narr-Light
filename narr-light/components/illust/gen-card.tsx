@@ -20,7 +20,7 @@ export type GenCardData =
       /** 模型名，如 DeepSeek-V4 */
       model: string;
       /** 随机种子 */
-      seed: number;
+      seed?: number;
     }
   | {
       /** 生成中 */
@@ -92,7 +92,7 @@ export function GenCard({ card, actions }: GenCardProps) {
       <div className="gen-img" style={{ background: card.image }} />
       <div className="gen-meta">
         <span className="gen-model">{card.model}</span>
-        <span className="gen-seed">seed {card.seed}</span>
+        {card.seed ? <span className="gen-seed">seed {card.seed}</span> : null}
       </div>
       <div className="gen-actions">
         <button type="button" className="ga-btn" onClick={actions?.onAdopt}>

@@ -7,7 +7,7 @@
  *
  * 视觉与 class 命名对齐原型 workbench2.html #view-illust .scene-item
  */
-import { Check, Circle, Disc } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 /** 插画资产类型（对齐 .if-tab[data-itype]） */
 export type AssetType = 'cover' | 'scene' | 'clue' | 'public' | 'char' | 'poster';
@@ -127,23 +127,25 @@ interface AssetListProps {
   selectedAssetId?: string;
   /** 选中资产回调 */
   onSelect?: (asset: IllustrationAsset) => void;
+  onGenerate?: (asset: IllustrationAsset) => void;
 }
 
 /** 状态图标映射 */
-function StatusIcon({ status }: { status: AssetStatus }) {
-  if (status === 'done') {
-    return <Check size={14} className="si-status ok" strokeWidth={2.5} />;
-  }
-  if (status === 'active') {
-    return <Disc size={14} className="si-status run" fill="currentColor" />;
-  }
-  return <Circle size={14} className="si-status" />;
-}
-
 /**
  * 资产列表组件
  */
-export function AssetList({ assets, activeType, selectedAssetId, onSelect }: AssetListProps) {
+function StatusIcon(props: { status: AssetStatus }) {
+  void props;
+  return null;
+}
+
+export function AssetList({
+  assets,
+  activeType,
+  selectedAssetId,
+  onSelect,
+  onGenerate,
+}: AssetListProps) {
   // 按激活类型计算可见项与已完成数（驱动头部计数）
   const visible = assets.filter(
     (a) => activeType === 'all' || a.type === activeType,
@@ -151,46 +153,71 @@ export function AssetList({ assets, activeType, selectedAssetId, onSelect }: Ass
   const doneCount = visible.filter((a) => a.status === 'done').length;
 
   return (
-    <div className="card">
+    <div className="card illust-asset-card">
       <div className="illust-asset-head">
         <span>ASSET LIST · {visible.length}</span>
         <span className="iah-progress">已完成 {doneCount}</span>
       </div>
-      {assets.map((asset) => {
-        const matchType = activeType === 'all' || asset.type === activeType;
-        const isSelected = asset.id === selectedAssetId;
-        const classNames = [
-          'scene-item',
-          asset.status === 'done' ? 'done' : '',
-          asset.status === 'active' || isSelected ? 'active' : '',
-          matchType ? '' : 'hidden-by-type',
-        ]
-          .filter(Boolean)
-          .join(' ');
-        return (
-          <div
-            key={asset.id}
-            className={classNames}
-            data-itype={asset.type}
-            onClick={() => onSelect?.(asset)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                onSelect?.(asset);
-              }
-            }}
-          >
-            <div className="si-thumb" style={{ background: asset.thumb }} />
-            <div className="si-info">
-              <div className="si-title">{asset.title}</div>
-              <div className="si-sub">{asset.sub}</div>
+      <div className="illust-asset-scroll">
+        {visible.map((asset) => {
+          const isSelected = asset.id === selectedAssetId;
+          const classNames = [
+            'scene-item',
+            asset.status === 'done' ? 'done' : '',
+            asset.status === 'pending' ? 'pending' : '',
+            asset.status === 'active' || isSelected ? 'active' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+          return (
+            <div
+              key={asset.id}
+              className={classNames}
+              data-itype={asset.type}
+              onClick={() => onSelect?.(asset)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect?.(asset);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="si-thumb si-thumb-action"
+                style={{ background: asset.thumb }}
+                title={asset.status === 'done' ? '重新生成' : '开始生成'}
+                aria-label={`${asset.status === 'done' ? '重新生成' : '开始生成'}：${asset.title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect?.(asset);
+                  onGenerate?.(asset);
+                }}
+              >
+                <Plus size={16} />
+              </button>
+              <div className="si-info">
+                <div className="si-title">{asset.title}</div>
+                <div className="si-sub">{asset.sub}</div>
+              </div>
+              <button
+                type="button"
+                className="si-status-button"
+                title="选择任务"
+                aria-label={`选择任务：${asset.title}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect?.(asset);
+                }}
+              >
+                <StatusIcon status={asset.status} />
+              </button>
             </div>
-            <StatusIcon status={asset.status} />
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

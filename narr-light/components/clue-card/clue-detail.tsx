@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { MapPin, Users, FileText, Tag, Hash, X } from 'lucide-react';
+import { ImagePlus, MapPin, Users, FileText, Tag, Hash, X } from 'lucide-react';
 import {
   ACT_LABELS,
   CLUE_TYPE_LABELS,
@@ -24,12 +24,19 @@ interface ClueDetailProps {
   onClose?: () => void;
   /** 跳转真相复盘 */
   onJumpToTruth?: (clue: Clue) => void;
+  /** 为当前线索创建/打开插画任务 */
+  onGenerateIllustration?: (clue: Clue) => void;
 }
 
 /**
  * 线索详情抽屉
  */
-export function ClueDetail({ clue, onClose, onJumpToTruth }: ClueDetailProps) {
+export function ClueDetail({
+  clue,
+  onClose,
+  onJumpToTruth,
+  onGenerateIllustration,
+}: ClueDetailProps) {
   return (
     <div className="clue-detail">
       <div className="cd-head">
@@ -52,6 +59,19 @@ export function ClueDetail({ clue, onClose, onJumpToTruth }: ClueDetailProps) {
       </div>
 
       <div className="cd-body">
+        {onGenerateIllustration && (
+          <section className="cd-section">
+            <button
+              type="button"
+              className="truth-link"
+              onClick={() => onGenerateIllustration(clue)}
+            >
+              <ImagePlus size={13} />
+              <span>生成线索插画</span>
+            </button>
+          </section>
+        )}
+
         <section className="cd-section">
           <div className="cd-section-title">
             <FileText size={13} /> 线索正文

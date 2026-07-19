@@ -159,6 +159,10 @@ interface JsZipLike {
   generateAsync(opts: { type: 'blob' }): Promise<Blob>;
 }
 
+interface JsZipConstructor {
+  new (): JsZipLike;
+}
+
 /**
  * 动态加载 jszip（可选依赖）。未安装时返回 null，调用方走降级分支。
  * 使用 string 类型 specifier 避免 TS 静态解析报错。
@@ -166,8 +170,8 @@ interface JsZipLike {
 async function loadJsZip(): Promise<JsZipLike | null> {
   try {
     const specifier: string = 'jszip';
-    const mod = (await import(specifier)) as { default: JsZipLike };
-    return mod.default;
+    const mod = (await import(specifier)) as { default: JsZipConstructor };
+    return new mod.default();
   } catch {
     return null;
   }

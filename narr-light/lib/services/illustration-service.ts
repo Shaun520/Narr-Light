@@ -16,7 +16,9 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ApiError } from "@/lib/api/response";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
+import type { Clue } from "@/components/clue-card/clue-card";
 
 /** 插画资产类型（对齐 components/illust/asset-list.tsx AssetType） */
 export type IllustrationAssetType =
@@ -43,6 +45,8 @@ interface IllustrationAssetRow {
   locked: boolean;
   sort_order: number;
   current_version_id: string | null;
+  source_type: string | null;
+  source_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -58,6 +62,23 @@ interface IllustrationVersionRow {
   created_at: string;
 }
 
+function isMissingTableError(error: { code?: string; message?: string } | null): boolean {
+  return Boolean(
+    error &&
+      (error.code === "42P01" ||
+        error.message?.includes("Could not find the table") ||
+        error.message?.includes("schema cache")),
+  );
+}
+
+function migrationRequiredError(): ApiError {
+  return new ApiError(
+    "MIGRATION_REQUIRED",
+    "插画资产表尚未创建，请先应用 Supabase 迁移 011_illustration_assets_source_link.sql",
+    500,
+  );
+}
+
 /** 服务层返回的插画资产结构（蛇形转驼峰） */
 export interface IllustrationAssetDTO {
   id: string;
@@ -71,6 +92,8 @@ export interface IllustrationAssetDTO {
   locked: boolean;
   sortOrder: number;
   currentVersionId: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,9 +144,95 @@ export class IllustrationService {
       .order("sort_order", { ascending: true });
 
     if (error) {
+      if (isMissingTableError(error)) return [];
       throw new ApiError("DB_QUERY_ERROR", `获取插画资产失败: ${error.message}`, 500);
     }
     return (data ?? []).map((row) => this.mapAssetRow(row as unknown as IllustrationAssetRow));
+  }
+
+  /**
+   * 确保线索卡存在对应插画资产。
+   * 已存在 source_type='clue' + source_id=clue.id 的资产时复用；
+   * 不存在时创建 pending 资产，供插画生成页继续生成。
+   */
+  async ensureClueAsset(scriptId: string, clue: Clue): Promise<IllustrationAssetDTO> {
+    const [asset] = await this.ensureClueAssets(scriptId, [clue]);
+    if (!asset) {
+      throw new ApiError("DB_UPDATE_ERROR", "创建线索插画资产失败", 500);
+    }
+    return asset;
+  }
+
+  /**
+   * 批量确保当前线索列表都有对应插画资产。
+   */
+  async ensureClueAssets(scriptId: string, clues: Clue[]): Promise<IllustrationAssetDTO[]> {
+    if (clues.length === 0) return [];
+
+    const supabase = this.getAdminClient();
+    const clueIds = clues.map((clue) => clue.id);
+    const { data: existingRows, error: existingError } = await supabase
+      .from("illustration_assets")
+      .select("*")
+      .eq("script_id", scriptId)
+      .eq("source_type", "clue")
+      .in("source_id", clueIds);
+
+    if (existingError) {
+      if (isMissingTableError(existingError)) {
+        throw migrationRequiredError();
+      }
+      throw new ApiError(
+        "DB_QUERY_ERROR",
+        `读取线索插画资产失败: ${existingError.message}`,
+        500,
+      );
+    }
+
+    const existingBySource = new Map(
+      ((existingRows ?? []) as unknown as IllustrationAssetRow[])
+        .filter((row) => row.source_id)
+        .map((row) => [row.source_id as string, row]),
+    );
+    const missingClues = clues.filter((clue) => !existingBySource.has(clue.id));
+
+    if (missingClues.length > 0) {
+      const rows = missingClues.map((clue, index) => ({
+        script_id: scriptId,
+        type: "clue",
+        title: `${clue.title} · 线索插画`,
+        sub: `${clue.code} · ${clue.location} · 待生成`,
+        status: "pending",
+        thumb: "",
+        progress: 0,
+        locked: false,
+        sort_order: clueIds.indexOf(clue.id) >= 0 ? clueIds.indexOf(clue.id) : index,
+        source_type: "clue",
+        source_id: clue.id,
+      }));
+
+      const { data: insertedRows, error: insertError } = await supabase
+        .from("illustration_assets")
+        .insert(rows as never)
+        .select("*");
+
+      if (insertError) {
+        throw new ApiError(
+          "DB_UPDATE_ERROR",
+          `创建线索插画资产失败: ${insertError.message}`,
+          500,
+        );
+      }
+
+      for (const row of (insertedRows ?? []) as unknown as IllustrationAssetRow[]) {
+        if (row.source_id) existingBySource.set(row.source_id, row);
+      }
+    }
+
+    return clueIds
+      .map((id) => existingBySource.get(id))
+      .filter((row): row is IllustrationAssetRow => Boolean(row))
+      .map((row) => this.mapAssetRow(row));
   }
 
   /**
@@ -371,8 +480,11 @@ export class IllustrationService {
 
   /** 动态导入服务端 Supabase Client（避免 next/headers 进入客户端 bundle） */
   private async getServerClient(): Promise<SupabaseClient> {
-    const { createClient } = await import("@/lib/supabase/server");
-    return createClient();
+    return this.getAdminClient();
+  }
+
+  private getAdminClient(): SupabaseClient {
+    return createAdminClient() as unknown as SupabaseClient;
   }
 
   /** 将 illustration_assets 行映射为 DTO */
@@ -389,6 +501,8 @@ export class IllustrationService {
       locked: row.locked,
       sortOrder: row.sort_order,
       currentVersionId: row.current_version_id,
+      sourceType: row.source_type,
+      sourceId: row.source_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

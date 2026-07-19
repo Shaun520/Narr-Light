@@ -15,24 +15,41 @@
  */
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
 import { App as AntdApp, Modal as AntModal, Progress } from 'antd';
 import { Sparkles } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import {
   AssetList,
   ASSET_TYPE_TABS,
   countAssetsByType,
-  DEFAULT_ILLUST_ASSETS,
   type AssetFilter,
-  type IllustrationAsset,
 } from '@/components/illust/asset-list';
 import { GalleryPanel, type GenerateConfig } from '@/components/illust/gallery-panel';
 import { NewTaskDrawer, type NewTaskFormData } from '@/components/illust/new-task-drawer';
 import { illustrationGenerateService } from '@/lib/services/illustration-generate-service';
+import {
+  getIllustrationAssetsAction,
+  type IllustrationAssetView,
+} from './actions';
 import './illustrations.css';
 
 interface PageProps {
   params: Promise<{ scriptId: string }>;
+}
+
+function normalizeAssetFilter(value: string | null): AssetFilter {
+  if (
+    value === 'cover' ||
+    value === 'scene' ||
+    value === 'clue' ||
+    value === 'public' ||
+    value === 'char' ||
+    value === 'poster'
+  ) {
+    return value;
+  }
+  return 'all';
 }
 
 /**
@@ -40,14 +57,17 @@ interface PageProps {
  */
 export default function IllustrationsPage({ params }: PageProps) {
   const { scriptId } = use(params);
+  const searchParams = useSearchParams();
+  const sourceId = searchParams.get('source');
 
   // 状态：类型筛选 / 选中资产 / 抽屉开闭
-  const [activeType, setActiveType] = useState<AssetFilter>('all');
-  const [selectedAssetId, setSelectedAssetId] = useState<string>('scene-5');
+  const [activeType, setActiveType] = useState<AssetFilter>(() =>
+    normalizeAssetFilter(searchParams.get('type')),
+  );
+  const [selectedAssetId, setSelectedAssetId] = useState<string>('');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // 资产数据（后续可由 IllustrationService.getAssets(scriptId) 注入）
-  const [assets, setAssets] = useState<IllustrationAsset[]>(DEFAULT_ILLUST_ASSETS);
+  const [assets, setAssets] = useState<IllustrationAssetView[]>([]);
   // 正在生成中的资产 ID（防止重复触发）
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
 
@@ -63,9 +83,29 @@ export default function IllustrationsPage({ params }: PageProps) {
   const { message } = AntdApp.useApp();
 
   const { counts, total, done } = countAssetsByType(assets);
-  const selectedAsset: IllustrationAsset | undefined = assets.find(
+  const selectedAsset: IllustrationAssetView | undefined = assets.find(
     (a) => a.id === selectedAssetId,
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    getIllustrationAssetsAction(scriptId)
+      .then((items) => {
+        if (cancelled) return;
+        setAssets(items);
+        const sourceMatch = sourceId
+          ? items.find((asset) => asset.sourceType === 'clue' && asset.sourceId === sourceId)
+          : undefined;
+        setSelectedAssetId(sourceMatch?.id ?? items[0]?.id ?? '');
+      })
+      .catch((error) => {
+        console.error('Failed to load illustration assets:', error);
+        message.error('读取插画资产失败');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [message, scriptId, sourceId]);
 
   // ===== 单资产生成（复用于「开始生成」与「重绘」） =====
   const generateForAsset = async (
@@ -132,6 +172,16 @@ export default function IllustrationsPage({ params }: PageProps) {
       return;
     }
     void generateForAsset(selectedAsset.id, config);
+  };
+
+  const handleQuickGenerate = (asset: IllustrationAssetView) => {
+    setSelectedAssetId(asset.id);
+    void generateForAsset(asset.id, {
+      prompt: '',
+      model: 'deepseek',
+      ratio: '16:9',
+      count: 4,
+    });
   };
 
   // ===== 画廊卡：采用 → 锁定资产 =====
@@ -285,7 +335,7 @@ export default function IllustrationsPage({ params }: PageProps) {
         {ASSET_TYPE_TABS.map((tab) => (
           <div
             key={tab.type}
-            className={`if-tab ${activeType === tab.type ? 'active' : ''}`}
+            className={`if-tab ${activeType === tab.type ? 'active' : ''} ${counts[tab.type] === 0 ? 'is-empty' : ''}`}
             data-itype={tab.type}
             onClick={() => setActiveType(tab.type)}
             role="button"
@@ -303,6 +353,7 @@ export default function IllustrationsPage({ params }: PageProps) {
           activeType={activeType}
           selectedAssetId={selectedAssetId}
           onSelect={(asset) => setSelectedAssetId(asset.id)}
+          onGenerate={handleQuickGenerate}
         />
         <GalleryPanel
           asset={selectedAsset}

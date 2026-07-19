@@ -48,6 +48,12 @@
   align-items: center;
   flex-shrink: 0;
 }
+.clues-page .page-actions .icon-only {
+  width: 38px;
+  padding-left: 0;
+  padding-right: 0;
+  justify-content: center;
+}
 
 /* ===== 风格切换器 ===== */
 .style-switcher {
@@ -899,4 +905,3 @@
   font-size: 11px;
   color: var(--sepia);
 }
-

@@ -134,6 +134,15 @@
   border-color: var(--sepia-soft);
   color: var(--ink);
 }
+.illust-filter .if-tab.is-empty:not(.active) {
+  color: rgba(122, 92, 58, 0.46);
+  border-color: rgba(58, 50, 42, 0.2);
+  background: rgba(253, 248, 240, 0.42);
+}
+.illust-filter .if-tab.is-empty:not(.active) .if-count {
+  color: rgba(176, 141, 87, 0.48);
+  background: rgba(176, 141, 87, 0.08);
+}
 .illust-filter .if-tab.active {
   background: var(--ink);
   color: var(--paper-light);
@@ -167,6 +176,30 @@
   box-shadow: var(--shadow-sm);
   padding: 4px 0;
 }
+.illust-asset-card {
+  position: sticky;
+  top: 84px;
+  display: flex;
+  flex-direction: column;
+  max-height: min(560px, calc(100vh - 210px));
+  overflow: hidden;
+}
+.illust-asset-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(122, 92, 58, 0.38) transparent;
+}
+.illust-asset-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.illust-asset-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.illust-asset-scroll::-webkit-scrollbar-thumb {
+  background: rgba(122, 92, 58, 0.32);
+  border-radius: 999px;
+}
 
 /* ---- 资产列表头部 ---- */
 .illust-asset-head {
@@ -189,8 +222,9 @@
 .scene-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  min-height: 50px;
+  padding: 6px 10px;
   border-bottom: 1px dashed rgba(58, 50, 42, 0.4);
   cursor: pointer;
   transition: background 0.16s, border-left-color 0.16s;
@@ -205,6 +239,10 @@
 .scene-item.done {
   border-left-color: var(--ok);
 }
+.scene-item.pending {
+  background: rgba(253, 248, 240, 0.5);
+  border-left-color: rgba(176, 141, 87, 0.48);
+}
 .scene-item.active {
   background: rgba(176, 141, 87, 0.1);
   border-left-color: var(--gold);
@@ -213,20 +251,57 @@
   display: none;
 }
 .scene-item .si-thumb {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 2px;
   flex-shrink: 0;
   border: 1px solid var(--noir-line);
   background-size: cover;
   background-position: center;
 }
+.scene-item .si-thumb-action {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: pointer;
+  color: var(--gold);
+  transition: border-color 0.16s, color 0.16s, background-color 0.16s;
+}
+.scene-item .si-thumb-action:hover {
+  border-color: var(--blood);
+  color: var(--blood);
+  background-color: rgba(138, 28, 28, 0.05);
+}
+.scene-item .si-thumb-action svg {
+  position: relative;
+  z-index: 1;
+}
+.scene-item.pending .si-thumb {
+  background:
+    linear-gradient(135deg, rgba(253, 248, 240, 0.86), rgba(243, 233, 219, 0.72)),
+    repeating-linear-gradient(45deg, rgba(176, 141, 87, 0.12) 0 6px, transparent 6px 12px) !important;
+  position: relative;
+}
+.scene-item.pending .si-thumb::after {
+  content: '+';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+  font-family: 'Courier Prime', monospace;
+  font-size: 22px;
+  font-weight: 700;
+}
+.scene-item.pending .si-thumb-action::after {
+  content: none;
+}
 .scene-item .si-info {
   flex: 1;
   min-width: 0;
 }
 .scene-item .si-title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--ink);
   white-space: nowrap;
@@ -237,7 +312,7 @@
   font-family: 'Courier Prime', monospace;
   font-size: 10.5px;
   color: var(--sepia-soft);
-  margin-top: 2px;
+  margin-top: 1px;
   letter-spacing: 0.04em;
 }
 .scene-item.active .si-sub {
@@ -253,6 +328,21 @@
   color: var(--sepia-soft);
   flex-shrink: 0;
 }
+.scene-item .si-status-button {
+  display: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.scene-item .si-status-button:hover {
+  background: rgba(176, 141, 87, 0.12);
+}
 .scene-item .si-status.ok {
   color: var(--ok);
   font-weight: 700;
@@ -260,6 +350,9 @@
 .scene-item .si-status.run {
   color: var(--gold);
   animation: illust-pulse 1.4s ease-in-out infinite;
+}
+.scene-item.pending .si-status {
+  color: var(--gold-soft);
 }
 @keyframes illust-pulse {
   0%, 100% { opacity: 1; }
@@ -279,6 +372,69 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 14px;
+}
+.gallery.single-result {
+  grid-template-columns: minmax(0, 720px);
+}
+.pending-asset-panel {
+  min-height: 118px;
+  background:
+    radial-gradient(circle at 82% 16%, rgba(176, 141, 87, 0.16), transparent 34%),
+    linear-gradient(135deg, rgba(253, 248, 240, 0.9), rgba(243, 233, 219, 0.72));
+  border: 1px solid rgba(176, 141, 87, 0.45);
+  border-left: 4px solid var(--gold);
+  border-radius: 2px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+}
+.pending-asset-panel.empty {
+  border-left-color: var(--sepia-soft);
+  opacity: 0.86;
+  min-height: 94px;
+}
+.pending-asset-icon {
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(122, 92, 58, 0.28);
+  background: rgba(255, 252, 246, 0.66);
+  display: grid;
+  place-items: center;
+  color: var(--gold);
+}
+.pending-asset-copy {
+  min-width: 0;
+}
+.pending-asset-kicker {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--gold-soft);
+  margin-bottom: 3px;
+}
+.pending-asset-copy h3 {
+  margin: 0;
+  font-family: 'Noto Serif SC', serif;
+  font-size: 16px;
+  color: var(--ink);
+}
+.pending-asset-copy p {
+  margin: 3px 0 0;
+  color: var(--sepia);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .pending-asset-panel {
+    grid-template-columns: 42px 1fr;
+  }
+  .pending-asset-panel .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
 }
 .gen-card {
   background: var(--paper-lighter);
@@ -927,6 +1083,10 @@
 @media (max-width: 1100px) {
   .illust-layout {
     grid-template-columns: 1fr;
+  }
+  .illust-asset-card {
+    position: static;
+    max-height: 34vh;
   }
   .gallery {
     grid-template-columns: 1fr;

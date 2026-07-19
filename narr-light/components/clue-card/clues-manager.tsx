@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { App as AntdApp, Checkbox } from 'antd';
-import { Download, Grid3x3 } from 'lucide-react';
+import { App as AntdApp, Checkbox, Dropdown, type MenuProps } from 'antd';
+import { Download, ImagePlus, MoreHorizontal, Package, WandSparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   ClueCard,
@@ -25,6 +25,8 @@ import {
   type ExportedImage,
 } from '@/lib/export/clue-image-export';
 import {
+  ensureClueIllustrationAssetAction,
+  ensureClueIllustrationAssetsAction,
   markClueDistractorAction,
   markClueKeyAction,
 } from '@/app/(dashboard)/editor/[scriptId]/clues/actions';
@@ -107,32 +109,65 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
     router.push(`/editor/${scriptId}?node=truth`);
   };
 
-  const handleExportPng = async () => {
-    if (!gridRef.current || filter.visible.length === 0) return;
+  const handleExportPng = async (targetClues: Clue[] = filter.visible) => {
+    if (!gridRef.current || targetClues.length === 0) {
+      message.warning('当前没有可导出的线索卡');
+      return;
+    }
     setProgressMode('export');
     setExportOpen(true);
     setExportStatus('running');
     setExportDone(0);
-    setExportTotal(filter.visible.length);
+    setExportTotal(targetClues.length);
     setExportLabel(undefined);
 
     try {
-      const nodes = filter.visible
+      const nodes = targetClues
         .map((clue) => gridRef.current?.querySelector(`[data-clue-id="${clue.id}"]`) as HTMLElement | null)
         .filter((node): node is HTMLElement => node !== null);
 
       const images: ExportedImage[] = [];
       for (let i = 0; i < nodes.length; i += 1) {
-        setExportLabel(filter.visible[i].title);
-        const batch = await exportCluesToImages([nodes[i]], [filter.visible[i]]);
+        setExportLabel(targetClues[i].title);
+        const batch = await exportCluesToImages([nodes[i]], [targetClues[i]]);
         images.push(...batch);
         setExportDone(i + 1);
       }
 
       await downloadImagesAsZip(images, `${scriptId}_线索卡`);
       setExportStatus('completed');
-    } catch {
+    } catch (error) {
+      console.error('Export clue package failed:', error);
       setExportStatus('failed');
+    }
+  };
+
+  const handleGoIllustrations = () => {
+    router.push(`/editor/${scriptId}/illustrations?type=clue`);
+  };
+
+  const handleEnsureVisibleIllustrations = async () => {
+    if (filter.visible.length === 0) {
+      message.warning('当前筛选下没有可生成插画的线索');
+      return;
+    }
+
+    try {
+      const result = await ensureClueIllustrationAssetsAction(scriptId, filter.visible);
+      message.success(`已准备 ${result.count} 个线索插画任务`);
+      handleGoIllustrations();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '创建线索插画任务失败');
+    }
+  };
+
+  const handleGenerateClueIllustration = async (clue: Clue) => {
+    try {
+      await ensureClueIllustrationAssetAction(scriptId, clue);
+      message.success(`已准备「${clue.title}」插画任务`);
+      router.push(`/editor/${scriptId}/illustrations?type=clue&source=${clue.id}`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '创建线索插画任务失败');
     }
   };
 
@@ -186,6 +221,43 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
     setRedrawSelectedIds(checked ? new Set(filter.visible.map((clue) => clue.id)) : new Set());
   };
 
+  const exportMenuItems: MenuProps['items'] = [
+    {
+      key: 'current-png',
+      label: '导出当前筛选 PNG 包',
+      icon: <Download size={14} />,
+      onClick: () => void handleExportPng(filter.visible),
+    },
+    {
+      key: 'all-png',
+      label: filter.visible.length === clues.length ? '导出全部 PNG 包' : '导出全部 PNG 包（先切到全部）',
+      icon: <Package size={14} />,
+      disabled: filter.visible.length !== clues.length,
+      onClick: () => void handleExportPng(clues),
+    },
+    {
+      key: 'illustrations',
+      label: '前往线索插画资产',
+      icon: <ImagePlus size={14} />,
+      onClick: handleGoIllustrations,
+    },
+  ];
+
+  const moreMenuItems: MenuProps['items'] = [
+    {
+      key: 'redraw',
+      label: '批量重绘当前筛选',
+      icon: <WandSparkles size={14} />,
+      onClick: handleBatchRedraw,
+    },
+    {
+      key: 'check-illustrations',
+      label: '检查线索插画状态',
+      icon: <ImagePlus size={14} />,
+      onClick: handleGoIllustrations,
+    },
+  ];
+
   return (
     <div className="clues-page">
       <div className="page-head">
@@ -198,14 +270,21 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
           </div>
         </div>
         <div className="page-actions">
-          <button type="button" className="btn btn-ghost" onClick={handleBatchRedraw}>
-            <Grid3x3 size={15} />
-            批量重绘
+          <button type="button" className="btn btn-ghost" onClick={() => void handleEnsureVisibleIllustrations()}>
+            <ImagePlus size={15} />
+            补全插画
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleExportPng}>
-            <Download size={15} />
-            导出 PNG
-          </button>
+          <Dropdown menu={{ items: exportMenuItems }} trigger={['click']} placement="bottomRight">
+            <button type="button" className="btn btn-primary">
+              <Package size={15} />
+              导出线索包
+            </button>
+          </Dropdown>
+          <Dropdown menu={{ items: moreMenuItems }} trigger={['click']} placement="bottomRight">
+            <button type="button" className="btn btn-ghost icon-only" aria-label="更多线索操作">
+              <MoreHorizontal size={16} />
+            </button>
+          </Dropdown>
         </div>
       </div>
 
@@ -264,6 +343,7 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
               clue={selectedClue}
               onClose={() => setSelectedClueId(null)}
               onJumpToTruth={handleJumpToTruth}
+              onGenerateIllustration={(clue) => void handleGenerateClueIllustration(clue)}
             />
             <div className="cd-extra">
               <ClueTags
