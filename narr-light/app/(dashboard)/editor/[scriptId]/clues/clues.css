@@ -362,7 +362,7 @@
 /* ===== 线索详情抽屉 ===== */
 .clue-detail-drawer {
   position: fixed;
-  top: 0;
+  top: var(--topbar-height, 64px);
   right: 0;
   bottom: 0;
   width: 420px;
@@ -381,7 +381,10 @@
 }
 .clue-detail-drawer-mask {
   position: fixed;
-  inset: 0;
+  top: var(--topbar-height, 64px);
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: rgba(26, 18, 11, 0.4);
   z-index: 90;
 }
@@ -460,6 +463,42 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+.cd-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.cd-action-row .truth-link {
+  justify-content: center;
+}
+.cd-export-action {
+  border-color: rgba(122, 92, 58, 0.34);
+  color: var(--char);
+  background: rgba(255, 250, 240, 0.7);
+}
+.cd-illustration-preview {
+  border: 1px solid rgba(122, 92, 58, 0.22);
+  background: rgba(26, 18, 11, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cd-illustration-preview img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--noir-bg);
+}
+.cd-illustration-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  color: var(--sepia);
+  border-top: 1px solid rgba(122, 92, 58, 0.18);
 }
 .cd-section {
   display: flex;

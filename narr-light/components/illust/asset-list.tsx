@@ -8,6 +8,7 @@
  * 视觉与 class 命名对齐原型 workbench2.html #view-illust .scene-item
  */
 import { Plus } from 'lucide-react';
+import type { CSSProperties } from 'react';
 
 /** 插画资产类型（对齐 .if-tab[data-itype]） */
 export type AssetType = 'cover' | 'scene' | 'clue' | 'public' | 'char' | 'poster';
@@ -130,6 +131,13 @@ interface AssetListProps {
   onGenerate?: (asset: IllustrationAsset) => void;
 }
 
+function buildThumbStyle(thumb: string): CSSProperties {
+  if (thumb.startsWith('http') || thumb.startsWith('data:image/')) {
+    return { backgroundImage: `url("${thumb}")` };
+  }
+  return { background: thumb };
+}
+
 /** 状态图标映射 */
 /**
  * 资产列表组件
@@ -187,7 +195,7 @@ export function AssetList({
               <button
                 type="button"
                 className="si-thumb si-thumb-action"
-                style={{ background: asset.thumb }}
+                style={buildThumbStyle(asset.thumb)}
                 title={asset.status === 'done' ? '重新生成' : '开始生成'}
                 aria-label={`${asset.status === 'done' ? '重新生成' : '开始生成'}：${asset.title}`}
                 onClick={(e) => {

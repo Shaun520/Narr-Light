@@ -6,6 +6,8 @@
 // 因此此处静态 import 不会产生运行时循环依赖
 import { DeepSeekProvider } from "./deepseek-provider";
 import { GLMProvider } from "./glm-provider";
+import { OpenAIImageProvider } from "./openai-image-provider";
+import { SeedreamProvider } from "./seedream-provider";
 
 /**
  * 文本生成请求选项
@@ -78,12 +80,18 @@ export interface AIProvider {
  * Provider 工厂
  * 根据 name 返回对应的 Provider 实例
  */
-export function getProvider(name: "deepseek" | "glm"): AIProvider {
+export function getProvider(name: "deepseek" | "glm" | "openai-image" | "seedream"): AIProvider {
   if (name === "deepseek") {
     return new DeepSeekProvider();
   }
   if (name === "glm") {
     return new GLMProvider();
+  }
+  if (name === "openai-image") {
+    return new OpenAIImageProvider();
+  }
+  if (name === "seedream") {
+    return new SeedreamProvider();
   }
   throw new Error(`Unknown provider: ${name}`);
 }

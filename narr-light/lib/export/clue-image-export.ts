@@ -11,6 +11,7 @@
 import { toPng } from 'html-to-image';
 import {
   ACT_LABELS,
+  CLUE_TYPE_LABELS,
   PHASE_LABELS,
   type Clue,
   type ClueAct,
@@ -33,6 +34,11 @@ export interface ExportedImage {
   group: string;
   /** 源线索 */
   clue: Clue;
+}
+
+export interface ClueIllustrationExportAsset {
+  thumb?: string;
+  status: 'done' | 'active' | 'pending';
 }
 
 /** 图片导出选项 */
@@ -78,6 +84,220 @@ function buildFilename(clue: Clue, index: number, options: ClueImageExportOption
   const script = options.scriptTitle ? `${safeName(options.scriptTitle)}_` : '';
   const seq = String(index + 1).padStart(2, '0');
   return `${script}${seq}_${clue.code.replace('#', '')}_${safeName(clue.title)}.png`;
+}
+
+export function buildClueAssetFilename(clue: Clue, suffix = ''): string {
+  return `${safeName(clue.code.replace('#', ''))}_${safeName(clue.title)}${suffix}.png`;
+}
+
+function fileToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function imageUrlToDataUrl(url: string): Promise<string> {
+  if (url.startsWith('data:')) return url;
+  const response = await fetch(url, { mode: 'cors' });
+  if (!response.ok) {
+    throw new Error(`下载插画失败：${response.status}`);
+  }
+  return fileToDataUrl(await response.blob());
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('插画图片加载失败'));
+    img.src = src;
+  });
+}
+
+function drawCoverImage(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const boxRatio = width / height;
+  const sourceWidth = imageRatio > boxRatio ? image.naturalHeight * boxRatio : image.naturalWidth;
+  const sourceHeight = imageRatio > boxRatio ? image.naturalHeight : image.naturalWidth / boxRatio;
+  const sourceX = (image.naturalWidth - sourceWidth) / 2;
+  const sourceY = (image.naturalHeight - sourceHeight) / 2;
+  ctx.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, x, y, width, height);
+}
+
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number,
+): number {
+  const chars = Array.from(text);
+  let line = '';
+  let lineCount = 0;
+
+  for (const char of chars) {
+    const testLine = line + char;
+    if (ctx.measureText(testLine).width > maxWidth && line) {
+      lineCount += 1;
+      if (lineCount >= maxLines) {
+        ctx.fillText(`${line.slice(0, Math.max(0, line.length - 1))}…`, x, y);
+        return y + lineHeight;
+      }
+      ctx.fillText(line, x, y);
+      line = char;
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+
+  if (line && lineCount < maxLines) {
+    ctx.fillText(line, x, y);
+    y += lineHeight;
+  }
+  return y;
+}
+
+function drawTag(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+): number {
+  const paddingX = 18;
+  const width = ctx.measureText(text).width + paddingX * 2;
+  ctx.fillStyle = '#efe4d3';
+  ctx.strokeStyle = '#d8c3a6';
+  ctx.lineWidth = 2;
+  ctx.fillRect(x, y, width, 42);
+  ctx.strokeRect(x, y, width, 42);
+  ctx.fillStyle = '#765f45';
+  ctx.fillText(text, x + paddingX, y + 28);
+  return x + width + 14;
+}
+
+async function renderIllustratedClueCard(
+  clue: Clue,
+  imageDataUrl: string,
+): Promise<string> {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1400;
+  canvas.height = 2000;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('浏览器不支持 Canvas 导出');
+
+  ctx.fillStyle = '#f7efe2';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = '#e5d6bf';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(52, 52, canvas.width - 104, canvas.height - 104);
+
+  const image = await loadImage(imageDataUrl);
+  drawCoverImage(ctx, image, 80, 80, 1240, 980);
+
+  ctx.fillStyle = 'rgba(20, 14, 8, 0.56)';
+  ctx.fillRect(80, 958, 1240, 102);
+  ctx.fillStyle = '#fff8ec';
+  ctx.font = '700 56px serif';
+  ctx.fillText(clue.code.replace('#', ''), 116, 1025);
+
+  ctx.fillStyle = '#1d160f';
+  ctx.font = '700 64px serif';
+  wrapText(ctx, clue.title, 80, 1168, 1240, 78, 2);
+
+  ctx.font = '400 40px serif';
+  ctx.fillStyle = '#4f4031';
+  const textEndY = wrapText(ctx, clue.text, 80, 1308, 1240, 62, 6);
+
+  ctx.strokeStyle = '#d6c4aa';
+  ctx.setLineDash([12, 10]);
+  ctx.beginPath();
+  ctx.moveTo(80, Math.max(textEndY + 28, 1630));
+  ctx.lineTo(1320, Math.max(textEndY + 28, 1630));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.font = '400 34px serif';
+  ctx.fillStyle = '#927657';
+  ctx.fillText('搜证地点', 80, 1725);
+  ctx.fillStyle = '#2f2519';
+  ctx.font = '700 42px serif';
+  ctx.fillText(clue.location || '未标注', 80, 1792);
+
+  ctx.fillStyle = '#927657';
+  ctx.font = '400 34px serif';
+  ctx.fillText('编号', 850, 1725);
+  ctx.fillStyle = '#2f2519';
+  ctx.font = '700 42px serif';
+  ctx.fillText(clue.code, 850, 1792);
+
+  ctx.font = '400 32px serif';
+  let tagX = 80;
+  tagX = drawTag(ctx, CLUE_TYPE_LABELS[clue.type], tagX, 1870);
+  drawTag(ctx, ACT_LABELS[clue.act], tagX, 1870);
+
+  return canvas.toDataURL('image/png');
+}
+
+function getDoneAsset(
+  clue: Clue,
+  assetsByClueId: Map<string, ClueIllustrationExportAsset>,
+): (ClueIllustrationExportAsset & { thumb: string }) | null {
+  const asset = assetsByClueId.get(clue.id);
+  if (asset?.status !== 'done' || !asset.thumb) return null;
+  return { ...asset, thumb: asset.thumb };
+}
+
+export async function exportClueIllustrationsToImages(
+  clues: Clue[],
+  assetsByClueId: Map<string, ClueIllustrationExportAsset>,
+): Promise<ExportedImage[]> {
+  const results: ExportedImage[] = [];
+  const ordered = orderClues(clues);
+  for (const clue of ordered) {
+    const asset = getDoneAsset(clue, assetsByClueId);
+    if (!asset) continue;
+    results.push({
+      filename: buildClueAssetFilename(clue),
+      dataUrl: await imageUrlToDataUrl(asset.thumb),
+      group: '纯插画',
+      clue,
+    });
+  }
+  return results;
+}
+
+export async function exportIllustratedClueCardsToImages(
+  clues: Clue[],
+  assetsByClueId: Map<string, ClueIllustrationExportAsset>,
+): Promise<ExportedImage[]> {
+  const results: ExportedImage[] = [];
+  const ordered = orderClues(clues);
+  for (const clue of ordered) {
+    const asset = getDoneAsset(clue, assetsByClueId);
+    if (!asset) continue;
+    const imageDataUrl = await imageUrlToDataUrl(asset.thumb);
+    results.push({
+      filename: buildClueAssetFilename(clue, '_线索卡'),
+      dataUrl: await renderIllustratedClueCard(clue, imageDataUrl),
+      group: '插画线索卡',
+      clue,
+    });
+  }
+  return results;
 }
 
 /**

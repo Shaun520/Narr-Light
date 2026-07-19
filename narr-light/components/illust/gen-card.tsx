@@ -9,6 +9,7 @@
  * 视觉与 class 命名对齐原型 workbench2.html #view-illust .gen-card
  */
 import { ImagePlus } from 'lucide-react';
+import type { CSSProperties } from 'react';
 
 /** 生成结果卡数据（判别联合） */
 export type GenCardData =
@@ -52,6 +53,13 @@ interface GenCardProps {
   actions?: GenCardActions;
 }
 
+function buildImageStyle(image: string): CSSProperties {
+  if (image.startsWith('http') || image.startsWith('data:image/')) {
+    return { backgroundImage: `url("${image}")` };
+  }
+  return { background: image };
+}
+
 /**
  * 生成结果卡组件
  */
@@ -89,7 +97,7 @@ export function GenCard({ card, actions }: GenCardProps) {
   // done
   return (
     <div className="gen-card">
-      <div className="gen-img" style={{ background: card.image }} />
+      <div className="gen-img" style={buildImageStyle(card.image)} />
       <div className="gen-meta">
         <span className="gen-model">{card.model}</span>
         {card.seed ? <span className="gen-seed">seed {card.seed}</span> : null}

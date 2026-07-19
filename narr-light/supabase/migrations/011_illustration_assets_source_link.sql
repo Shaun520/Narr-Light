@@ -46,6 +46,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_illustration_assets_unique_source
 
 CREATE INDEX IF NOT EXISTS idx_illustration_versions_asset ON public.illustration_versions(asset_id);
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'illustration_assets_current_version_id_fkey'
+  ) THEN
+    ALTER TABLE public.illustration_assets
+      ADD CONSTRAINT illustration_assets_current_version_id_fkey
+      FOREIGN KEY (current_version_id)
+      REFERENCES public.illustration_versions(id)
+      ON DELETE SET NULL;
+  END IF;
+END $$;
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'illustration-assets',
+  'illustration-assets',
+  TRUE,
+  10485760,
+  ARRAY['image/png', 'image/jpeg', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE
+SET
+  public = EXCLUDED.public,
+  file_size_limit = EXCLUDED.file_size_limit,
+  allowed_mime_types = EXCLUDED.allowed_mime_types;
+
 ALTER TABLE public.illustration_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.illustration_versions ENABLE ROW LEVEL SECURITY;
 

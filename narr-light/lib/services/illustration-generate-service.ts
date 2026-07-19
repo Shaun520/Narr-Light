@@ -1,194 +1,341 @@
-/**
- * 插画生成协调服务
- *
- * 封装插画生成的 Mock 逻辑与未来真实 AI 调用接口。
- * 当前为开发期 Mock 实现：使用 setTimeout 模拟异步生成、批量重绘与高清放大。
- *
- * 方法签名兼容未来接入真实 AI 生成服务（如 Edge Function / 第三方模型 API），
- * 届时只需替换方法体内 Mock 逻辑为真实 fetch 调用，无需改动调用方。
- */
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { getProvider } from '@/lib/ai/providers/base-provider';
+import { fetchWithOptionalProxy } from '@/lib/ai/providers/fetch-with-proxy';
+import { ApiError } from '@/lib/api/response';
+import { createAdminClient } from '@/lib/supabase/admin';
+import type { Json } from '@/lib/supabase/types';
 
-/** 单次生成参数 */
+const IMAGE_BUCKET = 'illustration-assets';
+
 export interface GenerateSingleParams {
-  /** 剧本 ID */
   scriptId: string;
-  /** 生成提示词 */
+  assetId: string;
   prompt: string;
-  /** 模型标识，如 deepseek / glm / fusion */
   model: string;
-  /** 画面比例，如 1:1 / 16:9 / 3:4 */
   ratio: string;
-  /** 生成张数 */
   count: number;
 }
 
-/** 批量重绘参数 */
-export interface BatchRegenerateParams {
-  /** 剧本 ID */
-  scriptId: string;
-  /** 需要重绘的资产 ID 列表 */
-  assetIds: string[];
-}
-
-/** 单次生成结果 */
 export interface GenerateResult {
-  /** 资产/版本 ID */
   id: string;
-  /** 生成的图片地址（Mock：随机渐变背景 CSS） */
   imageUrl: string;
-  /** 使用的模型名 */
   model: string;
-  /** 随机种子 */
   seed: number;
 }
 
-/** 高清放大结果 */
-export interface UpscaleResult {
-  /** 资产 ID */
-  id: string;
-  /** 放大后图片地址（Mock：渐变背景 CSS） */
-  imageUrl: string;
-}
-
-/** 进度回调：percent 0-100，message 为当前状态文案 */
 export type ProgressCallback = (percent: number, message: string) => void;
 
-/** 随机渐变色调色板（Mock 生成图，色调各异） */
-const GRADIENT_PALETTE: ReadonlyArray<readonly [string, string]> = [
-  ['rgba(176,141,87,0.45)', 'rgba(26,20,16,0.65)'],
-  ['rgba(74,124,89,0.42)', 'rgba(15,26,20,0.65)'],
-  ['rgba(58,90,122,0.45)', 'rgba(20,26,42,0.65)'],
-  ['rgba(138,28,28,0.4)', 'rgba(42,26,26,0.65)'],
-  ['rgba(106,74,138,0.42)', 'rgba(26,20,42,0.65)'],
-];
-
-/** 默认渐变兜底色（防止取色失败） */
-const FALLBACK_GRADIENT: readonly [string, string] = [
-  'rgba(58,42,26,0.5)',
-  'rgba(26,20,16,0.65)',
-];
-
-/** 生成随机渐变背景 CSS（基于种子选取色调与高光位置） */
-function randomGradient(seed: number): string {
-  const palette = GRADIENT_PALETTE[seed % GRADIENT_PALETTE.length] ?? FALLBACK_GRADIENT;
-  const [c1, c2] = palette;
-  const px = 30 + (seed % 40);
-  const py = 20 + (seed % 50);
-  return `radial-gradient(circle at ${px}% ${py}%, ${c1}, transparent 60%), linear-gradient(135deg, ${c2} 0%, rgba(26,20,16,0.5) 100%)`;
+interface AssetRow {
+  id: string;
+  script_id: string;
+  title: string;
+  sub: string;
+  locked: boolean;
 }
 
-/** 生成随机种子（1000-9999） */
-function randomSeed(): number {
-  return Math.floor(Math.random() * 9000) + 1000;
+interface VersionRow {
+  id: string;
+  image_url: string;
+  model: string;
+  seed: number;
 }
 
-/** 延时工具（Mock 异步） */
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+type ImageProviderName = 'glm' | 'openai-image' | 'seedream';
+
+function normalizeProvider(model: string): ImageProviderName {
+  if (model === 'glm') return 'glm';
+  if (model === 'openai') return 'openai-image';
+  if (model === 'seedream' || model === 'seeddance') return 'seedream';
+  throw new ApiError('INVALID_MODEL', `不支持的插画模型: ${model}`, 400);
 }
 
-/**
- * 插画生成协调服务
- *
- * 当前为 Mock 实现，方法签名兼容未来真实 AI 调用。
- * 替换为真实服务时，仅需在各方法体内将 Mock 逻辑改为 fetch / Edge Function 调用。
- */
+function mapRatioToSize(ratio: string, provider: ImageProviderName): string {
+  if (provider === 'openai-image') {
+    if (ratio === '3:4') return '1024x1536';
+    if (ratio === '16:9') return '1536x1024';
+    return '1024x1024';
+  }
+  if (ratio === '3:4') return '1024x1536';
+  if (ratio === '16:9') return '1536x1024';
+  return '1024x1024';
+}
+
+function resolveProviderModel(provider: ImageProviderName): string {
+  if (provider === 'openai-image') {
+    return process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1.5';
+  }
+  if (provider === 'seedream') {
+    const model = process.env.SEEDDANCE_IMAGE_MODEL ?? process.env.SEEDREAM_IMAGE_MODEL;
+    if (!model) {
+      throw new ApiError(
+        'AI_PROVIDER_NOT_CONFIGURED',
+        'SEEDREAM_IMAGE_MODEL 或 SEEDDANCE_IMAGE_MODEL 未配置，无法调用豆包图片模型。',
+        500,
+      );
+    }
+    return model;
+  }
+  return process.env.GLM_IMAGE_MODEL ?? 'cogview-3-plus';
+}
+
+function isInvalidKey(key: string | undefined): boolean {
+  const value = key?.trim();
+  return (
+    !value ||
+    value.includes('你的') ||
+    value.includes('浣犵殑') ||
+    value.includes('your-') ||
+    value.includes('_') ||
+    [...value].some((char) => char.codePointAt(0)! > 127) ||
+    value.length < 20
+  );
+}
+
+function assertRealImageProviderConfigured(provider: ImageProviderName) {
+  const keyByProvider: Record<ImageProviderName, string | undefined> = {
+    glm: process.env.GLM_API_KEY,
+    'openai-image': process.env.OPENAI_API_KEY,
+    seedream: process.env.ARK_API_KEY ?? process.env.VOLCENGINE_API_KEY,
+  };
+  const envNameByProvider: Record<ImageProviderName, string> = {
+    glm: 'GLM_API_KEY',
+    'openai-image': 'OPENAI_API_KEY',
+    seedream: 'ARK_API_KEY',
+  };
+  const hasInvalidPlaceholder =
+    isInvalidKey(keyByProvider[provider]);
+  if (hasInvalidPlaceholder) {
+    throw new ApiError(
+      'AI_PROVIDER_NOT_CONFIGURED',
+      `${envNameByProvider[provider]} 未配置为有效值，无法执行真实插画生成。`,
+      500,
+    );
+  }
+}
+
+function extensionFromContentType(contentType: string | null): string {
+  if (contentType?.includes('png')) return 'png';
+  if (contentType?.includes('webp')) return 'webp';
+  if (contentType?.includes('jpeg') || contentType?.includes('jpg')) return 'jpg';
+  return 'png';
+}
+
+async function fetchImageBlob(imageUrl: string): Promise<{ blob: Blob; contentType: string }> {
+  const response = await fetchWithOptionalProxy(imageUrl);
+  if (!response.ok) {
+    throw new ApiError(
+      'IMAGE_DOWNLOAD_FAILED',
+      `下载生成图片失败: ${response.status} ${response.statusText}`,
+      502,
+    );
+  }
+  const contentType = response.headers.get('content-type') ?? 'image/png';
+  return { blob: await response.blob(), contentType };
+}
+
 export class IllustrationGenerateService {
-  /**
-   * 单次生成（Mock：setTimeout 约 3 秒，返回随机渐变图）。
-   * 进度通过 onProgress 回调实时反馈（0-100）。
-   * @param params     生成参数
-   * @param onProgress 进度回调
-   * @returns 生成结果（图片地址、模型、种子）
-   */
   async generateSingle(
     params: GenerateSingleParams,
     onProgress?: ProgressCallback,
   ): Promise<GenerateResult> {
-    const total = 3000;
-    const step = 300;
-    let elapsed = 0;
-    onProgress?.(5, `正在生成 · ${params.model}`);
+    const providerName = normalizeProvider(params.model);
+    assertRealImageProviderConfigured(providerName);
 
-    while (elapsed < total) {
-      await delay(step);
-      elapsed += step;
-      const percent = Math.min(95, Math.round((elapsed / total) * 100));
-      onProgress?.(percent, `生成中 ${percent}%`);
-    }
+    const supabase = this.getAdminClient();
+    const asset = await this.getAssetForGeneration(supabase, params.scriptId, params.assetId);
+    const provider = getProvider(providerName);
 
-    const seed = randomSeed();
-    onProgress?.(100, '生成完成');
-    return {
-      id: `gen-${Date.now()}-${seed}`,
-      imageUrl: randomGradient(seed),
-      model: params.model,
-      seed,
-    };
-  }
+    onProgress?.(10, '准备生成');
+    await this.markAssetActive(supabase, params.assetId);
 
-  /**
-   * 批量重绘（Mock：逐张 setTimeout，每张 1.5 秒）。
-   * 进度回调中 percent 为整体进度，message 为当前处理的资产序号文案。
-   * @param params     批量参数（资产 ID 列表）
-   * @param onProgress 进度回调
-   * @returns 每张资产的重绘结果（顺序与 assetIds 一致）
-   */
-  async batchRegenerate(
-    params: BatchRegenerateParams,
-    onProgress?: ProgressCallback,
-  ): Promise<GenerateResult[]> {
-    const { assetIds } = params;
-    const results: GenerateResult[] = [];
-    const perAsset = 1500;
-
-    for (let i = 0; i < assetIds.length; i += 1) {
-      const assetId = assetIds[i];
-      onProgress?.(
-        Math.round((i / assetIds.length) * 100),
-        `正在重绘 ${i + 1}/${assetIds.length}`,
-      );
-      await delay(perAsset);
-      const seed = randomSeed();
-      results.push({
-        id: assetId,
-        imageUrl: randomGradient(seed),
-        model: 'GLM-5.1',
-        seed,
+    try {
+      onProgress?.(35, '调用图像模型');
+      const result = await provider.illustrate(params.prompt, {
+        model: resolveProviderModel(providerName),
+        size: mapRatioToSize(params.ratio, providerName),
+        n: Math.max(1, Math.min(params.count, 4)),
+        output_format: 'png',
       });
-    }
 
-    onProgress?.(100, '批量重绘完成');
-    return results;
+      onProgress?.(70, '上传图片');
+      const storedUrl = await this.storeGeneratedImage(supabase, {
+        scriptId: params.scriptId,
+        assetId: params.assetId,
+        sourceImageUrl: result.imageUrl,
+      });
+
+      onProgress?.(90, '写入版本');
+      const version = await this.createVersionAndUpdateAsset(supabase, {
+        assetId: params.assetId,
+        imageUrl: storedUrl,
+        model: result.model,
+        seed: result.seed,
+        params: {
+          prompt: params.prompt,
+          requestedModel: params.model,
+          provider: providerName,
+          ratio: params.ratio,
+          count: params.count,
+          assetTitle: asset.title,
+          assetSub: asset.sub,
+        },
+      });
+
+      onProgress?.(100, '生成完成');
+      return {
+        id: version.id,
+        imageUrl: version.image_url,
+        model: version.model,
+        seed: version.seed,
+      };
+    } catch (error) {
+      await this.markAssetFailed(supabase, params.assetId);
+      throw error;
+    }
   }
 
-  /**
-   * 高清放大（Mock：setTimeout 约 2 秒）。
-   * @param assetId    资产 ID
-   * @param onProgress 进度回调
-   * @returns 放大结果（图片地址）
-   */
-  async upscale(
-    assetId: string,
-    onProgress?: ProgressCallback,
-  ): Promise<UpscaleResult> {
-    const total = 2000;
-    const step = 400;
-    let elapsed = 0;
-    onProgress?.(10, '正在放大');
+  private getAdminClient(): SupabaseClient {
+    return createAdminClient() as unknown as SupabaseClient;
+  }
 
-    while (elapsed < total) {
-      await delay(step);
-      elapsed += step;
-      const percent = Math.min(95, Math.round((elapsed / total) * 100));
-      onProgress?.(percent, `放大中 ${percent}%`);
+  private async getAssetForGeneration(
+    supabase: SupabaseClient,
+    scriptId: string,
+    assetId: string,
+  ): Promise<AssetRow> {
+    const { data, error } = await supabase
+      .from('illustration_assets')
+      .select('id, script_id, title, sub, locked')
+      .eq('id', assetId)
+      .eq('script_id', scriptId)
+      .maybeSingle();
+
+    if (error) {
+      throw new ApiError('DB_QUERY_ERROR', `读取插画资产失败: ${error.message}`, 500);
+    }
+    if (!data) {
+      throw new ApiError('NOT_FOUND', '插画资产不存在', 404);
+    }
+    const asset = data as unknown as AssetRow;
+    if (asset.locked) {
+      throw new ApiError('ASSET_LOCKED', '该插画资产已锁定，不能重新生成。', 409);
+    }
+    return asset;
+  }
+
+  private async markAssetActive(supabase: SupabaseClient, assetId: string): Promise<void> {
+    const { error } = await supabase
+      .from('illustration_assets')
+      .update({
+        status: 'active',
+        progress: 10,
+        sub: '生成中',
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq('id', assetId);
+
+    if (error) {
+      throw new ApiError('DB_UPDATE_ERROR', `更新插画资产状态失败: ${error.message}`, 500);
+    }
+  }
+
+  private async markAssetFailed(supabase: SupabaseClient, assetId: string): Promise<void> {
+    await supabase
+      .from('illustration_assets')
+      .update({
+        status: 'pending',
+        progress: 0,
+        sub: '生成失败，请重试',
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq('id', assetId);
+  }
+
+  private async storeGeneratedImage(
+    supabase: SupabaseClient,
+    args: { scriptId: string; assetId: string; sourceImageUrl: string },
+  ): Promise<string> {
+    await this.ensureImageBucket(supabase);
+    const { blob, contentType } = await fetchImageBlob(args.sourceImageUrl);
+    const ext = extensionFromContentType(contentType);
+    const path = `${args.scriptId}/${args.assetId}/${Date.now()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(path, blob, { contentType, upsert: false });
+
+    if (error) {
+      throw new ApiError('STORAGE_UPLOAD_FAILED', `上传插画图片失败: ${error.message}`, 500);
     }
 
-    const seed = randomSeed();
-    onProgress?.(100, '放大完成');
-    return { id: assetId, imageUrl: randomGradient(seed) };
+    const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }
+
+  private async ensureImageBucket(supabase: SupabaseClient): Promise<void> {
+    const { error } = await supabase.storage.getBucket(IMAGE_BUCKET);
+    if (!error) return;
+
+    const { error: createError } = await supabase.storage.createBucket(IMAGE_BUCKET, {
+      public: true,
+      fileSizeLimit: 10 * 1024 * 1024,
+      allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+    });
+
+    if (createError && !createError.message.toLowerCase().includes('already exists')) {
+      throw new ApiError(
+        'STORAGE_BUCKET_ERROR',
+        `创建插画 Storage Bucket 失败: ${createError.message}`,
+        500,
+      );
+    }
+  }
+
+  private async createVersionAndUpdateAsset(
+    supabase: SupabaseClient,
+    args: {
+      assetId: string;
+      imageUrl: string;
+      model: string;
+      seed: number;
+      params: Json;
+    },
+  ): Promise<VersionRow> {
+    const { data: version, error: versionError } = await supabase
+      .from('illustration_versions')
+      .insert({
+        asset_id: args.assetId,
+        image_url: args.imageUrl,
+        model: args.model,
+        seed: args.seed,
+        params: args.params,
+      } as never)
+      .select('id, image_url, model, seed')
+      .single();
+
+    if (versionError) {
+      throw new ApiError('DB_UPDATE_ERROR', `写入插画版本失败: ${versionError.message}`, 500);
+    }
+
+    const row = version as unknown as VersionRow;
+    const { error: assetError } = await supabase
+      .from('illustration_assets')
+      .update({
+        status: 'done',
+        progress: 100,
+        thumb: args.imageUrl,
+        sub: '已生成',
+        current_version_id: row.id,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq('id', args.assetId);
+
+    if (assetError) {
+      throw new ApiError('DB_UPDATE_ERROR', `更新插画资产失败: ${assetError.message}`, 500);
+    }
+
+    return row;
   }
 }
 
-/** 服务单例（无状态，可直接复用） */
 export const illustrationGenerateService = new IllustrationGenerateService();

@@ -6,9 +6,9 @@ import { GenCard, type GenCardData } from './gen-card';
 import type { IllustrationAsset } from './asset-list';
 
 const MODEL_OPTIONS = [
-  { id: 'deepseek', label: 'DeepSeek-V4' },
-  { id: 'glm', label: 'GLM-5.1' },
-  { id: 'fusion', label: '多模态融合' },
+  { id: 'openai', label: 'OpenAI Images' },
+  { id: 'glm', label: 'GLM CogView' },
+  { id: 'seedream', label: '豆包 Seedream' },
 ] as const;
 
 const RATIO_OPTIONS = ['1:1', '16:9', '3:4'] as const;
@@ -65,7 +65,7 @@ export function GalleryPanel({
   onUpscale,
 }: GalleryPanelProps) {
   const [prompt, setPrompt] = useState(defaultPrompt(asset));
-  const [model, setModel] = useState<string>('deepseek');
+  const [model, setModel] = useState<string>('openai');
   const [ratio, setRatio] = useState<string>('16:9');
   const [count, setCount] = useState<number>(4);
 

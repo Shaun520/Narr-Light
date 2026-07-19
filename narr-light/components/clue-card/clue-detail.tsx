@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { ImagePlus, MapPin, Users, FileText, Tag, Hash, X } from 'lucide-react';
+import { Download, ImagePlus, MapPin, Users, FileText, Tag, Hash, X } from 'lucide-react';
 import {
   ACT_LABELS,
   CLUE_TYPE_LABELS,
@@ -16,6 +16,12 @@ import {
   type Clue,
 } from './clue-card';
 import { TruthLink } from './truth-link';
+
+export interface ClueIllustrationPreview {
+  imageUrl: string;
+  status: 'done' | 'active' | 'pending';
+  model?: string;
+}
 
 interface ClueDetailProps {
   /** 当前线索 */
@@ -26,6 +32,9 @@ interface ClueDetailProps {
   onJumpToTruth?: (clue: Clue) => void;
   /** 为当前线索创建/打开插画任务 */
   onGenerateIllustration?: (clue: Clue) => void;
+  /** 导出当前线索的插画线索卡 PNG */
+  onExportPng?: (clue: Clue) => void;
+  illustration?: ClueIllustrationPreview | null;
 }
 
 /**
@@ -36,6 +45,8 @@ export function ClueDetail({
   onClose,
   onJumpToTruth,
   onGenerateIllustration,
+  onExportPng,
+  illustration,
 }: ClueDetailProps) {
   return (
     <div className="clue-detail">
@@ -59,16 +70,42 @@ export function ClueDetail({
       </div>
 
       <div className="cd-body">
-        {onGenerateIllustration && (
+        {(onGenerateIllustration || onExportPng) && (
           <section className="cd-section">
-            <button
-              type="button"
-              className="truth-link"
-              onClick={() => onGenerateIllustration(clue)}
-            >
-              <ImagePlus size={13} />
-              <span>生成线索插画</span>
-            </button>
+            <div className="cd-action-row">
+              {onGenerateIllustration && (
+                <button
+                  type="button"
+                  className="truth-link"
+                  onClick={() => onGenerateIllustration(clue)}
+                >
+                  <ImagePlus size={13} />
+                  <span>生成线索插画</span>
+                </button>
+              )}
+              {onExportPng && (
+                <button
+                  type="button"
+                  className="truth-link cd-export-action"
+                  onClick={() => onExportPng(clue)}
+                >
+                  <Download size={13} />
+                  <span>导出 PNG</span>
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {illustration?.imageUrl && (
+          <section className="cd-section">
+            <div className="cd-illustration-preview">
+              <img src={illustration.imageUrl} alt={`${clue.title} 插画`} />
+              <div className="cd-illustration-meta">
+                <ImagePlus size={13} />
+                <span>{illustration.model ?? '已生成插画'}</span>
+              </div>
+            </div>
           </section>
         )}
 

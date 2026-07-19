@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { App as AntdApp, Checkbox, Dropdown, type MenuProps } from 'antd';
 import { Download, ImagePlus, MoreHorizontal, Package, WandSparkles } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -20,8 +20,11 @@ import {
 } from '@/components/clue-card/export-progress';
 import { Modal } from '@/components/common/modal';
 import {
+  buildClueAssetFilename,
+  downloadDataUrl,
   downloadImagesAsZip,
-  exportCluesToImages,
+  exportClueIllustrationsToImages,
+  exportIllustratedClueCardsToImages,
   type ExportedImage,
 } from '@/lib/export/clue-image-export';
 import {
@@ -30,6 +33,10 @@ import {
   markClueDistractorAction,
   markClueKeyAction,
 } from '@/app/(dashboard)/editor/[scriptId]/clues/actions';
+import {
+  getIllustrationAssetsAction,
+  type IllustrationAssetView,
+} from '@/app/(dashboard)/editor/[scriptId]/illustrations/actions';
 
 const REDRAW_STAMPS = ['〔AI 重绘〕', '〔水墨重绘〕', '〔细节增强〕', '〔构图微调〕'];
 
@@ -52,14 +59,40 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
   const [exportDone, setExportDone] = useState(0);
   const [exportTotal, setExportTotal] = useState(0);
   const [exportLabel, setExportLabel] = useState<string | undefined>(undefined);
-  const [progressMode, setProgressMode] = useState<'export' | 'redraw'>('export');
+  const [progressMode, setProgressMode] = useState<'illustration-export' | 'card-export' | 'redraw'>('card-export');
   const [redrawOpen, setRedrawOpen] = useState(false);
   const [redrawSelectedIds, setRedrawSelectedIds] = useState<Set<string>>(new Set());
+  const [illustrationAssets, setIllustrationAssets] = useState<IllustrationAssetView[]>([]);
   const { message } = AntdApp.useApp();
   const router = useRouter();
-  const gridRef = useRef<HTMLDivElement>(null);
 
   const selectedClue = clues.find((c) => c.id === selectedClueId) ?? null;
+  const illustrationByClueId = useMemo(() => {
+    const map = new Map<string, IllustrationAssetView>();
+    for (const asset of illustrationAssets) {
+      if (asset.sourceType === 'clue' && asset.sourceId) {
+        map.set(asset.sourceId, asset);
+      }
+    }
+    return map;
+  }, [illustrationAssets]);
+  const selectedIllustration = selectedClue
+    ? illustrationByClueId.get(selectedClue.id)
+    : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    getIllustrationAssetsAction(scriptId)
+      .then((assets) => {
+        if (!cancelled) setIllustrationAssets(assets);
+      })
+      .catch((error) => {
+        console.error('Load clue illustration assets failed:', error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scriptId]);
 
   const replaceClue = (nextClue: Clue) => {
     setClues((prev) => prev.map((clue) => (clue.id === nextClue.id ? nextClue : clue)));
@@ -109,36 +142,99 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
     router.push(`/editor/${scriptId}?node=truth`);
   };
 
-  const handleExportPng = async (targetClues: Clue[] = filter.visible) => {
-    if (!gridRef.current || targetClues.length === 0) {
-      message.warning('当前没有可导出的线索卡');
+  const exportableVisibleClues = useMemo(
+    () =>
+      filter.visible.filter((clue) => {
+        const asset = illustrationByClueId.get(clue.id);
+        return asset?.status === 'done' && Boolean(asset.thumb);
+      }),
+    [filter.visible, illustrationByClueId],
+  );
+
+  const handleExportPureIllustrations = async () => {
+    if (filter.visible.length === 0) {
+      message.warning('当前筛选下没有可导出的线索');
       return;
     }
-    setProgressMode('export');
+    if (exportableVisibleClues.length === 0) {
+      message.warning('当前筛选下没有已生成插画的线索');
+      return;
+    }
+    setProgressMode('illustration-export');
     setExportOpen(true);
     setExportStatus('running');
     setExportDone(0);
-    setExportTotal(targetClues.length);
+    setExportTotal(exportableVisibleClues.length);
     setExportLabel(undefined);
 
     try {
-      const nodes = targetClues
-        .map((clue) => gridRef.current?.querySelector(`[data-clue-id="${clue.id}"]`) as HTMLElement | null)
-        .filter((node): node is HTMLElement => node !== null);
-
       const images: ExportedImage[] = [];
-      for (let i = 0; i < nodes.length; i += 1) {
-        setExportLabel(targetClues[i].title);
-        const batch = await exportCluesToImages([nodes[i]], [targetClues[i]]);
+      for (const clue of exportableVisibleClues) {
+        setExportLabel(clue.title);
+        const batch = await exportClueIllustrationsToImages([clue], illustrationByClueId);
         images.push(...batch);
-        setExportDone(i + 1);
+        setExportDone(images.length);
       }
 
-      await downloadImagesAsZip(images, `${scriptId}_线索卡`);
+      await downloadImagesAsZip(images, `${scriptId}_纯插画`);
       setExportStatus('completed');
     } catch (error) {
-      console.error('Export clue package failed:', error);
+      console.error('Export clue illustrations failed:', error);
       setExportStatus('failed');
+    }
+  };
+
+  const handleExportIllustratedCards = async () => {
+    if (filter.visible.length === 0) {
+      message.warning('当前筛选下没有可导出的线索卡');
+      return;
+    }
+    if (exportableVisibleClues.length === 0) {
+      message.warning('当前筛选下没有已生成插画的线索卡');
+      return;
+    }
+    setProgressMode('card-export');
+    setExportOpen(true);
+    setExportStatus('running');
+    setExportDone(0);
+    setExportTotal(exportableVisibleClues.length);
+    setExportLabel(undefined);
+
+    try {
+      const images: ExportedImage[] = [];
+      for (const clue of exportableVisibleClues) {
+        setExportLabel(clue.title);
+        const batch = await exportIllustratedClueCardsToImages([clue], illustrationByClueId);
+        images.push(...batch);
+        setExportDone(images.length);
+      }
+
+      await downloadImagesAsZip(images, `${scriptId}_插画线索卡`);
+      setExportStatus('completed');
+    } catch (error) {
+      console.error('Export illustrated clue cards failed:', error);
+      setExportStatus('failed');
+    }
+  };
+
+  const handleExportSingleCluePng = async (clue: Clue) => {
+    const asset = illustrationByClueId.get(clue.id);
+    if (asset?.status !== 'done' || !asset.thumb) {
+      message.warning('当前线索还没有已生成插画，请先生成线索插画');
+      return;
+    }
+
+    try {
+      const [image] = await exportIllustratedClueCardsToImages([clue], illustrationByClueId);
+      if (!image) {
+        message.warning('当前线索还没有可导出的插画线索卡');
+        return;
+      }
+      downloadDataUrl(image.dataUrl, buildClueAssetFilename(clue, '_线索卡'));
+      message.success('已导出当前线索 PNG');
+    } catch (error) {
+      console.error('Export single clue card failed:', error);
+      message.error(error instanceof Error ? error.message : '导出当前线索 PNG 失败');
     }
   };
 
@@ -164,6 +260,8 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
   const handleGenerateClueIllustration = async (clue: Clue) => {
     try {
       await ensureClueIllustrationAssetAction(scriptId, clue);
+      const assets = await getIllustrationAssetsAction(scriptId);
+      setIllustrationAssets(assets);
       message.success(`已准备「${clue.title}」插画任务`);
       router.push(`/editor/${scriptId}/illustrations?type=clue&source=${clue.id}`);
     } catch (error) {
@@ -223,17 +321,16 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
 
   const exportMenuItems: MenuProps['items'] = [
     {
-      key: 'current-png',
-      label: '导出当前筛选 PNG 包',
+      key: 'pure-illustrations',
+      label: '纯插画导出（当前筛选）',
       icon: <Download size={14} />,
-      onClick: () => void handleExportPng(filter.visible),
+      onClick: () => void handleExportPureIllustrations(),
     },
     {
-      key: 'all-png',
-      label: filter.visible.length === clues.length ? '导出全部 PNG 包' : '导出全部 PNG 包（先切到全部）',
+      key: 'illustrated-cards',
+      label: '插画 + 线索导出（当前筛选）',
       icon: <Package size={14} />,
-      disabled: filter.visible.length !== clues.length,
-      onClick: () => void handleExportPng(clues),
+      onClick: () => void handleExportIllustratedCards(),
     },
     {
       key: 'illustrations',
@@ -317,7 +414,7 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
         onPhaseChange={filter.setPhase}
       />
 
-      <div className="clue-grid" ref={gridRef}>
+      <div className="clue-grid">
         {filter.visible.map((clue) => (
           <ClueCard
             key={clue.id}
@@ -341,9 +438,17 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
           <div className="clue-detail-drawer open">
             <ClueDetail
               clue={selectedClue}
+              illustration={selectedIllustration?.thumb
+                ? {
+                    imageUrl: selectedIllustration.thumb,
+                    status: selectedIllustration.status,
+                    model: selectedIllustration.sub,
+                  }
+                : null}
               onClose={() => setSelectedClueId(null)}
               onJumpToTruth={handleJumpToTruth}
               onGenerateIllustration={(clue) => void handleGenerateClueIllustration(clue)}
+              onExportPng={(clue) => void handleExportSingleCluePng(clue)}
             />
             <div className="cd-extra">
               <ClueTags
@@ -367,7 +472,7 @@ export function CluesManager({ scriptId, initialClues }: CluesManagerProps) {
         done={exportDone}
         status={exportStatus}
         currentLabel={exportLabel}
-        title={progressMode === 'redraw' ? '批量重绘线索卡' : '批量导出线索卡'}
+        title={progressMode === 'redraw' ? '批量重绘线索卡' : progressMode === 'illustration-export' ? '导出纯插画' : '导出插画线索卡'}
         currentLabelPrefix={progressMode === 'redraw' ? '正在重绘' : '正在导出'}
         completedTip={
           progressMode === 'redraw'
