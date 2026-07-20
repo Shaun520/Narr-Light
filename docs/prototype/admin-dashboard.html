@@ -1,0 +1,2459 @@
+<!--
+  文档: 叙光 Admin 后台管理静态原型
+  作用: 基于 docs/admin-design.md 的独立可交互 HTML 原型，用于视觉与信息架构确认
+  受众: 产品与开发人员
+  约束: 本期仅 super_admin 角色；主色 AntD 蓝 #1677ff；不使用 emoji 作为 UI 图标
+  更新: 2026-07-20
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>叙光 Admin · 运营后台原型</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1677ff;
+      --primary-hover: #4096ff;
+      --primary-active: #0958d9;
+      --primary-bg: #e6f4ff;
+      --primary-border: #91caff;
+
+      --success: #52c41a;
+      --success-bg: #f6ffed;
+      --warning: #faad14;
+      --warning-bg: #fffbe6;
+      --error: #ff4d4f;
+      --error-bg: #fff2f0;
+      --info: #1677ff;
+      --info-bg: #e6f4ff;
+
+      --sidebar-bg: #001529;
+      --sidebar-bg-2: #000c17;
+      --sidebar-text: rgba(255,255,255,0.85);
+      --sidebar-text-active: #ffffff;
+      --sidebar-item-hover: rgba(22,119,255,0.1);
+
+      --topbar-bg: #ffffff;
+      --content-bg: #f5f5f5;
+      --card-bg: #ffffff;
+      --border-color: #f0f0f0;
+      --border-color-2: #d9d9d9;
+
+      --text: rgba(0,0,0,0.85);
+      --text-secondary: rgba(0,0,0,0.45);
+      --text-tertiary: rgba(0,0,0,0.25);
+
+      --shadow-sm: 0 1px 2px 0 rgba(0,0,0,0.03), 0 1px 6px -1px rgba(0,0,0,0.02);
+      --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg: 0 6px 16px rgba(0,0,0,0.12);
+
+      --radius: 8px;
+      --radius-sm: 4px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      font-family: "Noto Sans SC", -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px; color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      background: var(--content-bg);
+    }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
+    input, select, textarea { font-family: inherit; color: inherit; }
+    a { color: inherit; text-decoration: none; }
+    code, pre { font-family: "JetBrains Mono", monospace; }
+
+    .app {
+      width: 100vw; height: 100vh;
+      display: grid;
+      grid-template-columns: 232px 1fr;
+      grid-template-rows: 56px 1fr;
+      grid-template-areas:
+        "sidebar topbar"
+        "sidebar main";
+    }
+
+    /* Sidebar */
+    .sidebar {
+      grid-area: sidebar;
+      background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-2) 100%);
+      color: var(--sidebar-text);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .brand {
+      height: 56px; padding: 0 20px;
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .brand-logo {
+      width: 30px; height: 30px; border-radius: 6px;
+      background: linear-gradient(135deg, var(--primary), #0958d9);
+      display: flex; align-items: center; justify-content: center;
+      color: white; font-weight: 700; font-size: 16px;
+    }
+    .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+    .brand-name { font-size: 15px; font-weight: 600; color: var(--sidebar-text-active); }
+    .brand-sub { font-size: 11px; color: rgba(255,255,255,0.45); letter-spacing: 0.5px; }
+
+    .nav { flex: 1; overflow-y: auto; padding: 12px 8px; }
+    .nav::-webkit-scrollbar { width: 6px; }
+    .nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+    .nav-section { margin-top: 16px; }
+    .nav-section:first-child { margin-top: 0; }
+    .nav-section-title {
+      padding: 8px 16px 6px;
+      font-size: 11px; color: rgba(255,255,255,0.35);
+      letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 16px; margin: 2px 0;
+      border-radius: 6px; cursor: pointer;
+      color: var(--sidebar-text); font-size: 14px;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .nav-item:hover { background: var(--sidebar-item-hover); color: var(--sidebar-text-active); }
+    .nav-item.active {
+      background: var(--primary);
+      color: var(--sidebar-text-active);
+      box-shadow: 0 2px 8px rgba(22,119,255,0.4);
+    }
+    .nav-item .nav-icon { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.85; }
+    .nav-item.active .nav-icon { opacity: 1; }
+    .nav-badge {
+      margin-left: auto;
+      padding: 1px 7px; min-width: 20px; height: 18px;
+      border-radius: 10px; background: var(--error);
+      color: white; font-size: 11px; font-weight: 500;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .nav-item.active .nav-badge { background: rgba(255,255,255,0.25); }
+
+    .sidebar-foot {
+      padding: 12px;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .admin-avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: linear-gradient(135deg, #fa8c16, #fa541c);
+      color: white; display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 13px;
+    }
+    .admin-info { flex: 1; min-width: 0; }
+    .admin-name { color: var(--sidebar-text-active); font-size: 13px; font-weight: 500; }
+    .admin-role { color: rgba(255,255,255,0.45); font-size: 11px; }
+    .logout-btn {
+      padding: 6px; border-radius: 4px; color: rgba(255,255,255,0.45);
+      cursor: pointer; transition: all 0.15s;
+    }
+    .logout-btn:hover { background: rgba(255,255,255,0.08); color: var(--error); }
+
+    /* Topbar */
+    .topbar {
+      grid-area: topbar;
+      background: var(--topbar-bg);
+      border-bottom: 1px solid var(--border-color);
+      display: flex; align-items: center; gap: 16px;
+      padding: 0 24px;
+      box-shadow: var(--shadow-sm);
+      z-index: 10;
+    }
+    .breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+    .breadcrumb-sep { color: var(--text-tertiary); }
+    .breadcrumb-current { color: var(--text); font-weight: 500; }
+    .breadcrumb-prev { color: var(--text-secondary); cursor: pointer; }
+    .breadcrumb-prev:hover { color: var(--primary); }
+    .topbar-spacer { flex: 1; }
+    .topbar-search {
+      width: 280px; height: 32px;
+      background: #f5f5f5; border: 1px solid transparent;
+      border-radius: 16px; padding: 0 14px 0 36px;
+      font-size: 13px; outline: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2300000073' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: 12px center;
+      transition: all 0.15s;
+    }
+    .topbar-search:hover { border-color: var(--primary); }
+    .topbar-search:focus { border-color: var(--primary); background-color: white; }
+    .topbar-icon-btn {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-secondary);
+      position: relative; transition: all 0.15s;
+    }
+    .topbar-icon-btn:hover { background: #f5f5f5; color: var(--primary); }
+    .topbar-icon-btn .dot {
+      position: absolute; top: 8px; right: 8px;
+      width: 8px; height: 8px; background: var(--error);
+      border-radius: 50%; border: 2px solid white;
+    }
+    .topbar-admin {
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 8px; height: 36px; border-radius: 6px;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .topbar-admin:hover { background: #f5f5f5; }
+    .topbar-admin-avatar {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: linear-gradient(135deg, #fa8c16, #fa541c);
+      color: white; display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 12px;
+    }
+    .topbar-admin-name { font-size: 13px; }
+
+    /* Main */
+    .main {
+      grid-area: main;
+      overflow-y: auto;
+      padding: 20px 24px;
+    }
+    .main::-webkit-scrollbar { width: 8px; }
+    .main::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 4px; }
+
+    .view { display: none; }
+    .view.active { display: block; animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Card */
+    .card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-color);
+      box-shadow: var(--shadow-sm);
+    }
+    .card-head {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-title { font-size: 15px; font-weight: 600; color: var(--text); }
+    .card-sub { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .card-body { padding: 20px; }
+
+    /* Stats */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s;
+    }
+    .stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+    .stat-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .stat-card-label { font-size: 13px; color: var(--text-secondary); }
+    .stat-card-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .stat-card-icon svg { width: 18px; height: 18px; }
+    .stat-card-value {
+      font-size: 28px; font-weight: 700; color: var(--text);
+      font-family: "JetBrains Mono", monospace;
+      line-height: 1.2;
+    }
+    .stat-card-trend {
+      margin-top: 8px; font-size: 12px;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .trend-up { color: var(--success); }
+    .trend-down { color: var(--error); }
+
+    /* Table */
+    .toolbar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+      flex-wrap: wrap;
+    }
+    .toolbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .input, .select {
+      height: 32px; padding: 0 11px;
+      border: 1px solid var(--border-color-2);
+      border-radius: 6px; background: white;
+      font-size: 13px; outline: none;
+      transition: all 0.15s;
+    }
+    .input:hover, .select:hover { border-color: var(--primary-hover); }
+    .input:focus, .select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-bg); }
+    .input { width: 200px; }
+    .select { min-width: 120px; cursor: pointer; padding-right: 28px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300000073' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+      appearance: none;
+    }
+
+    .btn {
+      height: 32px; padding: 0 15px;
+      border-radius: 6px; font-size: 13px;
+      display: inline-flex; align-items: center; gap: 6px;
+      cursor: pointer; transition: all 0.15s;
+      border: 1px solid var(--border-color-2);
+      background: white; color: var(--text);
+    }
+    .btn:hover { border-color: var(--primary); color: var(--primary); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); color: white; }
+    .btn-danger { color: var(--error); border-color: var(--error); }
+    .btn-danger:hover { background: var(--error); color: white; }
+    .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+    .btn-link {
+      height: auto; padding: 0; border: none; background: none;
+      color: var(--primary); font-size: 13px;
+    }
+    .btn-link:hover { color: var(--primary-hover); background: none; }
+    .btn-link.danger { color: var(--error); }
+    .btn-link.danger:hover { color: #ff7875; }
+
+    .table-wrap { overflow-x: auto; }
+    table.table {
+      width: 100%; border-collapse: collapse;
+      font-size: 13px;
+    }
+    .table th {
+      padding: 12px 16px;
+      background: #fafafa;
+      border-bottom: 1px solid var(--border-color);
+      text-align: left; font-weight: 500;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text);
+      vertical-align: middle;
+    }
+    .table tbody tr { transition: background 0.15s; }
+    .table tbody tr:hover { background: #fafafa; }
+    .table tbody tr:last-child td { border-bottom: none; }
+    .table-cell-id { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--text-secondary); }
+    .table-cell-actions { display: flex; gap: 4px; flex-wrap: nowrap; }
+
+    .tag {
+      display: inline-flex; align-items: center;
+      padding: 0 7px; height: 22px;
+      border-radius: 4px; font-size: 12px;
+      border: 1px solid; line-height: 1;
+      white-space: nowrap;
+    }
+    .tag-default { background: #fafafa; border-color: #d9d9d9; color: var(--text-secondary); }
+    .tag-success { background: var(--success-bg); border-color: #b7eb8f; color: #389e0d; }
+    .tag-warning { background: var(--warning-bg); border-color: #ffe58f; color: #ad6800; }
+    .tag-error { background: var(--error-bg); border-color: #ffccc7; color: #cf1322; }
+    .tag-info { background: var(--info-bg); border-color: var(--primary-border); color: #0958d9; }
+    .tag-purple { background: #f9f0ff; border-color: #d3adf7; color: #531dab; }
+
+    .pagination {
+      padding: 16px 20px;
+      display: flex; align-items: center; justify-content: flex-end;
+      gap: 6px;
+      border-top: 1px solid var(--border-color);
+    }
+    .page-btn {
+      min-width: 32px; height: 32px; padding: 0 8px;
+      border: 1px solid var(--border-color-2); border-radius: 6px;
+      background: white; font-size: 13px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+    .page-btn.active { background: var(--primary); border-color: var(--primary); color: white; }
+    .page-btn:disabled { color: var(--text-tertiary); cursor: not-allowed; }
+    .page-total { font-size: 13px; color: var(--text-secondary); margin-right: 12px; }
+
+    /* Drawer */
+    .drawer-mask {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1000;
+      display: none;
+    }
+    .drawer-mask.active { display: block; }
+    .drawer {
+      position: fixed; top: 0; right: 0; bottom: 0;
+      width: 560px; max-width: 90vw;
+      background: white;
+      z-index: 1001;
+      transform: translateX(100%);
+      transition: transform 0.25s;
+      display: flex; flex-direction: column;
+      box-shadow: -8px 0 24px rgba(0,0,0,0.15);
+    }
+    .drawer.active { transform: translateX(0); }
+    .drawer-head {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .drawer-title { font-size: 16px; font-weight: 600; }
+    .drawer-close {
+      width: 32px; height: 32px; border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: var(--text-secondary);
+    }
+    .drawer-close:hover { background: #f5f5f5; color: var(--text); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 20px 24px; }
+    .drawer-foot {
+      padding: 12px 24px;
+      border-top: 1px solid var(--border-color);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+
+    /* Desc list */
+    .desc-list { display: grid; grid-template-columns: 140px 1fr; gap: 12px 16px; }
+    .desc-term { color: var(--text-secondary); font-size: 13px; }
+    .desc-detail { color: var(--text); font-size: 13px; word-break: break-all; }
+
+    /* Form */
+    .form-item { margin-bottom: 18px; }
+    .form-label { display: block; margin-bottom: 6px; font-size: 13px; color: var(--text); }
+    .form-label.required::before { content: "*"; color: var(--error); margin-right: 4px; }
+    .form-control { width: 100%; }
+    textarea.form-control { min-height: 80px; padding: 8px 11px; resize: vertical; }
+    .form-hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* Page head */
+    .page-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .page-title { font-size: 20px; font-weight: 600; color: var(--text); }
+    .page-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+    /* Todo */
+    .todo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .todo-item {
+      padding: 12px 16px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .todo-item:hover { border-color: var(--primary); background: var(--primary-bg); }
+    .todo-item-info { display: flex; align-items: center; gap: 12px; }
+    .todo-icon {
+      width: 36px; height: 36px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .todo-icon svg { width: 18px; height: 18px; }
+    .todo-text { display: flex; flex-direction: column; }
+    .todo-label { font-size: 13px; color: var(--text-secondary); }
+    .todo-value { font-size: 18px; font-weight: 600; color: var(--text); }
+    .todo-arrow { color: var(--text-tertiary); }
+
+    /* Charts */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .bar-chart { display: flex; align-items: flex-end; gap: 16px; height: 200px; padding: 20px; }
+    .bar { flex: 1; background: var(--primary); border-radius: 4px 4px 0 0; position: relative; transition: all 0.2s; }
+    .bar:hover { background: var(--primary-hover); }
+    .bar-label {
+      position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; color: var(--text-secondary); white-space: nowrap;
+    }
+    .bar-value {
+      position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+      font-size: 11px; color: var(--text); font-weight: 500;
+    }
+
+    /* Progress */
+    .progress {
+      width: 100%; height: 8px;
+      background: #f5f5f5; border-radius: 4px; overflow: hidden;
+    }
+    .progress-inner {
+      height: 100%; background: var(--primary);
+      border-radius: 4px; transition: width 0.3s;
+    }
+    .progress.success .progress-inner { background: var(--success); }
+    .progress.warning .progress-inner { background: var(--warning); }
+    .progress.error .progress-inner { background: var(--error); }
+
+    /* JSON Diff */
+    .json-diff {
+      background: #fafafa; border: 1px solid var(--border-color);
+      border-radius: 6px; padding: 12px; font-size: 12px;
+      font-family: "JetBrains Mono", monospace;
+      max-height: 400px; overflow-y: auto;
+    }
+    .json-line { padding: 2px 8px; border-radius: 3px; white-space: pre-wrap; word-break: break-all; }
+    .json-line.added { background: #f6ffed; color: #389e0d; }
+    .json-line.removed { background: #fff2f0; color: #cf1322; text-decoration: line-through; }
+    .json-line.unchanged { color: var(--text-secondary); }
+
+    /* Avatar */
+    .avatar-sm {
+      width: 24px; height: 24px; border-radius: 50%;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 600; color: white;
+      background: linear-gradient(135deg, #fa8c16, #fa541c);
+    }
+    .user-cell { display: flex; align-items: center; gap: 8px; }
+    .user-cell-name { font-size: 13px; }
+    .user-cell-sub { font-size: 11px; color: var(--text-secondary); }
+
+    /* Switch */
+    .switch {
+      display: inline-block; width: 36px; height: 20px;
+      background: #d9d9d9; border-radius: 10px;
+      position: relative; cursor: pointer; transition: all 0.2s;
+    }
+    .switch::after {
+      content: ""; position: absolute;
+      top: 2px; left: 2px; width: 16px; height: 16px;
+      background: white; border-radius: 50%;
+      transition: all 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .switch.on { background: var(--primary); }
+    .switch.on::after { left: 18px; }
+
+    /* Empty */
+    .empty {
+      padding: 60px 0; text-align: center;
+      color: var(--text-tertiary); font-size: 13px;
+    }
+
+    /* Alert */
+    .alert {
+      padding: 10px 14px; border-radius: 6px;
+      border: 1px solid; margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px;
+    }
+    .alert-info { background: var(--info-bg); border-color: var(--primary-border); color: #0958d9; }
+    .alert-warning { background: var(--warning-bg); border-color: #ffe58f; color: #ad6800; }
+
+    /* Modal */
+    .modal-mask {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1000;
+      display: none; align-items: center; justify-content: center;
+    }
+    .modal-mask.active { display: flex; }
+    .modal {
+      background: white; border-radius: 8px;
+      width: 440px; max-width: 90vw;
+      box-shadow: var(--shadow-lg);
+      display: flex; flex-direction: column;
+    }
+    .modal-head {
+      padding: 16px 20px; border-bottom: 1px solid var(--border-color);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-body { padding: 20px; flex: 1; }
+    .modal-foot {
+      padding: 12px 20px; border-top: 1px solid var(--border-color);
+      display: flex; justify-content: flex-end; gap: 8px;
+    }
+
+    /* Config */
+    .config-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 0; border-bottom: 1px solid var(--border-color);
+    }
+    .config-row:last-child { border-bottom: none; }
+    .config-info { flex: 1; }
+    .config-label { font-size: 14px; color: var(--text); font-weight: 500; }
+    .config-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+    /* Tabs */
+    .tabs {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border-color);
+      margin-bottom: 16px;
+    }
+    .tab {
+      padding: 10px 16px; cursor: pointer; font-size: 14px;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: var(--primary); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
+
+    /* Responsive */
+    @media (max-width: 1280px) {
+      .stat-grid { grid-template-columns: repeat(3, 1fr); }
+      .chart-grid { grid-template-columns: 1fr; }
+      .todo-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      .app { grid-template-columns: 0 1fr; }
+      .sidebar { display: none; }
+      .stat-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">叙</div>
+      <div class="brand-text">
+        <span class="brand-name">叙光 Admin</span>
+        <span class="brand-sub">OPERATION CENTER</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-section">
+        <div class="nav-section-title">概览</div>
+        <div class="nav-item active" data-view="dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>工作台</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">业务管理</div>
+        <div class="nav-item" data-view="users">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>用户管理</span>
+        </div>
+        <div class="nav-item" data-view="scripts">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span>剧本管理</span>
+          <span class="nav-badge">8</span>
+        </div>
+        <div class="nav-item" data-view="tasks-generation">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 4 21 9 16 9"/></svg>
+          <span>生成任务</span>
+        </div>
+        <div class="nav-item" data-view="tasks-illustration">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <span>插画任务</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">审核运营</div>
+        <div class="nav-item" data-view="moderation">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.24"/></svg>
+          <span>社区审核</span>
+          <span class="nav-badge">5</span>
+        </div>
+        <div class="nav-item" data-view="analytics">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>数据看板</span>
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">系统</div>
+        <div class="nav-item" data-view="system">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>系统配置</span>
+        </div>
+        <div class="nav-item" data-view="audit">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+          <span>审计日志</span>
+        </div>
+      </div>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="admin-avatar">超</div>
+      <div class="admin-info">
+        <div class="admin-name">超级管理员</div>
+        <div class="admin-role">admin@narrlight.com</div>
+      </div>
+      <div class="logout-btn" title="退出登录">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="breadcrumb">
+      <span class="breadcrumb-prev">首页</span>
+      <span class="breadcrumb-sep">/</span>
+      <span class="breadcrumb-current" id="breadcrumb-current">工作台</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <input class="topbar-search" placeholder="搜索用户 / 剧本 / 任务 ID...">
+    <div class="topbar-icon-btn" title="通知">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="dot"></span>
+    </div>
+    <div class="topbar-icon-btn" title="帮助">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+    <div class="topbar-admin">
+      <div class="topbar-admin-avatar">超</div>
+      <span class="topbar-admin-name">超级管理员</span>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Dashboard -->
+    <section class="view active" id="view-dashboard">
+      <div class="page-head">
+        <div>
+          <div class="page-title">工作台</div>
+          <div class="page-sub">2026-07-20 周一 · 欢迎回来，超级管理员</div>
+        </div>
+        <div>
+          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg> 刷新数据</button>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-card-head">
+            <div class="stat-card-label">今日新增用户</div>
+            <div class="stat-card-icon" style="background: var(--info-bg); color: var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg></div>
+          </div>
+          <div class="stat-card-value">128</div>
+          <div class="stat-card-trend trend-up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg> 12.5% 较昨日</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head">
+            <div class="stat-card-label">今日生成任务</div>
+            <div class="stat-card-icon" style="background: var(--success-bg); color: var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+          </div>
+          <div class="stat-card-value">342</div>
+          <div class="stat-card-trend trend-up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg> 8.3% 较昨日</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head">
+            <div class="stat-card-label">活跃剧本</div>
+            <div class="stat-card-icon" style="background: #f9f0ff; color: #531dab;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+          </div>
+          <div class="stat-card-value">1,247</div>
+          <div class="stat-card-trend trend-up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg> 5.1% 较上周</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head">
+            <div class="stat-card-label">待审核举报</div>
+            <div class="stat-card-icon" style="background: var(--error-bg); color: var(--error);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          </div>
+          <div class="stat-card-value">5</div>
+          <div class="stat-card-trend trend-down"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/></svg> 2 较昨日</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head">
+            <div class="stat-card-label">AI 调用总量</div>
+            <div class="stat-card-icon" style="background: var(--warning-bg); color: var(--warning);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></div>
+          </div>
+          <div class="stat-card-value">28.6k</div>
+          <div class="stat-card-trend trend-up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg> 18.2% 较昨日</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 20px;">
+        <div class="card-head">
+          <div>
+            <div class="card-title">待办事项</div>
+            <div class="card-sub">需立即处理的运营任务</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="todo-grid">
+            <div class="todo-item" onclick="switchView('scripts')">
+              <div class="todo-item-info">
+                <div class="todo-icon" style="background: var(--warning-bg); color: var(--warning);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                <div class="todo-text">
+                  <span class="todo-label">待审核剧本</span>
+                  <span class="todo-value">8 个</span>
+                </div>
+              </div>
+              <span class="todo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+            </div>
+            <div class="todo-item" onclick="switchView('moderation')">
+              <div class="todo-item-info">
+                <div class="todo-icon" style="background: var(--error-bg); color: var(--error);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+                <div class="todo-text">
+                  <span class="todo-label">待处理举报</span>
+                  <span class="todo-value">5 条</span>
+                </div>
+              </div>
+              <span class="todo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+            </div>
+            <div class="todo-item" onclick="switchView('tasks-generation')">
+              <div class="todo-item-info">
+                <div class="todo-icon" style="background: var(--info-bg); color: var(--info);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 4 21 9 16 9"/></svg></div>
+                <div class="todo-text">
+                  <span class="todo-label">失败任务待重试</span>
+                  <span class="todo-value">12 个</span>
+                </div>
+              </div>
+              <span class="todo-arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">近 7 日用户增长</div>
+              <div class="card-sub">单位：人</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="bar-chart">
+              <div class="bar" style="height: 45%;"><span class="bar-value">76</span><span class="bar-label">7/14</span></div>
+              <div class="bar" style="height: 60%;"><span class="bar-value">102</span><span class="bar-label">7/15</span></div>
+              <div class="bar" style="height: 50%;"><span class="bar-value">85</span><span class="bar-label">7/16</span></div>
+              <div class="bar" style="height: 70%;"><span class="bar-value">119</span><span class="bar-label">7/17</span></div>
+              <div class="bar" style="height: 55%;"><span class="bar-value">94</span><span class="bar-label">7/18</span></div>
+              <div class="bar" style="height: 80%;"><span class="bar-value">136</span><span class="bar-label">7/19</span></div>
+              <div class="bar" style="height: 75%; background: var(--primary-hover);"><span class="bar-value">128</span><span class="bar-label">今日</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">任务成功率</div>
+              <div class="card-sub">近 24 小时</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div style="text-align: center; padding: 20px 0;">
+              <div style="font-size: 48px; font-weight: 700; color: var(--success); font-family: 'JetBrains Mono', monospace;">94.2%</div>
+              <div style="font-size: 13px; color: var(--text-secondary); margin-top: 8px;">成功 322 / 失败 20</div>
+              <div style="margin-top: 24px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px;">
+                  <span style="color: var(--success);"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> 成功</span>
+                  <span>322 (94.2%)</span>
+                </div>
+                <div class="progress success"><div class="progress-inner" style="width: 94.2%;"></div></div>
+                <div style="display: flex; justify-content: space-between; font-size: 12px; margin: 12px 0 6px;">
+                  <span style="color: var(--error);"><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg> 失败</span>
+                  <span>20 (5.8%)</span>
+                </div>
+                <div class="progress error"><div class="progress-inner" style="width: 5.8%;"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Users -->
+    <section class="view" id="view-users">
+      <div class="page-head">
+        <div>
+          <div class="page-title">用户管理</div>
+          <div class="page-sub">平台全部注册用户</div>
+        </div>
+        <div>
+          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出 CSV</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input class="input" placeholder="搜索手机号 / 昵称 / ID">
+            <select class="select">
+              <option>全部套餐</option>
+              <option>免费版</option>
+              <option>Pro</option>
+            </select>
+            <select class="select">
+              <option>全部状态</option>
+              <option>正常</option>
+              <option>已封禁</option>
+            </select>
+            <button class="btn btn-primary">查询</button>
+            <button class="btn">重置</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>用户 ID</th>
+                <th>昵称</th>
+                <th>手机号</th>
+                <th>套餐</th>
+                <th>配额使用</th>
+                <th>剧本数</th>
+                <th>注册时间</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="table-cell-id">a3f9c1e2...</td>
+                <td>
+                  <div class="user-cell">
+                    <span class="avatar-sm">沈</span>
+                    <div>
+                      <div class="user-cell-name">沈墨白</div>
+                      <div class="user-cell-sub">已认证</div>
+                    </div>
+                  </div>
+                </td>
+                <td>138****2847</td>
+                <td><span class="tag tag-purple">Pro</span></td>
+                <td>— / 无限</td>
+                <td>4</td>
+                <td>2026-06-22 14:32</td>
+                <td><span class="tag tag-success">正常</span></td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('user-detail')">详情</button>
+                  <button class="btn-link btn-sm" onclick="openModal('quota-modal')">配额</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('ban-modal')">封禁</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">b7e2d4f8...</td>
+                <td>
+                  <div class="user-cell">
+                    <span class="avatar-sm">苏</span>
+                    <div><div class="user-cell-name">苏沐</div></div>
+                  </div>
+                </td>
+                <td>139****1923</td>
+                <td><span class="tag tag-default">免费版</span></td>
+                <td>7 / 10</td>
+                <td>2</td>
+                <td>2026-07-01 09:15</td>
+                <td><span class="tag tag-success">正常</span></td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('user-detail')">详情</button>
+                  <button class="btn-link btn-sm" onclick="openModal('quota-modal')">配额</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('ban-modal')">封禁</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">c1a8f3b9...</td>
+                <td>
+                  <div class="user-cell">
+                    <span class="avatar-sm">陈</span>
+                    <div><div class="user-cell-name">陈一鸣</div></div>
+                  </div>
+                </td>
+                <td>137****5647</td>
+                <td><span class="tag tag-default">免费版</span></td>
+                <td>10 / 10</td>
+                <td>1</td>
+                <td>2026-07-05 16:48</td>
+                <td><span class="tag tag-error">已封禁</span></td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('user-detail')">详情</button>
+                  <button class="btn-link btn-sm" onclick="openModal('quota-modal')">配额</button>
+                  <button class="btn-link btn-sm" onclick="openModal('unban-modal')">解封</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">d9c4e2a1...</td>
+                <td>
+                  <div class="user-cell">
+                    <span class="avatar-sm">夜</span>
+                    <div><div class="user-cell-name">夜行者</div></div>
+                  </div>
+                </td>
+                <td>135****8201</td>
+                <td><span class="tag tag-purple">Pro</span></td>
+                <td>— / 无限</td>
+                <td>5</td>
+                <td>2026-06-30 11:22</td>
+                <td><span class="tag tag-success">正常</span></td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('user-detail')">详情</button>
+                  <button class="btn-link btn-sm" onclick="openModal('quota-modal')">配额</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('ban-modal')">封禁</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">e2b7f9c4...</td>
+                <td>
+                  <div class="user-cell">
+                    <span class="avatar-sm">林</span>
+                    <div><div class="user-cell-name">林晚秋</div></div>
+                  </div>
+                </td>
+                <td>136****4729</td>
+                <td><span class="tag tag-default">免费版</span></td>
+                <td>3 / 10</td>
+                <td>1</td>
+                <td>2026-07-10 20:11</td>
+                <td><span class="tag tag-success">正常</span></td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('user-detail')">详情</button>
+                  <button class="btn-link btn-sm" onclick="openModal('quota-modal')">配额</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('ban-modal')">封禁</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span class="page-total">共 1,247 条</span>
+          <button class="page-btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn">4</button>
+          <button class="page-btn">...</button>
+          <button class="page-btn">125</button>
+          <button class="page-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scripts -->
+    <section class="view" id="view-scripts">
+      <div class="page-head">
+        <div>
+          <div class="page-title">剧本管理</div>
+          <div class="page-sub">平台全部剧本，支持审核与下架</div>
+        </div>
+        <div>
+          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出 CSV</button>
+        </div>
+      </div>
+
+      <div class="alert alert-warning">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>当前有 <b>8</b> 个剧本等待审核，平均审核耗时需控制在 24 小时内</span>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input class="input" placeholder="搜索标题 / 作者 / ID">
+            <select class="select">
+              <option>全部状态</option>
+              <option>草稿</option>
+              <option>生成中</option>
+              <option>已完成</option>
+              <option>审核中</option>
+              <option>已通过</option>
+              <option>已驳回</option>
+              <option>已下架</option>
+            </select>
+            <select class="select">
+              <option>全部题材</option>
+              <option>硬核</option>
+              <option>情感</option>
+              <option>恐怖</option>
+              <option>欢乐</option>
+              <option>机制</option>
+            </select>
+            <select class="select">
+              <option>全部难度</option>
+              <option>新手</option>
+              <option>进阶</option>
+              <option>烧脑</option>
+            </select>
+            <button class="btn btn-primary">查询</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>剧本 ID</th>
+                <th>标题</th>
+                <th>作者</th>
+                <th>题材</th>
+                <th>难度</th>
+                <th>人数</th>
+                <th>字数</th>
+                <th>状态</th>
+                <th>创建时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="table-cell-id">s_a3f9c1...</td>
+                <td><b>雾港夜话</b></td>
+                <td>沈墨白</td>
+                <td><span class="tag tag-info">情感</span></td>
+                <td><span class="tag tag-default">进阶</span></td>
+                <td>6 人</td>
+                <td>42,180</td>
+                <td><span class="tag tag-warning">审核中</span></td>
+                <td>2026-07-15 10:32</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('script-detail')">查看</button>
+                  <button class="btn-link btn-sm" onclick="openModal('approve-modal')">通过</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('reject-modal')">驳回</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">s_b7e2d4...</td>
+                <td><b>长安十二时辰谜</b></td>
+                <td>陈一鸣</td>
+                <td><span class="tag tag-error">硬核</span></td>
+                <td><span class="tag tag-warning">烧脑</span></td>
+                <td>7 人</td>
+                <td>58,920</td>
+                <td><span class="tag tag-warning">审核中</span></td>
+                <td>2026-07-16 14:48</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('script-detail')">查看</button>
+                  <button class="btn-link btn-sm" onclick="openModal('approve-modal')">通过</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('reject-modal')">驳回</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">s_c1a8f3...</td>
+                <td><b>雨夜独行</b></td>
+                <td>夜行者</td>
+                <td><span class="tag tag-purple">悬疑</span></td>
+                <td><span class="tag tag-default">进阶</span></td>
+                <td>5 人</td>
+                <td>38,640</td>
+                <td><span class="tag tag-success">已通过</span></td>
+                <td>2026-07-10 09:15</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('script-detail')">查看</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('takedown-modal')">下架</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">s_d9c4e2...</td>
+                <td><b>星轨彼端</b></td>
+                <td>夜行者</td>
+                <td><span class="tag tag-success">机制</span></td>
+                <td><span class="tag tag-default">进阶</span></td>
+                <td>6 人</td>
+                <td>45,720</td>
+                <td><span class="tag tag-success">已通过</span></td>
+                <td>2026-07-08 16:22</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('script-detail')">查看</button>
+                  <button class="btn-link btn-sm danger" onclick="openModal('takedown-modal')">下架</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">s_e2b7f9...</td>
+                <td><b>青瓷记</b></td>
+                <td>苏沐</td>
+                <td><span class="tag tag-info">情感</span></td>
+                <td><span class="tag tag-default">新手</span></td>
+                <td>6 人</td>
+                <td>32,140</td>
+                <td><span class="tag tag-error">已下架</span></td>
+                <td>2026-07-03 11:08</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('script-detail')">查看</button>
+                  <button class="btn-link btn-sm" onclick="openModal('restore-modal')">恢复</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span class="page-total">共 1,247 条</span>
+          <button class="page-btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Generation Tasks -->
+    <section class="view" id="view-tasks-generation">
+      <div class="page-head">
+        <div>
+          <div class="page-title">生成任务监控</div>
+          <div class="page-sub">AI 剧本生成任务全量监控</div>
+        </div>
+      </div>
+
+      <div class="stat-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">运行中</div></div>
+          <div class="stat-card-value" style="color: var(--primary);">8</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">排队中</div></div>
+          <div class="stat-card-value" style="color: var(--warning);">23</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">已完成</div></div>
+          <div class="stat-card-value" style="color: var(--success);">1,856</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">失败</div></div>
+          <div class="stat-card-value" style="color: var(--error);">12</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input class="input" placeholder="任务 ID / 剧本标题">
+            <select class="select">
+              <option>全部类型</option>
+              <option>STORY_BIBLE</option>
+              <option>CHARACTER_PROFILES</option>
+              <option>ACT_STRUCTURE</option>
+              <option>CHARACTER_SCRIPT</option>
+              <option>CLUES</option>
+              <option>ORGANIZER_MANUAL</option>
+              <option>TRUTH_REVIEW</option>
+              <option>TIMELINE_STRUCTURE</option>
+            </select>
+            <select class="select">
+              <option>全部状态</option>
+              <option>pending</option>
+              <option>running</option>
+              <option>completed</option>
+              <option>failed</option>
+              <option>cancelled</option>
+            </select>
+            <label style="font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+              <input type="checkbox"> 仅看失败
+            </label>
+            <button class="btn btn-primary">查询</button>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn">批量重试</button>
+            <button class="btn">批量取消</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th><input type="checkbox"></th>
+                <th>任务 ID</th>
+                <th>剧本</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>进度</th>
+                <th>耗时</th>
+                <th>开始时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td class="table-cell-id">gt_8f3a...</td>
+                <td>雾港夜话</td>
+                <td><span class="tag tag-info">CHARACTER_SCRIPT</span></td>
+                <td><span class="tag tag-info">running</span></td>
+                <td style="min-width: 120px;">
+                  <div class="progress"><div class="progress-inner" style="width: 65%;"></div></div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">65%</div>
+                </td>
+                <td>3m 24s</td>
+                <td>2026-07-20 14:32</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm danger">取消</button>
+                </td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td class="table-cell-id">gt_2b7e...</td>
+                <td>长安十二时辰谜</td>
+                <td><span class="tag tag-purple">TIMELINE_STRUCTURE</span></td>
+                <td><span class="tag tag-warning">pending</span></td>
+                <td style="min-width: 120px;">
+                  <div class="progress warning"><div class="progress-inner" style="width: 0%;"></div></div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">0%</div>
+                </td>
+                <td>—</td>
+                <td>2026-07-20 14:35</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm danger">取消</button>
+                </td>
+              </tr>
+              <tr>
+                <td><input type="checkbox"></td>
+                <td class="table-cell-id">gt_c1a8...</td>
+                <td>雨夜独行</td>
+                <td><span class="tag tag-success">STORY_BIBLE</span></td>
+                <td><span class="tag tag-success">completed</span></td>
+                <td style="min-width: 120px;">
+                  <div class="progress success"><div class="progress-inner" style="width: 100%;"></div></div>
+                  <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">100%</div>
+                </td>
+                <td>1m 48s</td>
+                <td>2026-07-20 14:10</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm">详情</button>
+                </td>
+              </tr>
+              <tr style="background: var(--error-bg);">
+                <td><input type="checkbox" checked></td>
+                <td class="table-cell-id">gt_d9c4...</td>
+                <td>星轨彼端</td>
+                <td><span class="tag tag-info">CHARACTER_SCRIPT</span></td>
+                <td><span class="tag tag-error">failed</span></td>
+                <td style="min-width: 120px;">
+                  <div class="progress error"><div class="progress-inner" style="width: 35%;"></div></div>
+                  <div style="font-size: 11px; color: var(--error); margin-top: 2px;">35% · DeepSeek 超时</div>
+                </td>
+                <td>5m 02s</td>
+                <td>2026-07-20 13:48</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openDrawer('task-detail')">详情</button>
+                  <button class="btn-link btn-sm" onclick="openModal('retry-modal')">重试</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span class="page-total">共 1,899 条</span>
+          <button class="page-btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Illustration Tasks -->
+    <section class="view" id="view-tasks-illustration">
+      <div class="page-head">
+        <div>
+          <div class="page-title">插画任务监控</div>
+          <div class="page-sub">AI 插画生成任务全量监控</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input class="input" placeholder="任务 ID / 剧本标题">
+            <select class="select">
+              <option>全部类型</option>
+              <option>cover 封面</option>
+              <option>scene 场景</option>
+              <option>clue 线索卡</option>
+              <option>public 公共线</option>
+              <option>char 人物</option>
+              <option>poster 海报</option>
+            </select>
+            <select class="select">
+              <option>全部模型</option>
+              <option>openai</option>
+              <option>seedream</option>
+              <option>glm</option>
+            </select>
+            <select class="select">
+              <option>全部质检</option>
+              <option>unchecked</option>
+              <option>passed</option>
+              <option>warning</option>
+            </select>
+            <button class="btn btn-primary">查询</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>任务 ID</th>
+                <th>标题</th>
+                <th>剧本</th>
+                <th>类型</th>
+                <th>模型</th>
+                <th>状态</th>
+                <th>质检</th>
+                <th>耗时</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="table-cell-id">it_a3f9...</td>
+                <td>雾港夜话 · 封面</td>
+                <td>雾港夜话</td>
+                <td><span class="tag tag-info">cover</span></td>
+                <td><span class="tag tag-default">seedream</span></td>
+                <td><span class="tag tag-success">completed</span></td>
+                <td><span class="tag tag-success">passed</span></td>
+                <td>12s</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm">预览</button>
+                  <button class="btn-link btn-sm">重试</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">it_b7e2...</td>
+                <td>长安十二时辰谜 · 场景 03</td>
+                <td>长安十二时辰谜</td>
+                <td><span class="tag tag-purple">scene</span></td>
+                <td><span class="tag tag-default">openai</span></td>
+                <td><span class="tag tag-success">completed</span></td>
+                <td><span class="tag tag-warning">warning</span></td>
+                <td>18s</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm">预览</button>
+                  <button class="btn-link btn-sm">重试</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">it_c1a8...</td>
+                <td>雨夜独行 · 人物立绘 02</td>
+                <td>雨夜独行</td>
+                <td><span class="tag tag-success">char</span></td>
+                <td><span class="tag tag-default">openai</span></td>
+                <td><span class="tag tag-error">failed</span></td>
+                <td><span class="tag tag-default">unchecked</span></td>
+                <td>—</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openModal('retry-modal')">重试</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">it_d9c4...</td>
+                <td>星轨彼端 · 线索卡 08</td>
+                <td>星轨彼端</td>
+                <td><span class="tag tag-warning">clue</span></td>
+                <td><span class="tag tag-default">glm</span></td>
+                <td><span class="tag tag-info">running</span></td>
+                <td><span class="tag tag-default">unchecked</span></td>
+                <td>8s</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm danger">取消</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span class="page-total">共 423 条</span>
+          <button class="page-btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Moderation -->
+    <section class="view" id="view-moderation">
+      <div class="page-head">
+        <div>
+          <div class="page-title">社区审核</div>
+          <div class="page-sub">举报队列与内容审核</div>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">举报队列 <span class="nav-badge" style="background: var(--error); margin-left: 6px;">5</span></div>
+        <div class="tab">内容审核</div>
+        <div class="tab">申诉处理</div>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>举报 ID</th>
+                <th>目标类型</th>
+                <th>目标内容</th>
+                <th>举报原因</th>
+                <th>举报人</th>
+                <th>状态</th>
+                <th>举报时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="table-cell-id">rpt_001</td>
+                <td><span class="tag tag-info">post</span></td>
+                <td><b>"雾港夜话真凶解读（含剧透）"</b> - 陆星河</td>
+                <td>剧透</td>
+                <td>苏沐</td>
+                <td><span class="tag tag-warning">pending</span></td>
+                <td>2026-07-20 10:32</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openModal('report-modal')">处理</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">rpt_002</td>
+                <td><span class="tag tag-purple">comment</span></td>
+                <td>"这作者写得真烂..."</td>
+                <td>人身攻击</td>
+                <td>陈一鸣</td>
+                <td><span class="tag tag-warning">pending</span></td>
+                <td>2026-07-20 09:48</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openModal('report-modal')">处理</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">rpt_003</td>
+                <td><span class="tag tag-error">user</span></td>
+                <td>用户 <b>陈一鸣</b></td>
+                <td>恶意刷屏</td>
+                <td>林晚秋</td>
+                <td><span class="tag tag-warning">pending</span></td>
+                <td>2026-07-19 22:15</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm" onclick="openModal('report-modal')">处理</button>
+                </td>
+              </tr>
+              <tr>
+                <td class="table-cell-id">rpt_004</td>
+                <td><span class="tag tag-info">post</span></td>
+                <td><b>"上海长期固定车友招募"</b> - 苏沐</td>
+                <td>广告引流</td>
+                <td>夜行者</td>
+                <td><span class="tag tag-success">resolved</span></td>
+                <td>2026-07-19 18:22</td>
+                <td class="table-cell-actions">
+                  <button class="btn-link btn-sm">详情</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span class="page-total">共 23 条</span>
+          <button class="page-btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Analytics -->
+    <section class="view" id="view-analytics">
+      <div class="page-head">
+        <div>
+          <div class="page-title">数据看板</div>
+          <div class="page-sub">平台运营数据可视化</div>
+        </div>
+        <div>
+          <select class="select">
+            <option>近 7 日</option>
+            <option>近 30 日</option>
+            <option>近 90 日</option>
+          </select>
+          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出 PDF</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">创作侧</div>
+        <div class="tab">用户侧</div>
+        <div class="tab">AI 资源</div>
+      </div>
+
+      <div class="stat-grid" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">剧本总量</div></div>
+          <div class="stat-card-value">1,247</div>
+          <div class="stat-card-trend trend-up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/></svg> 5.1% 本周新增</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">平均字数</div></div>
+          <div class="stat-card-value">42.3k</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">校验报告数</div></div>
+          <div class="stat-card-value">3,842</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-head"><div class="stat-card-label">插画产出</div></div>
+          <div class="stat-card-value">8,927</div>
+        </div>
+      </div>
+
+      <div class="chart-grid">
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">剧本题材分布</div>
+              <div class="card-sub">基于 scripts.genre 字段聚合</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="bar-chart">
+              <div class="bar" style="height: 85%; background: var(--error);"><span class="bar-value">386</span><span class="bar-label">硬核</span></div>
+              <div class="bar" style="height: 70%; background: var(--info);"><span class="bar-value">318</span><span class="bar-label">情感</span></div>
+              <div class="bar" style="height: 45%; background: var(--warning);"><span class="bar-value">204</span><span class="bar-label">恐怖</span></div>
+              <div class="bar" style="height: 60%; background: var(--success);"><span class="bar-value">272</span><span class="bar-label">欢乐</span></div>
+              <div class="bar" style="height: 30%; background: #722ed1;"><span class="bar-value">136</span><span class="bar-label">机制</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">难度分布</div>
+              <div class="card-sub">基于 difficulty_assessments 表</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div style="padding: 8px 0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px;"><span><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style="color: var(--success);"><circle cx="12" cy="12" r="10"/></svg> 新手</span><span>423 (34%)</span></div>
+              <div class="progress"><div class="progress-inner" style="width: 34%; background: var(--success);"></div></div>
+              <div style="display: flex; justify-content: space-between; margin: 12px 0 6px; font-size: 13px;"><span><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style="color: var(--info);"><circle cx="12" cy="12" r="10"/></svg> 进阶</span><span>512 (41%)</span></div>
+              <div class="progress"><div class="progress-inner" style="width: 41%; background: var(--info);"></div></div>
+              <div style="display: flex; justify-content: space-between; margin: 12px 0 6px; font-size: 13px;"><span><svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor" style="color: var(--error);"><circle cx="12" cy="12" r="10"/></svg> 烧脑</span><span>312 (25%)</span></div>
+              <div class="progress"><div class="progress-inner" style="width: 25%; background: var(--error);"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">AI Provider 调用统计</div>
+            <div class="card-sub">近 7 日各模型调用次数与 token 消耗</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>调用次数</th>
+                  <th>成功率</th>
+                  <th>Token 消耗</th>
+                  <th>平均耗时</th>
+                  <th>估算成本（USD）</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="tag tag-info">DeepSeek</span></td>
+                  <td>12,847</td>
+                  <td><span class="tag tag-success">96.4%</span></td>
+                  <td>184.2M</td>
+                  <td>4.8s</td>
+                  <td>$36.84</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-purple">GLM</span></td>
+                  <td>8,234</td>
+                  <td><span class="tag tag-success">94.8%</span></td>
+                  <td>112.6M</td>
+                  <td>5.2s</td>
+                  <td>$22.52</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-success">OpenAI Image</span></td>
+                  <td>3,842</td>
+                  <td><span class="tag tag-warning">91.2%</span></td>
+                  <td>—</td>
+                  <td>11.3s</td>
+                  <td>$76.84</td>
+                </tr>
+                <tr>
+                  <td><span class="tag tag-error">Seedream</span></td>
+                  <td>2,156</td>
+                  <td><span class="tag tag-success">95.6%</span></td>
+                  <td>—</td>
+                  <td>9.8s</td>
+                  <td>$43.12</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- System Config -->
+    <section class="view" id="view-system">
+      <div class="page-head">
+        <div>
+          <div class="page-title">系统配置</div>
+          <div class="page-sub">AI 提供商 / 配额 / 内容安全配置</div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal('save-config-modal')">保存配置</button>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active">AI 提供商</div>
+        <div class="tab">配额默认值</div>
+        <div class="tab">内容安全</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">AI 提供商配置</div>
+            <div class="card-sub">修改 API Key 后立即生效，所有变更落审计日志</div>
+          </div>
+        </div>
+        <div class="card-body">
+
+          <div style="font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">DeepSeek（文本生成主用）</div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">启用状态</div>
+              <div class="config-desc">关闭后所有文本生成任务将路由到 GLM</div>
+            </div>
+            <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">API Key</div>
+              <div class="config-desc">服务端环境变量级别覆盖</div>
+            </div>
+            <input class="input" type="password" value="sk-****************************a3f9" style="width: 320px;">
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">模型</div>
+              <div class="config-desc">影响生成质量与成本</div>
+            </div>
+            <select class="select">
+              <option>deepseek-chat</option>
+              <option>deepseek-reasoner</option>
+            </select>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">超时（秒）</div>
+              <div class="config-desc">单次请求最大等待时间</div>
+            </div>
+            <input class="input" type="number" value="60" style="width: 100px;">
+          </div>
+
+          <div style="font-size: 13px; font-weight: 600; color: var(--text); margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">OpenAI Image（图像生成主用）</div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">启用状态</div>
+              <div class="config-desc">关闭后插画任务将路由到 Seedream</div>
+            </div>
+            <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">API Key</div>
+              <div class="config-desc">服务端环境变量级别覆盖</div>
+            </div>
+            <input class="input" type="password" value="sk-****************************b7e2" style="width: 320px;">
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">默认模型</div>
+              <div class="config-desc">用户未指定时使用</div>
+            </div>
+            <select class="select">
+              <option>dall-e-3</option>
+              <option>gpt-image-1</option>
+            </select>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">默认比例</div>
+              <div class="config-desc">用户未指定时使用</div>
+            </div>
+            <select class="select">
+              <option>1024x1024</option>
+              <option>1024x1536</option>
+              <option>1536x1024</option>
+              <option>1792x1024</option>
+            </select>
+          </div>
+
+          <div style="font-size: 13px; font-weight: 600; color: var(--text); margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">GLM（文本生成备用）</div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">启用状态</div>
+              <div class="config-desc">DeepSeek 不可用时自动 fallback</div>
+            </div>
+            <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">API Key</div>
+              <div class="config-desc">服务端环境变量级别覆盖</div>
+            </div>
+            <input class="input" type="password" value="sk-****************************c1a8" style="width: 320px;">
+          </div>
+
+          <div style="font-size: 13px; font-weight: 600; color: var(--text); margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-color);">Seedream（图像生成备用）</div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">启用状态</div>
+              <div class="config-desc">OpenAI Image 不可用时自动 fallback</div>
+            </div>
+            <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">API Key</div>
+              <div class="config-desc">服务端环境变量级别覆盖</div>
+            </div>
+            <input class="input" type="password" value="sk-****************************d9c4" style="width: 320px;">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">配额默认值</div>
+            <div class="card-sub">控制新用户默认配额与各套餐限制</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">免费用户默认配额</div>
+              <div class="config-desc">新注册用户的生成次数上限</div>
+            </div>
+            <input class="input" type="number" value="10" style="width: 120px;">
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">Pro 用户月度配额</div>
+              <div class="config-desc">订阅 Pro 套餐后的月度重置值</div>
+            </div>
+            <input class="input" type="number" value="500" style="width: 120px;">
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">单剧本最大字数</div>
+              <div class="config-desc">超出后前端提示拆分</div>
+            </div>
+            <input class="input" type="number" value="150000" style="width: 140px;">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">内容安全</div>
+            <div class="card-sub">敏感词与生成内容过滤规则</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">启用敏感词过滤</div>
+              <div class="config-desc">对生成结果与社区内容进行实时检测</div>
+            </div>
+            <div class="switch on" onclick="this.classList.toggle('on')"></div>
+          </div>
+          <div class="config-row">
+            <div class="config-info">
+              <div class="config-label">敏感词词库</div>
+              <div class="config-desc">每行一个词，保存后立即生效</div>
+            </div>
+          </div>
+          <textarea class="form-control input" style="min-height: 160px; margin-top: -8px;">血腥
+暴力
+色情
+政治敏感
+...</textarea>
+          <div class="config-row" style="margin-top: 16px;">
+            <div class="config-info">
+              <div class="config-label">生成内容人工复核</div>
+              <div class="config-desc">所有生成剧本默认进入 reviewing 状态</div>
+            </div>
+            <div class="switch" onclick="this.classList.toggle('on')"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Audit Logs -->
+    <section class="view" id="view-audit">
+      <div class="page-head">
+        <div>
+          <div class="page-title">审计日志</div>
+          <div class="page-sub">管理员敏感操作全量记录，支持按时间 / 操作类型 / 目标筛选</div>
+        </div>
+        <div>
+          <button class="btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 导出 CSV</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input class="input" placeholder="管理员 / 目标 ID">
+            <select class="select">
+              <option>全部操作</option>
+              <option>user.quota.update</option>
+              <option>user.ban.update</option>
+              <option>script.review</option>
+              <option>script.takedown</option>
+              <option>task.retry</option>
+              <option>report.handle</option>
+              <option>system.config.update</option>
+            </select>
+            <select class="select">
+              <option>全部目标</option>
+              <option>user</option>
+              <option>script</option>
+              <option>task</option>
+              <option>report</option>
+              <option>system</option>
+            </select>
+            <input class="input" type="date" value="2026-07-13" style="width: 140px;">
+            <span style="color: var(--text-tertiary);">至</span>
+            <input class="input" type="date" value="2026-07-20" style="width: 140px;">
+            <button class="btn btn-primary">查询</button>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>管理员</th>
+                <th>操作类型</th>
+                <th>目标类型</th>
+                <th>目标 ID</th>
+                <th>原因</th>
+                <th>IP</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2026-07-20 14:32:18</td>
+                <td><div class="user-cell"><span class="avatar-sm">超</span><div><div class="user-cell-name">超级管理员</div></div></div></td>
+                <td><span class="tag tag-info">user.quota.update</span></td>
+                <td><span class="tag tag-default">user</span></td>
+                <td class="table-cell-id">a3f9c1e2...</td>
+                <td>补偿 7 月 15 日服务波动</td>
+                <td class="table-cell-id">203.0.113.45</td>
+                <td class="table-cell-actions"><button class="btn-link btn-sm" onclick="openDrawer('audit-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td>2026-07-20 13:48:05</td>
+                <td><div class="user-cell"><span class="avatar-sm">超</span><div><div class="user-cell-name">超级管理员</div></div></div></td>
+                <td><span class="tag tag-warning">task.retry</span></td>
+                <td><span class="tag tag-default">task</span></td>
+                <td class="table-cell-id">gt_d9c4...</td>
+                <td>DeepSeek 超时，重试一次</td>
+                <td class="table-cell-id">203.0.113.45</td>
+                <td class="table-cell-actions"><button class="btn-link btn-sm" onclick="openDrawer('audit-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td>2026-07-20 11:15:42</td>
+                <td><div class="user-cell"><span class="avatar-sm">超</span><div><div class="user-cell-name">超级管理员</div></div></div></td>
+                <td><span class="tag tag-error">script.takedown</span></td>
+                <td><span class="tag tag-default">script</span></td>
+                <td class="table-cell-id">s_e2b7f9...</td>
+                <td>收到版权方投诉</td>
+                <td class="table-cell-id">203.0.113.45</td>
+                <td class="table-cell-actions"><button class="btn-link btn-sm" onclick="openDrawer('audit-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td>2026-07-20 10:08:33</td>
+                <td><div class="user-cell"><span class="avatar-sm">超</span><div><div class="user-cell-name">超级管理员</div></div></div></td>
+                <td><span class="tag tag-purple">report.handle</span></td>
+                <td><span class="tag tag-default">report</span></td>
+                <td class="table-cell-id">rpt_004</td>
+                <td>确认广告引流，已下架内容</td>
+                <td class="table-cell-id">203.0.113.45</td>
+                <td class="table-cell-actions"><button class="btn-link btn-sm" onclick="openDrawer('audit-detail')">详情</button></td>
+              </tr>
+              <tr>
+                <td>2026-07-19 22:45:11</td>
+                <td><div class="user-cell"><span class="avatar-sm">超</span><div><div class="user-cell-name">超级管理员</div></div></div></td>
+                <td><span class="tag tag-success">system.config.update</span></td>
+                <td><span class="tag tag-default">system</span></td>
+                <td class="table-cell-id">deepseek_timeout</td>
+                <td>降低超时避免长时间挂起</td>
+                <td class="table-cell-id">203.0.113.45</td>
+                <td class="table-cell-actions"><button class="btn-link btn-sm" onclick="openDrawer('audit-detail')">详情</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="pagination">
+          <span class="page-total">共 1,856 条</span>
+          <button class="page-btn" disabled><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn">2</button>
+          <button class="page-btn">3</button>
+          <button class="page-btn">4</button>
+          <button class="page-btn">...</button>
+          <button class="page-btn">186</button>
+          <button class="page-btn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Drawers -->
+<div class="drawer-mask" id="drawer-mask" onclick="closeDrawer()"></div>
+
+<div class="drawer" id="drawer-user-detail">
+  <div class="drawer-head">
+    <div class="drawer-title">用户详情</div>
+    <div class="drawer-close" onclick="closeDrawer()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="drawer-body">
+    <div class="desc-list">
+      <div class="desc-term">用户 ID</div><div class="desc-detail">a3f9c1e2-8b5d-4f8a-9c1e-2a3b4c5d6e7f</div>
+      <div class="desc-term">昵称</div><div class="desc-detail">沈墨白</div>
+      <div class="desc-term">手机号</div><div class="desc-detail">138****2847</div>
+      <div class="desc-term">邮箱</div><div class="desc-detail">shen.mobai@example.com</div>
+      <div class="desc-term">套餐</div><div class="desc-detail"><span class="tag tag-purple">Pro</span></div>
+      <div class="desc-term">配额</div><div class="desc-detail">— / 无限</div>
+      <div class="desc-term">状态</div><div class="desc-detail"><span class="tag tag-success">正常</span></div>
+      <div class="desc-term">注册时间</div><div class="desc-detail">2026-06-22 14:32:18</div>
+      <div class="desc-term">最近活跃</div><div class="desc-detail">2026-07-20 09:15:33</div>
+    </div>
+    <div style="margin-top: 24px;">
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">最近剧本</div>
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-body" style="padding: 12px 16px;">
+          <div style="font-weight: 500;">雾港夜话</div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">情感 · 进阶 · 6 人 · 42,180 字</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-body" style="padding: 12px 16px;">
+          <div style="font-weight: 500;">雨夜独行</div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">悬疑 · 进阶 · 5 人 · 38,640 字</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">关闭</button>
+  </div>
+</div>
+
+<div class="drawer" id="drawer-script-detail">
+  <div class="drawer-head">
+    <div class="drawer-title">剧本详情</div>
+    <div class="drawer-close" onclick="closeDrawer()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="drawer-body">
+    <div class="desc-list">
+      <div class="desc-term">剧本 ID</div><div class="desc-detail">s_a3f9c1e2-8b5d-4f8a</div>
+      <div class="desc-term">标题</div><div class="desc-detail"><b>雾港夜话</b></div>
+      <div class="desc-term">作者</div><div class="desc-detail">沈墨白</div>
+      <div class="desc-term">题材 / 难度</div><div class="desc-detail"><span class="tag tag-info">情感</span> <span class="tag tag-default">进阶</span></div>
+      <div class="desc-term">人数 / 时长</div><div class="desc-detail">6 人 / 4.5 小时</div>
+      <div class="desc-term">字数</div><div class="desc-detail">42,180</div>
+      <div class="desc-term">状态</div><div class="desc-detail"><span class="tag tag-warning">审核中</span></div>
+      <div class="desc-term">创建时间</div><div class="desc-detail">2026-07-15 10:32:18</div>
+    </div>
+    <div style="margin-top: 24px;">
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 12px;">幕次结构</div>
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-body" style="padding: 12px 16px;">
+          <div style="display: flex; justify-content: space-between; font-weight: 500;"><span>第一幕 · 雾起</span><span style="color: var(--text-secondary); font-size: 12px;">3 场</span></div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">引入人物与背景，奠定悬疑基调</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-body" style="padding: 12px 16px;">
+          <div style="display: flex; justify-content: space-between; font-weight: 500;"><span>第二幕 · 潮涌</span><span style="color: var(--text-secondary); font-size: 12px;">5 场</span></div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">冲突升级，关键线索浮现</div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom: 12px;">
+        <div class="card-body" style="padding: 12px 16px;">
+          <div style="display: flex; justify-content: space-between; font-weight: 500;"><span>第三幕 · 真相</span><span style="color: var(--text-secondary); font-size: 12px;">4 场</span></div>
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">复盘与真相揭示</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">关闭</button>
+  </div>
+</div>
+
+<div class="drawer" id="drawer-task-detail">
+  <div class="drawer-head">
+    <div class="drawer-title">任务详情</div>
+    <div class="drawer-close" onclick="closeDrawer()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="drawer-body">
+    <div class="alert alert-warning" style="margin-bottom: 16px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>失败原因：DeepSeek 请求超时（504 Gateway Timeout）</span>
+    </div>
+    <div class="desc-list">
+      <div class="desc-term">任务 ID</div><div class="desc-detail">gt_d9c4e2a1-5f6b-4c8d</div>
+      <div class="desc-term">任务类型</div><div class="desc-detail"><span class="tag tag-info">CHARACTER_SCRIPT</span></div>
+      <div class="desc-term">关联剧本</div><div class="desc-detail">星轨彼端</div>
+      <div class="desc-term">状态</div><div class="desc-detail"><span class="tag tag-error">failed</span></div>
+      <div class="desc-term">进度</div><div class="desc-detail"><div class="progress error" style="width: 120px; display: inline-block;"><div class="progress-inner" style="width: 35%;"></div></div> 35%</div>
+      <div class="desc-term">开始时间</div><div class="desc-detail">2026-07-20 13:48:05</div>
+      <div class="desc-term">结束时间</div><div class="desc-detail">2026-07-20 13:53:07</div>
+      <div class="desc-term">耗时</div><div class="desc-detail">5m 02s</div>
+      <div class="desc-term">Provider</div><div class="desc-detail"><span class="tag tag-info">DeepSeek</span></div>
+      <div class="desc-term">错误码</div><div class="desc-detail">TIMEOUT</div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">关闭</button>
+    <button class="btn btn-primary" onclick="closeDrawer(); openModal('retry-modal')">重试</button>
+  </div>
+</div>
+
+<div class="drawer" id="drawer-audit-detail">
+  <div class="drawer-head">
+    <div class="drawer-title">审计详情</div>
+    <div class="drawer-close" onclick="closeDrawer()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="drawer-body">
+    <div class="desc-list">
+      <div class="desc-term">日志 ID</div><div class="desc-detail">log_8f3a2b1c-9d4e</div>
+      <div class="desc-term">操作时间</div><div class="desc-detail">2026-07-20 14:32:18</div>
+      <div class="desc-term">管理员</div><div class="desc-detail">admin@narrlight.com</div>
+      <div class="desc-term">操作类型</div><div class="desc-detail"><span class="tag tag-info">user.quota.update</span></div>
+      <div class="desc-term">目标</div><div class="desc-detail">user / a3f9c1e2...</div>
+      <div class="desc-term">IP</div><div class="desc-detail">203.0.113.45</div>
+      <div class="desc-term">原因</div><div class="desc-detail">补偿 7 月 15 日服务波动</div>
+    </div>
+    <div style="margin-top: 20px;">
+      <div style="font-size: 14px; font-weight: 600; margin-bottom: 8px;">变更前后对比</div>
+      <div class="json-diff">
+        <div class="json-line removed">- quota_remaining: 10</div>
+        <div class="json-line added">+ quota_remaining: 15</div>
+        <div class="json-line unchanged">  plan_type: "free"</div>
+        <div class="json-line unchanged">  updated_at: "2026-07-20T14:32:18Z"</div>
+      </div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn" onclick="closeDrawer()">关闭</button>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-mask" id="modal-mask" onclick="closeModal(event)"></div>
+
+<div class="modal" id="modal-quota-modal">
+  <div class="modal-head">
+    <div class="modal-title">调整用户配额</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <div class="form-item">
+      <label class="form-label required">调整量</label>
+      <input class="input form-control" type="number" value="5" placeholder="正数增加，负数减少">
+      <div class="form-hint">当前配额：— / 无限（Pro 用户）</div>
+    </div>
+    <div class="form-item">
+      <label class="form-label required">操作原因</label>
+      <textarea class="input form-control" placeholder="请填写调整原因，将写入审计日志"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认调整</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-ban-modal">
+  <div class="modal-head">
+    <div class="modal-title">封禁用户</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <div class="alert alert-warning">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>封禁后该用户将无法登录与创建内容，操作将记录审计日志。</span>
+    </div>
+    <div class="form-item">
+      <label class="form-label required">封禁原因</label>
+      <textarea class="input form-control" placeholder="请填写封禁原因"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-danger" onclick="closeModal()">确认封禁</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-unban-modal">
+  <div class="modal-head">
+    <div class="modal-title">解封用户</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <div class="form-item">
+      <label class="form-label required">解封原因</label>
+      <textarea class="input form-control" placeholder="请填写解封原因"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认解封</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-approve-modal">
+  <div class="modal-head">
+    <div class="modal-title">通过审核</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">确认通过 <b>雾港夜话</b> 的审核？通过后剧本将对其他用户可见。</p>
+    <div class="form-item">
+      <label class="form-label required">操作原因</label>
+      <textarea class="input form-control" placeholder="可填写审核意见"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认通过</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-reject-modal">
+  <div class="modal-head">
+    <div class="modal-title">驳回剧本</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">驳回后作者可在编辑器中修改并重新提交。</p>
+    <div class="form-item">
+      <label class="form-label required">驳回原因</label>
+      <textarea class="input form-control" placeholder="请填写具体驳回原因，作者将看到此说明"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-danger" onclick="closeModal()">确认驳回</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-takedown-modal">
+  <div class="modal-head">
+    <div class="modal-title">强制下架剧本</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <div class="alert alert-warning">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>下架后剧本对所有人不可见，作者可发起申诉。</span>
+    </div>
+    <div class="form-item">
+      <label class="form-label required">下架原因</label>
+      <textarea class="input form-control" placeholder="请填写下架原因"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-danger" onclick="closeModal()">确认下架</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-restore-modal">
+  <div class="modal-head">
+    <div class="modal-title">恢复剧本</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">确认恢复 <b>青瓷记</b> 的可见状态？</p>
+    <div class="form-item">
+      <label class="form-label required">恢复原因</label>
+      <textarea class="input form-control" placeholder="请填写恢复原因"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认恢复</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-retry-modal">
+  <div class="modal-head">
+    <div class="modal-title">重试任务</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">任务将重新入队并尝试执行，原有进度不会保留。</p>
+    <div class="form-item">
+      <label class="form-label required">重试原因</label>
+      <textarea class="input form-control" placeholder="请填写重试原因"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认重试</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-report-modal">
+  <div class="modal-head">
+    <div class="modal-title">处理举报</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <div class="desc-list" style="margin-bottom: 16px;">
+      <div class="desc-term">举报类型</div><div class="desc-detail">post</div>
+      <div class="desc-term">举报原因</div><div class="desc-detail">剧透</div>
+      <div class="desc-term">举报人</div><div class="desc-detail">苏沐</div>
+    </div>
+    <div class="form-item">
+      <label class="form-label required">处理方式</label>
+      <select class="select form-control">
+        <option>下架内容</option>
+        <option>警告作者</option>
+        <option>封禁用户</option>
+        <option>驳回举报</option>
+      </select>
+    </div>
+    <div class="form-item">
+      <label class="form-label required">处理说明</label>
+      <textarea class="input form-control" placeholder="请填写处理说明"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认处理</button>
+  </div>
+</div>
+
+<div class="modal" id="modal-save-config-modal">
+  <div class="modal-head">
+    <div class="modal-title">保存系统配置</div>
+    <div class="drawer-close" onclick="closeModal()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+  </div>
+  <div class="modal-body">
+    <div class="alert alert-warning">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>配置变更将影响所有用户的生成与插画任务，请谨慎操作。</span>
+    </div>
+    <div class="form-item">
+      <label class="form-label required">变更原因</label>
+      <textarea class="input form-control" placeholder="请填写变更原因，将写入审计日志"></textarea>
+    </div>
+  </div>
+  <div class="modal-foot">
+    <button class="btn" onclick="closeModal()">取消</button>
+    <button class="btn btn-primary" onclick="closeModal()">确认保存</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const views = {
+    dashboard: { title: '工作台', breadcrumb: '工作台' },
+    users: { title: '用户管理', breadcrumb: '用户管理' },
+    scripts: { title: '剧本管理', breadcrumb: '剧本管理' },
+    'tasks-generation': { title: '生成任务监控', breadcrumb: '生成任务' },
+    'tasks-illustration': { title: '插画任务监控', breadcrumb: '插画任务' },
+    moderation: { title: '社区审核', breadcrumb: '社区审核' },
+    analytics: { title: '数据看板', breadcrumb: '数据看板' },
+    system: { title: '系统配置', breadcrumb: '系统配置' },
+    audit: { title: '审计日志', breadcrumb: '审计日志' }
+  };
+
+  function switchView(viewId) {
+    if (!views[viewId]) return;
+    document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    const target = document.getElementById('view-' + viewId);
+    if (target) target.classList.add('active');
+    const nav = document.querySelector('.nav-item[data-view="' + viewId + '"]');
+    if (nav) nav.classList.add('active');
+    document.getElementById('breadcrumb-current').textContent = views[viewId].breadcrumb;
+    document.title = views[viewId].title + ' · 叙光 Admin';
+  }
+
+  function openDrawer(id) {
+    document.getElementById('drawer-mask').classList.add('active');
+    const drawer = document.getElementById('drawer-' + id);
+    if (drawer) drawer.classList.add('active');
+  }
+
+  function closeDrawer() {
+    document.getElementById('drawer-mask').classList.remove('active');
+    document.querySelectorAll('.drawer').forEach(el => el.classList.remove('active'));
+  }
+
+  function openModal(id) {
+    document.getElementById('modal-mask').classList.add('active');
+    const modal = document.getElementById('modal-' + id);
+    if (modal) modal.classList.add('active');
+  }
+
+  function closeModal(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('modal-mask').classList.remove('active');
+    document.querySelectorAll('.modal').forEach(el => el.classList.remove('active'));
+  }
+
+  // Nav click handlers
+  document.querySelectorAll('.nav-item[data-view]').forEach(item => {
+    item.addEventListener('click', () => switchView(item.dataset.view));
+  });
+
+  // Tab click handlers
+  document.querySelectorAll('.tabs').forEach(tabs => {
+    const tabItems = tabs.querySelectorAll('.tab');
+    tabItems.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabItems.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  });
+
+  // Expose globals for inline onclick handlers
+  window.switchView = switchView;
+  window.openDrawer = openDrawer;
+  window.closeDrawer = closeDrawer;
+  window.openModal = openModal;
+  window.closeModal = closeModal;
+})();
+</script>
+
+</body>
+</html>
