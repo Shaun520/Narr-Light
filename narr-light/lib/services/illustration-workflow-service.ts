@@ -230,9 +230,17 @@ export class IllustrationWorkflowService {
       throw new Error('市场素材不存在');
     }
 
-    const taskSpecs = this.buildTaskSpecs(script, characters, [], [], styleProfile, marketItems, marketItem);
-    const [spec] = taskSpecs;
-    if (!spec) throw new Error('市场素材未能生成任务');
+    const spec: TaskSpec = {
+      taskKey: `market-${marketItem.id}`,
+      taskType: marketItem.taskType,
+      title: marketItem.title,
+      subtitle: marketItem.subtitle,
+      prompt: `${marketItem.promptHint}，${styleProfile.masterPrompt}`,
+      sourceType: 'market',
+      sourceId: marketItem.id,
+      sortOrder: 500 + marketItem.sortOrder,
+      marketItemId: marketItem.id,
+    };
 
     const { taskRow, assetRow } = await this.upsertSingleTaskAndAsset(supabase, script.id, styleProfile.id, spec);
     return this.mapTaskRow(taskRow, assetRow);

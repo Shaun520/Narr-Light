@@ -3,6 +3,7 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { App as AntdApp, Modal as AntModal, Progress } from 'antd';
 import { Library, Play, Sparkles } from 'lucide-react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   AssetList,
@@ -14,7 +15,6 @@ import { GalleryPanel, type GenerateConfig } from '@/components/illust/gallery-p
 import { NewTaskDrawer, type NewTaskFormData } from '@/components/illust/new-task-drawer';
 import {
   createCustomIllustrationTaskAction,
-  createIllustrationTaskFromMarketAction,
   getIllustrationWorkspaceAction,
   type IllustrationAssetView,
   type IllustrationWorkspaceView,
@@ -25,7 +25,6 @@ interface PageProps {
   params: Promise<{ scriptId: string }>;
 }
 
-type MarketItemView = IllustrationWorkspaceView['marketItems'][number];
 type TaskView = IllustrationWorkspaceView['tasks'][number];
 
 function normalizeAssetFilter(value: string | null): AssetFilter {
@@ -148,7 +147,6 @@ export default function IllustrationsPage({ params }: PageProps) {
   const [selectedAssetId, setSelectedAssetId] = useState('');
   const [workspace, setWorkspace] = useState<IllustrationWorkspaceView | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [marketOpen, setMarketOpen] = useState(false);
   const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
   const generationControllersRef = useRef<Map<string, AbortController>>(new Map());
   const progressTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
@@ -162,7 +160,6 @@ export default function IllustrationsPage({ params }: PageProps) {
 
   const assets = useMemo(() => workspace?.assets ?? [], [workspace]);
   const tasks = useMemo(() => workspace?.tasks ?? [], [workspace]);
-  const marketItems = useMemo(() => workspace?.marketItems ?? [], [workspace]);
   const { counts, total, done } = useMemo(() => countAssetsByType(assets), [assets]);
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId);
   const selectedTask = tasks.find((task) => task.id === selectedAssetId);
@@ -361,30 +358,6 @@ export default function IllustrationsPage({ params }: PageProps) {
     }
   };
 
-  const handleCreateFromMarket = async (item: MarketItemView) => {
-    try {
-      const task = await createIllustrationTaskFromMarketAction(scriptId, item.id);
-      setWorkspace((prev) => {
-        if (!prev) return prev;
-        const exists = prev.tasks.some((old) => old.id === task.id);
-        const tasksNext = exists
-          ? prev.tasks.map((old) => (old.id === task.id ? task : old))
-          : [...prev.tasks, task].sort((a, b) => a.sortOrder - b.sortOrder);
-        return {
-          ...prev,
-          tasks: tasksNext,
-          assets: tasksNext.map(taskToAsset),
-        };
-      });
-      setSelectedAssetId(task.id);
-      setMarketOpen(false);
-      message.success(`已加入任务：${task.title}`);
-    } catch (error) {
-      console.error('Create task from market failed:', error);
-      message.error(error instanceof Error ? error.message : '创建市场任务失败');
-    }
-  };
-
   const handleTaskSubmit = async (data: NewTaskFormData) => {
     try {
       const task = await createCustomIllustrationTaskAction(scriptId, {
@@ -444,10 +417,15 @@ export default function IllustrationsPage({ params }: PageProps) {
           </div>
         </div>
         <div className="page-actions">
-          <button type="button" className="btn btn-ghost" onClick={() => setMarketOpen(true)}>
+          <Link
+            href={`/editor/${scriptId}/illustrations/market`}
+            className="btn btn-ghost"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
             <Library size={15} />
             素材市场
-          </button>
+          </Link>
           <button type="button" className="btn btn-ghost" onClick={handleBatchExecute}>
             <Play size={15} />
             批量执行
@@ -505,31 +483,6 @@ export default function IllustrationsPage({ params }: PageProps) {
         visualTone={visualTone}
         scriptTitle={workspace?.script.title}
       />
-
-      <AntModal
-        open={marketOpen}
-        title="插画市场"
-        width={720}
-        footer={null}
-        onCancel={() => setMarketOpen(false)}
-      >
-        <div className="market-grid">
-          {marketItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className="market-card"
-              onClick={() => void handleCreateFromMarket(item)}
-            >
-              <span className="market-type">{item.taskType}</span>
-              <strong>{item.title}</strong>
-              <span>{item.subtitle}</span>
-              <small>{item.promptHint}</small>
-            </button>
-          ))}
-        </div>
-      </AntModal>
-
       <AntModal
         open={batchOpen}
         title="批量执行插画任务"

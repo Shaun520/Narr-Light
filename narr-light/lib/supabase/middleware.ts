@@ -52,9 +52,12 @@ export async function proxy(request: NextRequest) {
   // 5. 已登录访问 /auth/login、/auth/sign-up → redirect /dashboard
   // (dashboard) 为路由组不进 URL，实际路径为 /dashboard、/generate、/community、/editor、/scripts、/settings
   const protectedPaths = ["/dashboard", "/editor", "/scripts", "/generate", "/community", "/settings"];
+  const isIllustrationMarketPath = /^\/editor\/[^/]+\/illustrations\/market$/.test(
+    request.nextUrl.pathname,
+  );
   const isProtectedPath = protectedPaths.some((path) =>
     request.nextUrl.pathname === path || request.nextUrl.pathname.startsWith(path + "/")
-  );
+  ) && !isIllustrationMarketPath;
 
   if (!user && isProtectedPath) {
     const url = request.nextUrl.clone();
