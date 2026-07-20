@@ -13,6 +13,7 @@ import {
 } from '@/components/illust/asset-list';
 import { GalleryPanel, type GenerateConfig } from '@/components/illust/gallery-panel';
 import { NewTaskDrawer, type NewTaskFormData } from '@/components/illust/new-task-drawer';
+import { getDefaultIllustrationRatio } from '@/lib/ai/prompts/illustration-style';
 import {
   createCustomIllustrationTaskAction,
   getIllustrationWorkspaceAction,
@@ -310,7 +311,7 @@ export default function IllustrationsPage({ params }: PageProps) {
     void runTask(asset.id, {
       prompt: asset.taskPrompt ?? '',
       model: 'openai',
-      ratio: '16:9',
+      ratio: getDefaultIllustrationRatio(asset.type),
       count: 1,
     });
   };
@@ -390,10 +391,11 @@ export default function IllustrationsPage({ params }: PageProps) {
   };
 
   const handleRegenerate = (assetId: string) => {
+    const task = tasks.find((item) => item.id === assetId);
     void runTask(assetId, {
-      prompt: tasks.find((task) => task.id === assetId)?.prompt ?? '',
+      prompt: task?.prompt ?? '',
       model: 'openai',
-      ratio: '16:9',
+      ratio: task?.selectedRatio ?? getDefaultIllustrationRatio(task?.taskType ?? 'scene'),
       count: 1,
     });
   };
@@ -473,6 +475,8 @@ export default function IllustrationsPage({ params }: PageProps) {
           onRegenerate={handleRegenerate}
           onUpscale={handleUpscale}
           visualTone={visualTone}
+          initialRatio={selectedTask?.selectedRatio}
+          initialCount={selectedTask?.selectedCount}
         />
       </div>
 

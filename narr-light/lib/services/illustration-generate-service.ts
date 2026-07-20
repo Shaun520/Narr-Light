@@ -52,12 +52,12 @@ function normalizeProvider(model: string): ImageProviderName {
 
 function mapRatioToSize(ratio: string, provider: ImageProviderName): string {
   if (provider === 'openai-image') {
-    if (ratio === '3:4') return '1024x1536';
-    if (ratio === '16:9') return '1536x1024';
+    if (ratio === '9:16' || ratio === '3:4') return '1024x1536';
+    if (ratio === '4:3' || ratio === '16:9') return '1536x1024';
     return '1024x1024';
   }
-  if (ratio === '3:4') return '1024x1536';
-  if (ratio === '16:9') return '1536x1024';
+  if (ratio === '9:16' || ratio === '3:4') return '1024x1536';
+  if (ratio === '4:3' || ratio === '16:9') return '1536x1024';
   return '1024x1024';
 }
 

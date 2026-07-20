@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { ImagePlus, Play, Sparkles, Square } from 'lucide-react';
+import { getDefaultIllustrationRatio } from '@/lib/ai/prompts/illustration-style';
 import { GenCard, type GenCardData } from './gen-card';
-import type { IllustrationAsset } from './asset-list';
+import type { AssetType, IllustrationAsset } from './asset-list';
 
 const MODEL_OPTIONS = [
   { id: 'openai', label: 'OpenAI Images' },
@@ -11,7 +12,7 @@ const MODEL_OPTIONS = [
   { id: 'seedream', label: '豆包 Seedream' },
 ] as const;
 
-const RATIO_OPTIONS = ['1:1', '16:9', '3:4'] as const;
+const RATIO_OPTIONS = ['1:1', '4:3', '16:9', '3:4', '9:16'] as const;
 const COUNT_OPTIONS = [1, 4] as const;
 
 export interface GenerateConfig {
@@ -25,12 +26,21 @@ interface GalleryPanelProps {
   asset: IllustrationAsset | undefined;
   generatedPrompt?: string;
   visualTone?: string;
+  initialRatio?: string;
+  initialCount?: number;
   isGenerating?: boolean;
   onGenerate?: (config: GenerateConfig) => void;
   onStopGenerate?: () => void;
   onAdopt?: (assetId: string) => void;
   onRegenerate?: (assetId: string) => void;
   onUpscale?: (assetId: string) => void;
+}
+
+function previewVariant(type: AssetType | undefined): Extract<GenCardData, { status: 'done' }>['variant'] {
+  if (type === 'clue') return 'clue-card';
+  if (type === 'cover' || type === 'poster') return 'cover';
+  if (type === 'char') return 'character';
+  return 'plain';
 }
 
 function buildGalleryCards(asset: IllustrationAsset | undefined): GenCardData[] {
@@ -48,21 +58,35 @@ function buildGalleryCards(asset: IllustrationAsset | undefined): GenCardData[] 
     status: 'done',
     image: asset.thumb,
     model: asset.sub || '已生成',
+    variant: previewVariant(asset.type),
+    title: asset.title,
+    subtitle: asset.sub,
   }];
 }
 
 function defaultPrompt(asset: IllustrationAsset | undefined): string {
   if (!asset) return '';
-  if (asset.type === 'char') {
-    return '雨夜中的民国人物立绘，半身构图，冷暖对比，水墨质感，留白构图，悬疑氛围。';
+  if (asset.type === 'clue') {
+    return `${asset.title}，线索卡配图层，只生成证据物件或局部现场特写，不要文字、不要卡牌边框、不要说明正文，主体居中，四周留安全边距。`;
   }
-  return `${asset.title}，水墨古风，暗调暖光，留白构图，雨夜氛围，突出主体细节。`;
+  if (asset.type === 'cover') {
+    return `${asset.title}，剧本封面视觉底图，竖版封面构图，大面积留白，预留标题和发行信息排版区域，不要生成文字。`;
+  }
+  if (asset.type === 'char') {
+    return `${asset.title}，单人人物立绘，半身或全身，干净背景，清晰五官、发型和服饰，便于后续复用，不要复杂场景和文字。`;
+  }
+  if (asset.type === 'poster') {
+    return `${asset.title}，宣传海报视觉底图，强冲击构图，预留标题和卖点文案区域，不要直接生成可读文字。`;
+  }
+  return `${asset.title}，场景插画，强调空间纵深、环境叙事和关键道具位置，不要卡牌边框、封面排版和说明文字。`;
 }
 
 export function GalleryPanel({
   asset,
   generatedPrompt,
   visualTone,
+  initialRatio,
+  initialCount,
   isGenerating = false,
   onGenerate,
   onStopGenerate,
@@ -72,16 +96,19 @@ export function GalleryPanel({
 }: GalleryPanelProps) {
   const [prompt, setPrompt] = useState(defaultPrompt(asset));
   const [model, setModel] = useState<string>('openai');
-  const [ratio, setRatio] = useState<string>('16:9');
-  const [count, setCount] = useState<number>(1);
+  const [ratio, setRatio] = useState<string>(initialRatio ?? getDefaultIllustrationRatio(asset?.type ?? 'scene'));
+  const [count, setCount] = useState<number>(initialCount ?? 1);
 
   const cards = buildGalleryCards(asset);
   const promptTitle = asset ? `PROMPT · ${asset.title}` : 'PROMPT';
   const assetId = asset?.id;
+  const compactPreview = cards.length > 0;
 
   useEffect(() => {
     setPrompt(generatedPrompt ?? defaultPrompt(asset));
-  }, [asset, generatedPrompt]);
+    setRatio(initialRatio ?? getDefaultIllustrationRatio(asset?.type ?? 'scene'));
+    setCount(initialCount ?? 1);
+  }, [asset, generatedPrompt, initialCount, initialRatio]);
 
   const handleGenerate = () => {
     if (isGenerating) {
@@ -100,7 +127,7 @@ export function GalleryPanel({
     : undefined;
 
   return (
-    <div className="illust-main">
+    <div className={`illust-main ${compactPreview ? 'preview-compact' : ''}`}>
       {asset?.status === 'pending' ? (
         <div className="pending-asset-panel">
           <div className="pending-asset-icon">

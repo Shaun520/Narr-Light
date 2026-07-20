@@ -7,7 +7,9 @@ import {
   buildSceneStylePrompt,
   buildVisualTone,
   formatVisualTone,
+  getDefaultIllustrationRatio,
   type ScriptVisualInput,
+  type VisualTone,
 } from '@/lib/ai/prompts/illustration-style';
 import { illustrationGenerateService } from '@/lib/services/illustration-generate-service';
 import type {
@@ -160,6 +162,8 @@ interface TaskSpec {
   sourceId: string;
   sortOrder: number;
   marketItemId?: string | null;
+  selectedRatio?: string;
+  selectedCount?: number;
 }
 
 function isAbortError(error: unknown): boolean {
@@ -167,6 +171,16 @@ function isAbortError(error: unknown): boolean {
     (error instanceof DOMException && error.name === 'AbortError') ||
     (error instanceof Error && error.name === 'AbortError')
   );
+}
+
+function parseVisualTone(value: string): VisualTone {
+  const [style, lighting, composition, mood] = value.split(' / ');
+  return {
+    style: style || '水墨古风',
+    lighting: lighting || '暗调暖光',
+    composition: composition || '留白构图',
+    mood: mood || '悬疑氛围',
+  };
 }
 
 export class IllustrationWorkflowService {
@@ -230,16 +244,26 @@ export class IllustrationWorkflowService {
       throw new Error('市场素材不存在');
     }
 
+    const visualTone = parseVisualTone(styleProfile.visualTone);
     const spec: TaskSpec = {
       taskKey: `market-${marketItem.id}`,
       taskType: marketItem.taskType,
       title: marketItem.title,
       subtitle: marketItem.subtitle,
-      prompt: `${marketItem.promptHint}，${styleProfile.masterPrompt}`,
+      prompt: buildIllustrationPrompt(
+        {
+          id: marketItem.id,
+          type: marketItem.taskType,
+          title: marketItem.title,
+          description: marketItem.promptHint,
+        },
+        visualTone,
+      ),
       sourceType: 'market',
       sourceId: marketItem.id,
       sortOrder: 500 + marketItem.sortOrder,
       marketItemId: marketItem.id,
+      selectedRatio: getDefaultIllustrationRatio(marketItem.taskType),
     };
 
     const { taskRow, assetRow } = await this.upsertSingleTaskAndAsset(supabase, script.id, styleProfile.id, spec);
@@ -266,22 +290,33 @@ export class IllustrationWorkflowService {
     ]);
     const styleProfile =
       persistedStyleProfile ?? this.buildStyleProfileSnapshot(script, characters, marketItems);
+    const visualTone = parseVisualTone(styleProfile.visualTone);
     const taskKey = `manual-${crypto.randomUUID()}`;
     const spec: TaskSpec = {
       taskKey,
       taskType: input.taskType,
       title: input.title.trim() || `${script.title} · 自定义插画`,
       subtitle: input.sourceLabel?.trim() || '当前剧本 · 手动创建',
-      prompt: `${input.prompt.trim() || input.title}；${styleProfile.masterPrompt}`,
+      prompt: buildIllustrationPrompt(
+        {
+          id: taskKey,
+          type: input.taskType,
+          title: input.title.trim() || `${script.title} · 自定义插画`,
+          description: input.prompt.trim() || input.title,
+        },
+        visualTone,
+      ),
       sourceType: 'manual',
       sourceId: taskKey,
       sortOrder: 900 + Math.floor(Date.now() % 1000),
+      selectedRatio: input.ratio ?? getDefaultIllustrationRatio(input.taskType),
+      selectedCount: input.count,
     };
 
     const { taskRow, assetRow } = await this.upsertSingleTaskAndAsset(supabase, script.id, styleProfile.id, spec);
     const updated = await this.updateTask(supabase, taskRow.id, {
-      selected_ratio: input.ratio ?? taskRow.selected_ratio,
-      selected_count: input.count ?? taskRow.selected_count,
+      selected_ratio: spec.selectedRatio ?? taskRow.selected_ratio,
+      selected_count: spec.selectedCount ?? taskRow.selected_count,
     });
     return this.mapTaskRow(updated, assetRow);
   }
@@ -692,6 +727,7 @@ export class IllustrationWorkflowService {
     marketItem?: IllustrationMarketItem,
   ): TaskSpec[] {
     const visualTone = styleProfile.visualTone;
+    const tone = parseVisualTone(visualTone);
     const promptPrefix = styleProfile.masterPrompt;
     const refs = marketItems.slice(0, 2).map((item) => item.title);
 
@@ -710,16 +746,12 @@ export class IllustrationWorkflowService {
           coreTheme: script.core_theme,
           writingStyle: promptPrefix,
         },
-        {
-          style: visualTone.split(' / ')[0] ?? '水墨古风',
-          lighting: visualTone.split(' / ')[1] ?? '暗调暖光',
-          composition: visualTone.split(' / ')[2] ?? '留白构图',
-          mood: visualTone.split(' / ')[3] ?? '悬疑氛围',
-        },
+        tone,
       ),
       sourceType: 'script',
       sourceId: script.id,
       sortOrder: 0,
+      selectedRatio: getDefaultIllustrationRatio('cover'),
     });
 
     acts.forEach((act, index) => {
@@ -734,16 +766,12 @@ export class IllustrationWorkflowService {
             location: script.background_setting,
             content: act.content,
           },
-          {
-            style: visualTone.split(' / ')[0] ?? '水墨古风',
-            lighting: visualTone.split(' / ')[1] ?? '暗调暖光',
-            composition: visualTone.split(' / ')[2] ?? '留白构图',
-            mood: visualTone.split(' / ')[3] ?? '悬疑氛围',
-          },
+          tone,
         ),
         sourceType: 'act',
         sourceId: act.id,
         sortOrder: 10 + index,
+        selectedRatio: getDefaultIllustrationRatio('scene'),
       });
     });
 
@@ -764,6 +792,7 @@ export class IllustrationWorkflowService {
         sourceType: 'character',
         sourceId: character.id,
         sortOrder: 100 + index,
+        selectedRatio: getDefaultIllustrationRatio('char'),
       });
     });
 
@@ -780,17 +809,13 @@ export class IllustrationWorkflowService {
             title: clue.title,
             description: clue.content,
           },
-          {
-            style: visualTone.split(' / ')[0] ?? '水墨古风',
-            lighting: visualTone.split(' / ')[1] ?? '暗调暖光',
-            composition: visualTone.split(' / ')[2] ?? '留白构图',
-            mood: visualTone.split(' / ')[3] ?? '悬疑氛围',
-          },
+          tone,
           refs.map((title, refIndex) => ({ id: `${refIndex + 1}`, title })),
         ),
         sourceType: 'clue',
         sourceId: clue.id,
         sortOrder: 200 + index,
+        selectedRatio: getDefaultIllustrationRatio('clue'),
       });
     });
 
@@ -806,17 +831,13 @@ export class IllustrationWorkflowService {
           title: `${script.title} 公共线索`,
           description: `${script.background_setting}中的公共场景，保持与剧本其他插画一致的视觉基调`,
         },
-        {
-          style: visualTone.split(' / ')[0] ?? '水墨古风',
-          lighting: visualTone.split(' / ')[1] ?? '暗调暖光',
-          composition: visualTone.split(' / ')[2] ?? '留白构图',
-          mood: visualTone.split(' / ')[3] ?? '悬疑氛围',
-        },
+        tone,
       ),
       sourceType: 'script',
       sourceId: `${script.id}-public`,
       sortOrder: 300,
       marketItemId: marketItem?.id ?? null,
+      selectedRatio: getDefaultIllustrationRatio('public'),
     });
 
     specs.push({
@@ -834,17 +855,13 @@ export class IllustrationWorkflowService {
               coreTheme: script.core_theme,
               writingStyle: promptPrefix,
             },
-            {
-              style: visualTone.split(' / ')[0] ?? '水墨古风',
-              lighting: visualTone.split(' / ')[1] ?? '暗调暖光',
-              composition: visualTone.split(' / ')[2] ?? '留白构图',
-              mood: visualTone.split(' / ')[3] ?? '悬疑氛围',
-            },
+            tone,
           ),
       sourceType: 'script',
       sourceId: `${script.id}-poster`,
       sortOrder: 400,
       marketItemId: marketItem?.id ?? null,
+      selectedRatio: getDefaultIllustrationRatio('poster'),
     });
 
     return specs;
@@ -918,8 +935,8 @@ export class IllustrationWorkflowService {
       progress_percent: 0,
       sort_order: spec.sortOrder,
       selected_model: 'openai',
-      selected_ratio: '16:9',
-      selected_count: 1,
+      selected_ratio: spec.selectedRatio ?? getDefaultIllustrationRatio(spec.taskType),
+      selected_count: spec.selectedCount ?? 1,
       result_image_url: '',
       error_message: '',
       started_at: null,
@@ -982,8 +999,8 @@ export class IllustrationWorkflowService {
       progress_percent: 0,
       sort_order: spec.sortOrder,
       selected_model: 'openai',
-      selected_ratio: '16:9',
-      selected_count: 1,
+      selected_ratio: spec.selectedRatio ?? getDefaultIllustrationRatio(spec.taskType),
+      selected_count: spec.selectedCount ?? 1,
       result_image_url: '',
       error_message: '',
       started_at: null,

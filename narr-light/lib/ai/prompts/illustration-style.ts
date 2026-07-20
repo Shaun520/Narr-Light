@@ -160,6 +160,70 @@ const TYPE_LABEL: Record<IllustrationAssetInput['type'], string> = {
   poster: '宣传海报',
 };
 
+export const DEFAULT_ILLUSTRATION_RATIOS: Record<IllustrationAssetInput['type'], string> = {
+  cover: '3:4',
+  scene: '16:9',
+  clue: '4:3',
+  public: '16:9',
+  char: '3:4',
+  poster: '3:4',
+};
+
+export function getDefaultIllustrationRatio(type: IllustrationAssetInput['type']): string {
+  return DEFAULT_ILLUSTRATION_RATIOS[type] ?? '16:9';
+}
+
+function buildRefHint(refs: RefAssetInput[]): string {
+  if (refs.length === 0) return '';
+  const refHint = refs.map((r) => r.title).join('、');
+  return `参考已生成资产：${refHint}，保持同一剧本的色调、笔触和世界观一致`;
+}
+
+function typedMaterialInstruction(type: IllustrationAssetInput['type']): string {
+  switch (type) {
+    case 'clue':
+      return [
+        '输出目标：线索卡配图层，不是完整插画场景',
+        '画面只呈现线索物件、局部现场或证据特写，适合嵌入线索卡中部图片区',
+        '禁止生成卡牌边框、标题栏、说明文字、二维码、水印、UI按钮',
+        '构图干净，主体居中，预留四周安全边距，方便后续系统模板排版正文',
+      ].join('。');
+    case 'cover':
+      return [
+        '输出目标：剧本封面视觉底图层，不是普通场景插画',
+        '采用竖版封面构图，强平面设计感，大面积留白，人物或核心意象服务标题排版',
+        '顶部或右侧预留标题、作者、发行信息区域',
+        '禁止生成可读文字、Logo、书脊、UI按钮、水印',
+      ].join('。');
+    case 'char':
+      return [
+        '输出目标：人物立绘资产，不是剧情场景图',
+        '单人半身或全身，正面或三分之二侧身，干净纯色或透明感背景',
+        '强调五官、发型、服饰、身形比例一致，便于后续多表情和复用',
+        '禁止复杂场景、多人同框、海报排版、标题文字',
+      ].join('。');
+    case 'poster':
+      return [
+        '输出目标：宣传海报视觉底图层',
+        '允许强冲击构图和宣传氛围，但文字、标题、卖点文案由系统后期排版',
+        '预留标题和行动召唤区域，禁止模型直接生成可读文字',
+      ].join('。');
+    case 'public':
+      return [
+        '输出目标：公共线氛围图',
+        '表达全体玩家共同可见的信息、地点或关键氛围，不绑定单一人物视角',
+        '禁止卡牌边框、封面标题和说明文字',
+      ].join('。');
+    case 'scene':
+    default:
+      return [
+        '输出目标：场景插画',
+        '强调空间纵深、环境叙事和关键道具位置，人物可作为远景剪影',
+        '禁止卡牌边框、封面排版、说明文字和水印',
+      ].join('。');
+  }
+}
+
 /**
  * 构建插画生成 prompt（组合画面描述 + 视觉基调 + 引用资产线索）。
  * @param asset       目标资产
@@ -173,14 +237,16 @@ export function buildIllustrationPrompt(
 ): string {
   const desc = asset.description?.trim() || asset.title;
   const tone = formatVisualTone(visualTone);
-  const parts = [desc, tone];
+  const parts = [
+    `${TYPE_LABEL[asset.type]}：${desc}`,
+    typedMaterialInstruction(asset.type),
+    `视觉基调：${tone}`,
+  ];
 
-  if (refs.length > 0) {
-    const refHint = refs.map((r) => r.title).join('、');
-    parts.push(`参考已生成资产：${refHint}（保持风格与色调一致）`);
-  }
+  const refHint = buildRefHint(refs);
+  if (refHint) parts.push(refHint);
 
-  parts.push(`${TYPE_LABEL[asset.type]}，保持与同剧本其他插画风格统一`);
+  parts.push('保持与同剧本其他资产风格统一，但严格服从当前输出目标');
   return parts.join('。');
 }
 
@@ -207,8 +273,8 @@ export function buildCharacterConsistencyPrompt(
     character.personality ? `性格：${character.personality}` : '',
     character.backgroundStory ? `背景：${character.backgroundStory}` : '',
     `表情差分：${expressions.join(' / ')}，保持五官、发型、服饰完全一致`,
-    '半身立绘，正面构图，纯色背景，便于抠图复用',
-    '保持与同剧本其他人物立绘画风统一',
+    typedMaterialInstruction('char'),
+    '人物必须是可复用角色资产，优先清晰轮廓和服装识别度',
   ];
   return sentenceJoin(lines);
 }
@@ -237,9 +303,10 @@ export function buildCoverPrompt(script: ScriptVisualInput, visualTone: VisualTo
   const setting = compactText(script.backgroundSetting);
   const theme = compactText(script.coreTheme);
   return sentenceJoin([
-    `${script.title} · 剧本封面`,
+    `${script.title} · 剧本封面视觉底图`,
     theme ? `${setting}，主题：${theme}` : setting,
     tone,
-    '主视觉突出，强冲击力构图，顶部或底部预留标题排版空间，不出现文字',
+    typedMaterialInstruction('cover'),
+    '参考剧本杀封面和平面书籍封面设计，画面服务后续标题排版，而不是生成单纯风景插图',
   ]);
 }

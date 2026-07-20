@@ -30,6 +30,7 @@ import {
   iconButtonAria,
   keyboardNavProps,
 } from '@/lib/utils/a11y';
+import { getDefaultIllustrationRatio } from '@/lib/ai/prompts/illustration-style';
 import type { AssetType } from './asset-list';
 
 /** 抽屉表单数据 */
@@ -80,7 +81,7 @@ const MODEL_CARDS = [
 ];
 
 /** 比例选项 */
-const RATIO_OPTIONS = ['1:1', '16:9', '3:4', '9:16'];
+const RATIO_OPTIONS = ['1:1', '4:3', '16:9', '3:4', '9:16'];
 /** 张数选项 */
 const COUNT_OPTIONS = [1, 4, 8];
 
@@ -106,7 +107,7 @@ const INITIAL_DATA: NewTaskFormData = {
   prompt:
     '雨夜中的民国女子，身着青色旗袍立于药铺后院檐下，手持油纸伞，伞沿滴落水珠。半身构图，侧脸回眸，神情忧郁。背景柴房半掩，昏黄油灯透出暖光。水墨质感，冷峻色调，留白构图，悬疑氛围。',
   models: ['deepseek', 'glm'],
-  ratio: '16:9',
+  ratio: getDefaultIllustrationRatio('cover'),
   count: 4,
   steps: 32,
   cfg: 7,
@@ -155,6 +156,10 @@ export function NewTaskDrawer({ open, onClose, onSubmit, visualTone, scriptTitle
 
   const update = <K extends keyof NewTaskFormData>(key: K, value: NewTaskFormData[K]) => {
     setData((d) => ({ ...d, [key]: value }));
+  };
+
+  const updateType = (type: AssetType) => {
+    setData((d) => ({ ...d, type, ratio: getDefaultIllustrationRatio(type) }));
   };
 
   const toggleModel = (id: string) => {
@@ -252,10 +257,10 @@ export function NewTaskDrawer({ open, onClose, onSubmit, visualTone, scriptTitle
                     <div
                       key={type}
                       className={`nt-type-card ${data.type === type ? 'active' : ''}`}
-                      onClick={() => update('type', type)}
+                      onClick={() => updateType(type)}
                       role="button"
                       {...ariaProps(`选择任务类型 ${name}`)}
-                      {...keyboardNavProps(() => update('type', type))}
+                      {...keyboardNavProps(() => updateType(type))}
                     >
                       <div className="ntt-icon">
                         <Icon />

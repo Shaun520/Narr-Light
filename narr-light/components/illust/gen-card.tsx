@@ -22,6 +22,10 @@ export type GenCardData =
       model: string;
       /** 随机种子 */
       seed?: number;
+      /** 物料预览类型 */
+      variant?: 'plain' | 'clue-card' | 'cover' | 'character';
+      title?: string;
+      subtitle?: string;
     }
   | {
       /** 生成中 */
@@ -94,10 +98,43 @@ export function GenCard({ card, actions }: GenCardProps) {
     );
   }
 
-  // done
+  const renderDoneImage = () => {
+    const variant = card.variant ?? 'plain';
+    if (variant === 'clue-card') {
+      return (
+        <div className="gen-img gen-material gen-clue-card">
+          <div className="gmc-head">{card.title ?? '线索卡'}</div>
+          <div className="gmc-image" style={buildImageStyle(card.image)} />
+          <div className="gmc-text">{card.subtitle ?? '线索正文由系统模板排版，图片仅作为证据配图层。'}</div>
+        </div>
+      );
+    }
+    if (variant === 'cover') {
+      return (
+        <div className="gen-img gen-material gen-cover-card">
+          <div className="gcc-art" style={buildImageStyle(card.image)} />
+          <div className="gcc-title">{card.title ?? '剧本封面'}</div>
+          <div className="gcc-sub">{card.subtitle ?? '标题与发行信息由系统排版'}</div>
+        </div>
+      );
+    }
+    if (variant === 'character') {
+      return (
+        <div className="gen-img gen-material gen-character-card">
+          <div className="gch-figure" style={buildImageStyle(card.image)} />
+          <div className="gch-meta">
+            <strong>{card.title ?? '人物立绘'}</strong>
+            <span>{card.subtitle ?? '角色资产 · 可复用'}</span>
+          </div>
+        </div>
+      );
+    }
+    return <div className="gen-img" style={buildImageStyle(card.image)} />;
+  };
+
   return (
     <div className="gen-card">
-      <div className="gen-img" style={buildImageStyle(card.image)} />
+      {renderDoneImage()}
       <div className="gen-meta">
         <span className="gen-model">{card.model}</span>
         {card.seed ? <span className="gen-seed">seed {card.seed}</span> : null}
