@@ -50,16 +50,22 @@ export interface UseClueFilterResult {
 /**
  * 线索筛选闭包：封装 act/phase 双向联动的筛选、计数与空状态判定。
  */
-export function useClueFilter(clues: Clue[]): UseClueFilterResult {
+export function useClueFilter(clues: Clue[], searchQuery = ''): UseClueFilterResult {
   const [curAct, setAct] = useState<ClueAct | 'all'>('all');
   const [curPhase, setPhase] = useState<CluePhase | 'all'>('all');
 
-  const visible = useMemo(() => filterClues(clues, curAct, curPhase), [clues, curAct, curPhase]);
-  const counts = useMemo(() => computeClueCounts(clues, curAct, curPhase), [clues, curAct, curPhase]);
+  const visible = useMemo(
+    () => filterClues(clues, curAct, curPhase, searchQuery),
+    [clues, curAct, curPhase, searchQuery],
+  );
+  const counts = useMemo(
+    () => computeClueCounts(clues, curAct, curPhase, searchQuery),
+    [clues, curAct, curPhase, searchQuery],
+  );
 
-  const applyFilter = () => filterClues(clues, curAct, curPhase);
-  const refreshCounts = () => computeClueCounts(clues, curAct, curPhase);
-  const ensureEmptyState = () => filterClues(clues, curAct, curPhase).length === 0;
+  const applyFilter = () => filterClues(clues, curAct, curPhase, searchQuery);
+  const refreshCounts = () => computeClueCounts(clues, curAct, curPhase, searchQuery);
+  const ensureEmptyState = () => filterClues(clues, curAct, curPhase, searchQuery).length === 0;
 
   return {
     curAct,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { App as AntdApp, Checkbox, Dropdown, type MenuProps } from 'antd';
-import { Download, ImagePlus, MoreHorizontal, Package, WandSparkles } from 'lucide-react';
+import { Download, ImagePlus, MoreHorizontal, Package, Search, WandSparkles, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import {
   ClueCard,
@@ -51,7 +51,8 @@ interface CluesManagerProps {
 
 export function CluesManager({ scriptId, initialClues, actTabs }: CluesManagerProps) {
   const [clues, setClues] = useState<Clue[]>(initialClues);
-  const filter = useClueFilter(clues);
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const filter = useClueFilter(clues, searchKeyword);
   const [selectedClueId, setSelectedClueId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportStatus, setExportStatus] = useState<ExportStatus>('idle');
@@ -393,6 +394,32 @@ export function CluesManager({ scriptId, initialClues, actTabs }: CluesManagerPr
         onPhaseChange={filter.setPhase}
       />
 
+      <div className="clue-toolbar">
+        <div className="clue-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="text"
+            value={searchKeyword}
+            placeholder="搜索标题、正文、编号、地点、人物..."
+            aria-label="搜索线索卡"
+            onChange={(event) => setSearchKeyword(event.target.value)}
+          />
+          {searchKeyword ? (
+            <button
+              type="button"
+              className="clue-search-clear"
+              aria-label="清空搜索"
+              onClick={() => setSearchKeyword('')}
+            >
+              <X size={14} />
+            </button>
+          ) : null}
+        </div>
+        <div className="clue-result-meta">
+          显示 {filter.visible.length} / {clues.length} 张
+        </div>
+      </div>
+
       <div className="clue-grid">
         {filter.visible.map((clue) => (
           <ClueCard
@@ -403,7 +430,11 @@ export function CluesManager({ scriptId, initialClues, actTabs }: CluesManagerPr
           />
         ))}
         {filter.isEmpty && (
-          <div className="clue-empty">当前筛选下无线索卡</div>
+          <div className="clue-empty">
+            {searchKeyword.trim()
+              ? `没有匹配“${searchKeyword.trim()}”的线索卡`
+              : '当前筛选下无线索卡'}
+          </div>
         )}
       </div>
 

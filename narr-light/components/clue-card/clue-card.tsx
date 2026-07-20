@@ -126,6 +126,7 @@ export function computeClueCounts(
   clues: Clue[],
   curAct: ClueAct | 'all',
   curPhase: CluePhase | 'all',
+  searchQuery = '',
 ): {
   actCounts: Record<string, number>;
   phaseCounts: Record<CluePhase | 'all', number>;
@@ -136,7 +137,9 @@ export function computeClueCounts(
   const phaseCounts: Record<CluePhase | 'all', number> = {
     all: 0, public: 0, private: 0, key: 0, trap: 0,
   };
+  const normalizedKeyword = normalizeClueSearchText(searchQuery);
   for (const c of clues) {
+    if (!matchesClueSearch(c, normalizedKeyword)) continue;
     const phaseOk = curPhase === 'all' || c.phase === curPhase;
     const actOk = curAct === 'all' || c.act === curAct;
     if (phaseOk) {
@@ -151,6 +154,48 @@ export function computeClueCounts(
   return { actCounts, phaseCounts };
 }
 
+function normalizeClueSearchText(value: string): string {
+  return value.trim().toLocaleLowerCase();
+}
+
+function isFuzzyMatch(source: string, keyword: string): boolean {
+  if (!keyword) return true;
+
+  const text = normalizeClueSearchText(source);
+  if (text.includes(keyword)) return true;
+
+  let cursor = 0;
+  for (const char of keyword) {
+    cursor = text.indexOf(char, cursor);
+    if (cursor === -1) return false;
+    cursor += 1;
+  }
+  return true;
+}
+
+export function matchesClueSearch(clue: Clue, normalizedKeyword: string): boolean {
+  if (!normalizedKeyword) return true;
+
+  return isFuzzyMatch(
+    [
+      clue.title,
+      clue.text,
+      clue.code,
+      clue.location,
+      clue.tag,
+      clue.type,
+      CLUE_TYPE_LABELS[clue.type],
+      clue.owner,
+      clue.act,
+      clue.phase,
+      ...(clue.relatedCharacters ?? []),
+    ]
+      .filter(Boolean)
+      .join(' '),
+    normalizedKeyword,
+  );
+}
+
 /**
  * 应用联动筛选：返回当前 act/phase 下可见的线索。
  * 对齐原型 applyFilter：actOk && phaseOk。
@@ -159,11 +204,14 @@ export function filterClues(
   clues: Clue[],
   curAct: ClueAct | 'all',
   curPhase: CluePhase | 'all',
+  searchQuery = '',
 ): Clue[] {
+  const normalizedKeyword = normalizeClueSearchText(searchQuery);
   return clues.filter(
     (c) =>
       (curAct === 'all' || c.act === curAct) &&
-      (curPhase === 'all' || c.phase === curPhase),
+      (curPhase === 'all' || c.phase === curPhase) &&
+      matchesClueSearch(c, normalizedKeyword),
   );
 }
 
