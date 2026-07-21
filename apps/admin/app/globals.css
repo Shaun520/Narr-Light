@@ -170,14 +170,6 @@ a {
   color: #fff;
 }
 
-.admin-sidebar-foot {
-  padding: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .admin-avatar {
   width: 32px;
   height: 32px;
@@ -191,14 +183,16 @@ a {
 }
 
 .admin-user-name {
-  color: #fff;
+  color: var(--admin-text);
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.2;
 }
 
 .admin-user-role {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--admin-text-secondary);
   font-size: 11px;
+  line-height: 1.2;
 }
 
 .admin-topbar {
@@ -238,6 +232,63 @@ a {
 .admin-topbar-search:focus {
   border-color: var(--admin-primary);
   background: #fff;
+}
+
+.admin-account-button {
+  min-width: 148px;
+  height: 40px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: transparent;
+  color: var(--admin-text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.admin-account-button:hover,
+.admin-account-button:focus-visible {
+  border-color: var(--admin-border-strong);
+  background: #fff;
+  box-shadow: var(--admin-shadow-sm);
+  outline: none;
+}
+
+.admin-account-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.admin-logout-copy {
+  display: none;
+  align-items: center;
+  gap: 5px;
+  color: var(--admin-error);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.admin-logout-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.admin-account-button:hover .admin-user-name,
+.admin-account-button:hover .admin-user-role,
+.admin-account-button:focus-visible .admin-user-name,
+.admin-account-button:focus-visible .admin-user-role {
+  display: none;
+}
+
+.admin-account-button:hover .admin-logout-copy,
+.admin-account-button:focus-visible .admin-logout-copy {
+  display: inline-flex;
 }
 
 .admin-main {
@@ -928,6 +979,16 @@ a {
   justify-content: flex-end;
 }
 
+.login-error {
+  margin: 12px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #ffccc7;
+  border-radius: 6px;
+  background: #fff2f0;
+  color: #cf1322;
+  font-size: 13px;
+}
+
 @media (max-width: 960px) {
   .admin-shell {
     grid-template-columns: 1fr;
@@ -953,8 +1014,15 @@ a {
   }
 
   .admin-nav-title,
-  .admin-sidebar-foot {
+  .admin-account-copy {
     display: none;
+  }
+
+  .admin-account-button {
+    min-width: 44px;
+    width: 44px;
+    justify-content: center;
+    padding: 0;
   }
 
   .stat-grid {

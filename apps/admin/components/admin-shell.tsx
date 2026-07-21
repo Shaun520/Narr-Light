@@ -9,11 +9,13 @@ import {
   ClipboardList,
   FileText,
   LayoutDashboard,
+  LogOut,
   Settings,
   ShieldAlert,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { signOutAdmin } from "@/lib/auth/actions";
 
 type NavItem = {
   href: string;
@@ -95,13 +97,6 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           ))}
         </nav>
 
-        <div className="admin-sidebar-foot">
-          <div className="admin-avatar">管</div>
-          <div>
-            <div className="admin-user-name">超级管理员</div>
-            <div className="admin-user-role">super_admin</div>
-          </div>
-        </div>
       </aside>
 
       <header className="admin-topbar">
@@ -112,6 +107,21 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           aria-label="全局搜索"
           placeholder="搜索用户、剧本或任务"
         />
+        <form action={signOutAdmin}>
+          <button className="admin-account-button" type="submit" aria-label="退出登录">
+            <span className="admin-avatar" aria-hidden="true">
+              管
+            </span>
+            <span className="admin-account-copy">
+              <span className="admin-user-name">超级管理员</span>
+              <span className="admin-user-role">super_admin</span>
+              <span className="admin-logout-copy">
+                <LogOut className="admin-logout-icon" aria-hidden="true" />
+                退出登录
+              </span>
+            </span>
+          </button>
+        </form>
       </header>
 
       <main className="admin-main">{children}</main>

@@ -19,7 +19,7 @@
 | 维度 | web 端 | admin 端 |
 |---|---|---|
 | 用户 | 创作者、玩家 | 公司内部超级管理员 |
-| 入口 | `(marketing)` + `(dashboard)` 路由组 | 独立登录页 + 邮箱白名单 |
+| 入口 | `(marketing)` + `(dashboard)` 路由组 | 独立登录页 + 固定超级管理员账号 |
 | 数据访问 | RLS，仅本人数据 | service role，全量数据 |
 | 部署域名 | `narrlight.app` | `admin.narrlight.app` |
 | 构建产物 | `apps/web/.next` | `apps/admin/.next` |
@@ -29,8 +29,9 @@
 
 - 角色模型只设置**超级管理员**一种，拥有下文列出的全部权限。
 - 不实现角色管理、权限分配、多角色审批流。
-- 登录方式为邮箱 + 密码，账号通过 SQL 直接写入 `admin_users` 表，不做注册入口。
-- 后续如需细分运营、审核、客服角色，可在 `admin_users.role` 字段扩展，并补充 `ROLE_PERMISSIONS` 映射。
+- 当前阶段登录方式为固定超级管理员账号：`admin / narr-light-admin123`。
+- `admin_users` 表已预留给后续多管理员账号管理；当前固定账号登录不读取该表。
+- 后续如需多个后台账号，可在系统中增加管理员账号管理入口，使用 `admin_users.username`、`password_hash`、`role`、`is_active` 等字段承载账号、密码哈希、角色与启停状态。
 
 ---
 
@@ -65,7 +66,8 @@
 - 不引入 `@ant-design/pro-components`，直接用 AntD 6 的 Table + Form 组合，避免额外依赖。
 - 复用 `packages/shared` 中已声明的 `ADMIN_ROLES` 与 `ADMIN_PERMISSIONS`，本期只启用 `super_admin`。
 - 复用 web 端 `apps/web/lib/supabase/admin.ts` 的 service role client 实现思路。
-- 仍走 Supabase Auth，但用独立 `admin_users` 表 + 邮箱白名单做二次校验。
+- 当前阶段不走 Supabase Auth，使用固定超级管理员账号写入后台专用 httpOnly cookie。
+- `admin_users` 作为后续多管理员账号管理的预留表；届时再把登录切换为读取账号表并校验密码哈希。
 
 ---
 
@@ -127,26 +129,26 @@ export const ROLE_PERMISSIONS: Record<AdminRole, AdminPermission[] | ["*"]> = {
 
 ### 3.3 鉴权三层校验
 
-1. **中间件层** `lib/supabase/middleware.ts`：未登录跳转 `/login`；已登录但不在 `admin_users` 表或 `is_active = false` 返回 403。
-2. **Server Component 层**：每个页面读 session，调用 `hasPermission()` 校验，否则渲染 403 页。
-3. **API 层**：所有 `/api/admin/*` 路由首行调用 `requirePermission(req, "users:write")`，未通过返回 401/403。
+1. **Proxy 层** `apps/admin/proxy.ts`：未携带有效 `narr_admin_session` cookie 时跳转 `/login`。
+2. **Server Component 层**：`app/(admin)/layout.tsx` 调用 `requireAdmin()`，防止绕过 proxy 直接渲染后台页面。
+3. **API 层**：后续所有 `/api/admin/*` 路由首行调用 `requireAdmin()` / `requirePermission()`；当前固定超级管理员拥有全部权限。
 
 ---
 
 ## 四、数据库改造
 
-新增迁移 `supabase/migrations/014_admin_tables.sql`。
+Admin 相关迁移从 `supabase/migrations/016_admin_users.sql` 开始追加。`016` 如果已经在数据库执行，不再修改历史迁移；后续账号字段通过 `017_admin_account_fields.sql` 追加。
 
 ### 4.1 admin_users
 
-管理员账户表，与 `auth.users` 一一对应。
+管理员账号预留表。当前固定账号登录不读取该表；后续多管理员账号管理再接入。
 
 ```sql
 CREATE TABLE IF NOT EXISTS public.admin_users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email VARCHAR(200) UNIQUE NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'super_admin'
-    CHECK (role IN ('super_admin')),
+    CHECK (role IN ('super_admin', 'operator', 'reviewer', 'support')),
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_login_at TIMESTAMPTZ
@@ -156,6 +158,25 @@ ALTER TABLE public.admin_users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "admin_users_self_read" ON public.admin_users
   FOR SELECT USING (auth.uid() = id);
 ```
+
+`017_admin_account_fields.sql` 追加预留字段：
+
+```sql
+ALTER TABLE public.admin_users
+  DROP CONSTRAINT IF EXISTS admin_users_id_fkey;
+
+ALTER TABLE public.admin_users
+  ALTER COLUMN id SET DEFAULT gen_random_uuid(),
+  ADD COLUMN IF NOT EXISTS username VARCHAR(80),
+  ADD COLUMN IF NOT EXISTS password_hash TEXT,
+  ADD COLUMN IF NOT EXISTS display_name VARCHAR(120),
+  ADD COLUMN IF NOT EXISTS password_updated_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS failed_login_count INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS locked_until_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+```
+
+注意：`password_hash` 只存密码哈希，禁止存明文密码。当前固定超级管理员密码仅存在应用代码中，后续切换多账号登录时再统一改为哈希校验。
 
 ### 4.2 admin_audit_logs
 
@@ -248,7 +269,7 @@ CREATE TABLE IF NOT EXISTS public.system_configs (
 
 ### 模块 2：用户管理
 
-- 列表字段：手机号、昵称、会员等级、配额使用、注册时间、最近活跃。
+- 列表字段：邮箱、昵称、会员等级、配额使用、注册时间、最近活跃。
 - 操作：调整免费配额、升级/降级会员（`plan_type`）、封禁/解封、查看用户全部剧本。
 - 详情页：基础信息 + 剧本列表 + 生成任务历史 + 配额变更历史（来自审计日志）。
 - 写操作落 `admin_audit_logs`。
@@ -379,18 +400,22 @@ apps/admin/
 - 主色调：AntD 默认蓝 `#1677ff`，不用 web 端水墨朱砂。
 - 布局：标准 ProLayout（左侧深色侧栏 + 顶栏 + 内容区）。
 - 表格密度：`size="middle"`，避免 web 端宽松的卷轴式排版。
-- 顶栏右侧：管理员邮箱 + 退出登录，无主题切换。
+- 顶栏右侧：超级管理员身份 + 退出登录，无主题切换。
 
 ### 6.3 超级管理员账号初始化
 
-通过 SQL 直接插入，不做注册入口：
+当前阶段不需要 SQL 初始化后台登录账号，固定账号为：
 
-```sql
--- 1. 先在 Supabase Auth 中创建用户（管理控制台或 admin API）
--- 2. 拿到 auth.users.id 后插入 admin_users
-INSERT INTO public.admin_users (id, email, role, is_active)
-VALUES ('<auth.users.id>', 'admin@narrlight.com', 'super_admin', TRUE);
+```txt
+账号：admin
+密码：narr-light-admin123
 ```
+
+`admin_users` 表只作为后续多账号管理预留。如果后续切换为表驱动登录，再在系统配置中添加管理员账号，并写入 `username`、`password_hash`、`role`、`is_active` 等字段。密码只保存哈希，不保存明文。
+
+已执行过 `016_admin_users.sql` 的数据库无需回滚，继续执行 `017_admin_account_fields.sql` 即可补齐预留字段。
+
+历史 Supabase Auth 白名单方案暂不启用，不需要在 Supabase Auth 中创建后台管理员用户。
 
 ---
 
