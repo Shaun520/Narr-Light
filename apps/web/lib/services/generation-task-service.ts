@@ -26,6 +26,14 @@ interface TaskRow {
   error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
+  quality_status?: 'unchecked' | 'passed' | 'failed' | 'disputed' | 'refunded';
+  retry_of_task_id?: string | null;
+  retry_count?: number;
+  max_retries?: number;
+  charged_credits?: number;
+  refund_credits?: number;
+  failure_reason?: string | null;
+  user_feedback?: string | null;
   created_at: string;
 }
 
@@ -267,6 +275,14 @@ export class GenerationTaskService {
       errorMessage: row.error_message,
       startedAt: row.started_at,
       completedAt: row.completed_at,
+      qualityStatus: row.quality_status,
+      retryOfTaskId: row.retry_of_task_id,
+      retryCount: row.retry_count,
+      maxRetries: row.max_retries,
+      chargedCredits: row.charged_credits,
+      refundCredits: row.refund_credits,
+      failureReason: row.failure_reason,
+      userFeedback: row.user_feedback,
       createdAt: row.created_at,
     };
   }

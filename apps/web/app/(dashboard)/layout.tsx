@@ -40,6 +40,7 @@ import { NavItem } from '@/components/common/nav-item';
 import { NotificationPanel } from '@/components/common/notification-panel';
 import { ScriptSwitcher } from '@/components/common/script-switcher';
 import { SettingsMenu } from '@/components/common/settings-menu';
+import { QuotaService } from '@/lib/services/quota-service';
 import './dashboard.css';
 import './responsive.css';
 
@@ -68,8 +69,16 @@ export default async function DashboardLayout({
 
   const nickname = profile?.nickname || user.email || '创作者';
   const avatarChar = nickname.charAt(0).toUpperCase();
-  const quotaUsed = profile?.free_quota_used ?? 0;
-  const quotaLimit = profile?.free_quota_limit ?? 10;
+  let creditBalance = Math.max(
+    0,
+    (profile?.free_quota_limit ?? 10) - (profile?.free_quota_used ?? 0),
+  );
+  try {
+    const creditInfo = await new QuotaService().getCreditInfo(user.id);
+    creditBalance = creditInfo.balance;
+  } catch {
+    // 新创作点表未迁移时，保留旧额度展示，避免开发环境侧栏白屏。
+  }
   const currentScript = scriptsTyped[0] ?? null;
   // 无剧本时，编辑器子功能统一引导到生成页；有剧本时指向当前剧本对应子页。
   const hasScript = currentScript != null;
@@ -159,9 +168,9 @@ export default async function DashboardLayout({
               href="/settings/quota"
               className="user-quota"
               title="额度管理"
-              aria-label={`额度管理：剩余 ${Math.max(0, quotaLimit - quotaUsed)} 次`}
+              aria-label={`额度管理：剩余 ${creditBalance} 创作点`}
             >
-              免费额度 <b>{Math.max(0, quotaLimit - quotaUsed)}</b>/{quotaLimit}
+              创作点 <b>{creditBalance}</b>
             </Link>
           </div>
           <form action={handleLogout}>

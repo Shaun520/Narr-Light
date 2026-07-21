@@ -30,6 +30,11 @@ import {
   type TimelineStructureEvent,
 } from '@/lib/ai/prompts/timeline-structure';
 import { illustrationWorkflowService } from '@/lib/services/illustration-workflow-service';
+import {
+  GENERATION_CREDIT_COSTS,
+  QuotaService,
+  type GenerationCreditPhase,
+} from '@/lib/services/quota-service';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 
@@ -84,6 +89,10 @@ function isMissingTableError(error: { code?: string; message?: string } | null):
 
 function buildError(message: string, status = 500): Response {
   return Response.json({ error: message }, { status });
+}
+
+function isGenerationCreditPhase(phase: string): phase is GenerationCreditPhase {
+  return Object.prototype.hasOwnProperty.call(GENERATION_CREDIT_COSTS, phase);
 }
 
 function getGenerationMode(): GenerationMode {
@@ -1686,6 +1695,142 @@ async function proxySupabaseGenerate(
   });
 }
 
+async function resolveRequestUserId(request: NextRequest): Promise<string | null> {
+  const authorization = request.headers.get('authorization');
+  const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (token && SUPABASE_URL && anonKey) {
+    const supabase = createSupabaseClient(SUPABASE_URL, anonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+    const {
+      data: { user },
+    } = await supabase.auth.getUser(token);
+    if (user) return user.id;
+  }
+
+  const supabase = await createServerSupabaseClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+async function wrapMeteredSseResponse(
+  response: Response,
+  settlement: {
+    userId: string;
+    phase: GenerationCreditPhase;
+    scriptId: string;
+    amount: number;
+    transactionId: string | null;
+  },
+): Promise<Response> {
+  const quotaService = new QuotaService();
+  let completed = false;
+  let failed = !response.ok;
+  let refunded = false;
+  const refund = async (failureReason: string) => {
+    if (refunded || settlement.amount <= 0) return;
+    refunded = true;
+    try {
+      await quotaService.refundCredits(
+        settlement.userId,
+        settlement.amount,
+        `生成失败返还：${settlement.phase}`,
+        {
+          phase: settlement.phase,
+          scriptId: settlement.scriptId,
+          consumeTransactionId: settlement.transactionId,
+          failureReason,
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`Credit refund failed; continuing response stream: ${message}`);
+    }
+  };
+
+  if (!response.body) {
+    if (failed) await refund(`http_${response.status}`);
+    return response;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = decoder.decode(value, { stream: true });
+          if (text.includes('event: completed')) completed = true;
+          if (text.includes('event: error')) failed = true;
+          controller.enqueue(value);
+        }
+
+        if (failed || !completed) {
+          await refund(failed ? 'sse_error' : 'stream_closed_without_completed');
+        }
+        controller.close();
+      } catch (error) {
+        await refund('stream_read_error');
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await refund('stream_cancelled');
+      await reader.cancel();
+    },
+  });
+
+  return new Response(stream, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+async function runMeteredGeneration(
+  request: NextRequest,
+  phase: GenerationCreditPhase,
+  body: GenerateRequestBody,
+  execute: () => Promise<Response>,
+): Promise<Response> {
+  const userId = await resolveRequestUserId(request);
+  if (!userId) {
+    return buildError('未登录或登录态已失效', 401);
+  }
+
+  const quotaService = new QuotaService();
+  const charge = await quotaService.consumeGenerationPhase(userId, phase, body.scriptId);
+
+  try {
+    const response = await execute();
+    return wrapMeteredSseResponse(response, {
+      userId,
+      phase,
+      scriptId: body.scriptId,
+      amount: charge.amount,
+      transactionId: charge.transactionId,
+    });
+  } catch (error) {
+    await quotaService.refundCredits(userId, charge.amount, `生成异常返还：${phase}`, {
+      phase,
+      scriptId: body.scriptId,
+      consumeTransactionId: charge.transactionId,
+      failureReason: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+}
+
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ phase: string }> },
@@ -1700,7 +1845,7 @@ export async function POST(
     if (!validateBody(body)) {
       return buildError('Invalid parameters', 400);
     }
-    return handleStoryBible(body);
+    return runMeteredGeneration(request, phase, body, () => handleStoryBible(body));
   }
 
   if (phase === 'character-profiles' || phase === 'act-structure') {
@@ -1710,11 +1855,11 @@ export async function POST(
     }
     if (getGenerationMode() === 'real') {
       if (phase === 'character-profiles') {
-        return handleCharacterProfiles(body);
+        return runMeteredGeneration(request, phase, body, () => handleCharacterProfiles(body));
       }
-      return handleActStructure(body);
+      return runMeteredGeneration(request, phase, body, () => handleActStructure(body));
     }
-    return handleMockPhase(phase, body);
+    return runMeteredGeneration(request, phase, body, () => handleMockPhase(phase, body));
   }
 
   if (
@@ -1729,17 +1874,17 @@ export async function POST(
     }
     if (getGenerationMode() === 'real') {
       if (phase === 'character-script') {
-        return handleCharacterScript(body);
+        return runMeteredGeneration(request, phase, body, () => handleCharacterScript(body));
       }
       if (phase === 'clues') {
-        return handleClues(body);
+        return runMeteredGeneration(request, phase, body, () => handleClues(body));
       }
       if (phase === 'organizer-manual') {
-        return handleOrganizerManual(body);
+        return runMeteredGeneration(request, phase, body, () => handleOrganizerManual(body));
       }
-      return handleTruthReview(body);
+      return runMeteredGeneration(request, phase, body, () => handleTruthReview(body));
     }
-    return handleGenericMockPhase(phase, body);
+    return runMeteredGeneration(request, phase, body, () => Promise.resolve(handleGenericMockPhase(phase, body)));
   }
 
   if (phase === 'timeline-structure') {
@@ -1748,14 +1893,17 @@ export async function POST(
       return buildError('Invalid parameters', 400);
     }
     if (getGenerationMode() === 'real') {
-      return handleTimelineStructure(body);
+      return runMeteredGeneration(request, phase, body, () => handleTimelineStructure(body));
     }
-    return handleTimelineStructureMock(body);
+    return runMeteredGeneration(request, phase, body, () => handleTimelineStructureMock(body));
   }
 
   const body: unknown = await request.json().catch(() => null);
   if (!validateBody(body)) {
     return buildError('Invalid parameters', 400);
+  }
+  if (isGenerationCreditPhase(phase)) {
+    return runMeteredGeneration(request, phase, body, () => proxySupabaseGenerate(request, phase, body));
   }
   return proxySupabaseGenerate(request, phase, body);
 }

@@ -51,6 +51,38 @@ export interface Database {
           updated_at?: string;
         };
       };
+      user_credits: {
+        Row: {
+          user_id: string;
+          balance: number;
+          monthly_grant: number;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          balance?: number;
+          monthly_grant?: number;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["user_credits"]["Row"]>;
+      };
+      credit_transactions: {
+        Row: {
+          id: string;
+          user_id: string;
+          task_id: string | null;
+          amount: number;
+          type: "grant" | "consume" | "refund" | "adjustment";
+          reason: string;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["credit_transactions"]["Row"], "id" | "created_at"> & {
+          id?: string;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["credit_transactions"]["Row"]>;
+      };
       scripts: {
         Row: {
           id: string;
@@ -235,7 +267,15 @@ export interface Database {
             | "STYLE_CHANGE"
             | "COMPRESS"
             | "COMPLIANCE"
-            | "ILLUSTRATION";
+            | "ILLUSTRATION"
+            | "STORY_BIBLE"
+            | "CHARACTER_PROFILES"
+            | "ACT_STRUCTURE"
+            | "CHARACTER_SCRIPT"
+            | "CLUES"
+            | "ORGANIZER_MANUAL"
+            | "TRUTH_REVIEW"
+            | "TIMELINE_STRUCTURE";
           status: "pending" | "running" | "completed" | "failed" | "cancelled";
           params: Json;
           progress_percent: number;
@@ -243,6 +283,14 @@ export interface Database {
           error_message: string | null;
           started_at: string | null;
           completed_at: string | null;
+          quality_status: "unchecked" | "passed" | "failed" | "disputed" | "refunded";
+          retry_of_task_id: string | null;
+          retry_count: number;
+          max_retries: number;
+          charged_credits: number;
+          refund_credits: number;
+          failure_reason: string | null;
+          user_feedback: string | null;
           created_at: string;
         };
         Insert: Omit<Database["public"]["Tables"]["generation_tasks"]["Row"], "id" | "created_at"> & {

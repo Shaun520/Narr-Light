@@ -4,14 +4,14 @@
  * 路由：/settings/quota
  *
  * 服务端组件，直接从 layout 已查的 profile（React cache 共享）构造当前
- * 套餐与额度信息，并查询 generation_tasks 表获取最近 AI 生成任务作为使用历史。
+ * 套餐信息，并查询 credit_transactions 表获取最近创作点流水。
  *
  * 视觉对齐项目古风系统：朱砂红 + 纸张色 + 印章质感。
  * 包含：
- *   1. 当前套餐卡（免费版 / 专业版 + 已用/总额度进度条）
- *   2. 套餐对比表（免费版 vs 专业版）
+ *   1. 当前套餐卡（免费版 / 专业版 + 创作点余额）
+ *   2. 三档套餐卡（入门版 / 专业版 / 工作室版）
  *   3. 升级专业版按钮（开发期 mock：直接调用 upgradePlan）
- *   4. 使用历史记录（最近 20 条 AI 生成任务）
+ *   4. 创作点流水（最近 20 条消费/返还/发放记录）
  *
  * 性能优化（T418）：
  * - 通过 React `cache()` 共享 layout 已查的 `getUser()` 与 users 表查询，
@@ -25,17 +25,22 @@ import {
   Check,
   Crown,
   History,
+  Layers,
   Sparkles,
   TrendingUp,
-  X,
+  Users,
   Zap,
 } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
 import {
   getCachedUser,
   getCachedProfile,
 } from '@/lib/queries/dashboard-queries';
-import { QuotaService, type QuotaInfo } from '@/lib/services/quota-service';
+import {
+  QuotaService,
+  type CreditInfo,
+  type CreditTransaction,
+  type QuotaInfo,
+} from '@/lib/services/quota-service';
 import { EmptyState } from '@/components/common/state-views';
 import './quota.css';
 
@@ -45,52 +50,61 @@ const PLAN_LABEL: Record<QuotaInfo['planType'], string> = {
   pro: '专业版',
 };
 
-/** 套餐对比项 */
-interface PlanRow {
-  feature: string;
-  free: string | boolean;
-  pro: string | boolean;
+interface PricingPlan {
+  id: 'starter' | 'pro' | 'studio';
+  name: string;
+  price: string;
+  audience: string;
+  credits: string;
+  output: string;
+  features: string[];
+  highlighted?: boolean;
+  actionLabel: string;
+  disabled?: boolean;
 }
 
-const PLAN_COMPARISON: PlanRow[] = [
-  { feature: 'AI 剧本生成', free: '10 次/月', pro: '无限次' },
-  { feature: 'AI 插画生成', free: '不可用', pro: '无限次' },
-  { feature: '逻辑校验', free: '基础规则', pro: '高级 + 难度评估' },
-  { feature: '线索卡导出', free: '含水印', pro: '无水印高清' },
-  { feature: '版本历史', free: '保留 7 天', pro: '永久保留' },
-  { feature: '社区发布', free: false, pro: true },
-  { feature: '优先客服支持', free: false, pro: true },
+const PRICING_PLANS: PricingPlan[] = [
+  {
+    id: 'starter',
+    name: '入门版',
+    price: '¥49/月',
+    audience: '新手作者、低频创作',
+    credits: '300 创作点',
+    output: '约 1 本完整短中篇剧本',
+    features: ['基础逻辑校验', '少量线索卡 / 插画', '失败生成自动返还'],
+    actionLabel: '暂未开通',
+    disabled: true,
+  },
+  {
+    id: 'pro',
+    name: '专业版',
+    price: '¥129/月',
+    audience: '职业作者、稳定创作',
+    credits: '1000 创作点',
+    output: '约 3-4 本剧本',
+    features: ['完整逻辑校验', '版本历史', '高清无水印导出'],
+    highlighted: true,
+    actionLabel: '升级专业版',
+  },
+  {
+    id: 'studio',
+    name: '工作室版',
+    price: '¥399/月',
+    audience: '小团队 / 发行工作室',
+    credits: '4000 创作点',
+    output: '约 10 本剧本',
+    features: ['团队协作', '素材批量导出', '优先队列'],
+    actionLabel: '暂未开通',
+    disabled: true,
+  },
 ];
 
-/** 任务类型中文标签 */
-const TASK_TYPE_LABEL: Record<string, string> = {
-  FULL_SCRIPT: '剧本生成',
-  CHARACTER_ADJUST: '人物调整',
-  CLUE_MODIFY: '线索修改',
-  TRICK_REPLACE: '诡计替换',
-  STYLE_CHANGE: '风格改写',
-  COMPRESS: '内容压缩',
-  COMPLIANCE: '合规调整',
-  ILLUSTRATION: '插画生成',
+const TRANSACTION_TYPE_LABEL: Record<CreditTransaction['type'], string> = {
+  grant: '发放',
+  consume: '消费',
+  refund: '返还',
+  adjustment: '调整',
 };
-
-/** 任务状态中文标签 */
-const STATUS_LABEL: Record<string, string> = {
-  pending: '排队中',
-  running: '生成中',
-  completed: '已完成',
-  failed: '失败',
-  cancelled: '已取消',
-};
-
-/** 使用历史行（generation_tasks 投影） */
-interface UsageHistoryRow {
-  id: string;
-  task_type: string;
-  status: string;
-  created_at: string;
-  completed_at: string | null;
-}
 
 /** 升级套餐 server action（开发期 mock：直接置为 pro） */
 async function upgradeToPro() {
@@ -141,6 +155,23 @@ function buildQuotaFromProfile(
   };
 }
 
+function buildCreditFallback(quotaInfo: QuotaInfo): CreditInfo {
+  const balance = quotaInfo.planType === 'pro' ? 1000 : quotaInfo.remaining * 3;
+  return {
+    balance,
+    monthlyGrant: quotaInfo.planType === 'pro' ? 1000 : 30,
+    planType: quotaInfo.planType,
+  };
+}
+
+function describeTransaction(row: CreditTransaction): string {
+  if (row.reason) return row.reason;
+  if (row.type === 'grant') return '创作点发放';
+  if (row.type === 'refund') return '生成失败返还';
+  if (row.type === 'consume') return 'AI 生成消费';
+  return '额度调整';
+}
+
 export default async function QuotaPage() {
   // 复用 layout 已查的 user（React cache 命中，无重复 getUser 调用）
   const user = await getCachedUser();
@@ -149,21 +180,29 @@ export default async function QuotaPage() {
   // 复用 layout 已查的 profile，直接构造额度信息（避免重复查询 users 表）
   const profile = await getCachedProfile(user.id);
   const { info: quotaInfo, error: quotaError } = buildQuotaFromProfile(profile);
+  const quotaService = new QuotaService();
+  let creditInfo = buildCreditFallback(quotaInfo);
+  let historyRows: CreditTransaction[] = [];
+  let creditError: string | null = null;
 
-  // 获取最近 20 条 AI 生成任务作为使用历史（layout 未查过，保留本页查询）
-  const supabase = await createClient();
-  const { data: historyRows } = (await supabase
-    .from('generation_tasks')
-    .select('id, task_type, status, created_at, completed_at')
-    .order('created_at', { ascending: false })
-    .limit(20)) as { data: UsageHistoryRow[] | null };
+  try {
+    [creditInfo, historyRows] = await Promise.all([
+      quotaService.getCreditInfo(user.id),
+      quotaService.getCreditTransactions(user.id, 20),
+    ]);
+  } catch (error) {
+    creditError =
+      error instanceof Error
+        ? `创作点账户暂不可用，已显示旧额度估算：${error.message}`
+        : '创作点账户暂不可用，已显示旧额度估算。';
+  }
 
-  const isPro = quotaInfo.planType === 'pro';
+  const isPro = creditInfo.planType === 'pro';
   const usedPercent =
-    quotaInfo.limit > 0
-      ? Math.min(100, Math.round((quotaInfo.used / quotaInfo.limit) * 100))
+    creditInfo.monthlyGrant > 0
+      ? Math.min(100, Math.round(((creditInfo.monthlyGrant - creditInfo.balance) / creditInfo.monthlyGrant) * 100))
       : 0;
-  const isQuotaLow = !isPro && quotaInfo.remaining <= 2;
+  const isQuotaLow = creditInfo.balance <= Math.max(15, Math.round(creditInfo.monthlyGrant * 0.15));
 
   return (
     <section className="quota-page">
@@ -175,7 +214,7 @@ export default async function QuotaPage() {
             额度与套餐 <span className="seal">QUOTA</span>
           </h1>
           <div className="page-desc">
-            管理你的 AI 生成额度与订阅套餐
+            管理你的 AI 创作点与订阅套餐
           </div>
         </div>
         <div className="page-actions">
@@ -188,124 +227,121 @@ export default async function QuotaPage() {
       {quotaError ? (
         <div className="quota-warn" role="alert">{quotaError}</div>
       ) : null}
+      {creditError ? (
+        <div className="quota-warn" role="alert">{creditError}</div>
+      ) : null}
 
       {/* ============ 当前套餐 + 进度条 ============ */}
       <div className={`quota-current-card ${isPro ? 'is-pro' : ''}`}>
         <div className="qc-left">
           <div className="qc-plan-badge">
             {isPro ? <Crown size={14} /> : <Sparkles size={14} />}
-            {PLAN_LABEL[quotaInfo.planType]}
+            {PLAN_LABEL[creditInfo.planType]}
           </div>
           <div className="qc-title">
             {isPro ? '专业版创作者' : '免费体验中'}
           </div>
           <div className="qc-desc">
             {isPro
-              ? '已解锁全部 AI 生成能力，可无限创作。'
-              : `本月剩余 ${quotaInfo.remaining} / ${quotaInfo.limit} 次 AI 生成机会。`}
+              ? `本月已发放 ${creditInfo.monthlyGrant} 创作点，失败生成会自动返还。`
+              : `当前剩余 ${creditInfo.balance} / ${creditInfo.monthlyGrant} 创作点。`}
           </div>
         </div>
         <div className="qc-right">
           <div className="qc-progress-label">
-            <span>已用额度</span>
+            <span>创作点余额</span>
             <span className={`qc-pct ${isQuotaLow ? 'low' : ''}`}>
-              {isPro ? '∞' : `${quotaInfo.used} / ${quotaInfo.limit}`}
+              {creditInfo.balance} 点
             </span>
           </div>
-          {isPro ? (
-            <div className="qc-progress-bar pro">
-              <div className="qc-progress-fill pro" style={{ width: '100%' }} />
-            </div>
-          ) : (
-            <div className="qc-progress-bar">
-              <div
-                className={`qc-progress-fill ${isQuotaLow ? 'low' : ''}`}
-                style={{ width: `${usedPercent}%` }}
-              />
-            </div>
-          )}
+          <div className={`qc-progress-bar ${isPro ? 'pro' : ''}`}>
+            <div
+              className={`qc-progress-fill ${isQuotaLow ? 'low' : ''} ${isPro ? 'pro' : ''}`}
+              style={{ width: `${usedPercent}%` }}
+            />
+          </div>
           {isQuotaLow ? (
             <div className="qc-hint">
               <Zap size={12} />
-              额度即将用尽，升级专业版可继续创作。
+              创作点即将用尽，升级或补充点数后可继续创作。
             </div>
           ) : null}
         </div>
       </div>
 
-      {/* ============ 套餐对比表 ============ */}
+      {/* ============ 套餐价格卡 ============ */}
       <div className="quota-compare-card">
         <div className="card-head">
           <h3>
             <TrendingUp size={16} />
-            套餐对比
+            套餐设计
           </h3>
+          <span className="pricing-note">开发期价格方案</span>
         </div>
         <div className="qc-compare-body">
-          <table className="quota-table">
-            <thead>
-              <tr>
-                <th>功能</th>
-                <th className="col-free">免费版</th>
-                <th className="col-pro">专业版</th>
-              </tr>
-            </thead>
-            <tbody>
-              {PLAN_COMPARISON.map((row) => (
-                <tr key={row.feature}>
-                  <td className="qc-feature">{row.feature}</td>
-                  <td className="qc-cell">
-                    {typeof row.free === 'boolean' ? (
-                      row.free ? (
-                        <Check size={15} className="qc-yes" />
-                      ) : (
-                        <X size={15} className="qc-no" />
-                      )
-                    ) : (
-                      <span>{row.free}</span>
-                    )}
-                  </td>
-                  <td className="qc-cell pro">
-                    {typeof row.pro === 'boolean' ? (
-                      row.pro ? (
-                        <Check size={15} className="qc-yes" />
-                      ) : (
-                        <X size={15} className="qc-no" />
-                      )
-                    ) : (
-                      <span>{row.pro}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="qc-cta">
-            {isPro ? (
-              <div className="qc-current-tag">
-                <Crown size={14} />
-                你已是专业版用户
-              </div>
-            ) : (
-              <form action={upgradeToPro}>
-                <button type="submit" className="btn btn-primary qc-upgrade-btn">
-                  <Crown size={15} />
-                  升级专业版
-                  <span className="qc-mock-tag">开发期 mock</span>
-                </button>
-              </form>
-            )}
+          <div className="pricing-grid">
+            {PRICING_PLANS.map((plan) => {
+              const isCurrentPro = isPro && plan.id === 'pro';
+              const Icon = plan.id === 'studio' ? Users : plan.id === 'starter' ? Layers : Crown;
+              return (
+                <article
+                  key={plan.id}
+                  className={`pricing-card ${plan.highlighted ? 'is-highlighted' : ''}`}
+                >
+                  {plan.highlighted ? <div className="pricing-ribbon">推荐</div> : null}
+                  <div className="pricing-head">
+                    <div className="pricing-icon" aria-hidden="true">
+                      <Icon size={17} />
+                    </div>
+                    <div>
+                      <h4>{plan.name}</h4>
+                      <p>{plan.audience}</p>
+                    </div>
+                  </div>
+                  <div className="pricing-price">
+                    {plan.price}
+                  </div>
+                  <div className="pricing-credit">{plan.credits}</div>
+                  <div className="pricing-output">{plan.output}</div>
+                  <ul className="pricing-features">
+                    {plan.features.map((feature) => (
+                      <li key={feature}>
+                        <Check size={14} />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  {isCurrentPro ? (
+                    <div className="qc-current-tag pricing-action">
+                      <Crown size={14} />
+                      当前套餐
+                    </div>
+                  ) : plan.id === 'pro' ? (
+                    <form action={upgradeToPro}>
+                      <button type="submit" className="btn btn-primary qc-upgrade-btn pricing-action">
+                        <Crown size={15} />
+                        {plan.actionLabel}
+                        <span className="qc-mock-tag">开发期 mock</span>
+                      </button>
+                    </form>
+                  ) : (
+                    <button type="button" className="btn btn-ghost pricing-action" disabled>
+                      {plan.actionLabel}
+                    </button>
+                  )}
+                </article>
+              );
+            })}
           </div>
         </div>
       </div>
 
-      {/* ============ 使用历史记录 ============ */}
+      {/* ============ 创作点流水 ============ */}
       <div className="quota-history-card">
         <div className="card-head">
           <h3>
             <History size={16} />
-            使用历史
+            创作点流水
           </h3>
           <span className="qh-count">
             最近 {historyRows?.length ?? 0} 条
@@ -315,23 +351,21 @@ export default async function QuotaPage() {
           <div className="qh-list">
             {historyRows.map((row) => {
               const statusClass =
-                row.status === 'completed'
+                row.amount > 0
                   ? 'ok'
-                  : row.status === 'failed'
-                    ? 'err'
-                    : row.status === 'running'
-                      ? 'gen'
-                      : 'warn';
+                  : row.type === 'consume'
+                    ? 'gen'
+                    : 'warn';
               return (
                 <div key={row.id} className="qh-row">
                   <div className="qh-type">
-                    {TASK_TYPE_LABEL[row.task_type] ?? row.task_type}
+                    {describeTransaction(row)}
                   </div>
                   <div className="qh-time">
-                    {formatTime(row.created_at)}
+                    {formatTime(row.createdAt)}
                   </div>
                   <div className={`qh-status qh-${statusClass}`}>
-                    {STATUS_LABEL[row.status] ?? row.status}
+                    {row.amount > 0 ? '+' : ''}{row.amount} 点 · {TRANSACTION_TYPE_LABEL[row.type]}
                   </div>
                 </div>
               );
@@ -340,7 +374,7 @@ export default async function QuotaPage() {
         ) : (
           <EmptyState
             title="暂无使用记录"
-            description="开始使用 AI 生成功能后，这里会展示最近的任务历史。"
+            description="开始使用 AI 生成功能后，这里会展示最近的创作点消费和返还。"
             Icon={History}
           />
         )}

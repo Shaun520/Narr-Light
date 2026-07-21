@@ -15,7 +15,15 @@ export type TaskType =
   | 'STYLE_CHANGE'
   | 'COMPRESS'
   | 'COMPLIANCE'
-  | 'ILLUSTRATION';
+  | 'ILLUSTRATION'
+  | 'STORY_BIBLE'
+  | 'CHARACTER_PROFILES'
+  | 'ACT_STRUCTURE'
+  | 'CHARACTER_SCRIPT'
+  | 'CLUES'
+  | 'ORGANIZER_MANUAL'
+  | 'TRUTH_REVIEW'
+  | 'TIMELINE_STRUCTURE';
 
 /** AI 生成任务状态 */
 export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
@@ -55,6 +63,14 @@ export interface GenerationTask {
   errorMessage: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  qualityStatus?: 'unchecked' | 'passed' | 'failed' | 'disputed' | 'refunded';
+  retryOfTaskId?: string | null;
+  retryCount?: number;
+  maxRetries?: number;
+  chargedCredits?: number;
+  refundCredits?: number;
+  failureReason?: string | null;
+  userFeedback?: string | null;
   createdAt: string;
 }
 
