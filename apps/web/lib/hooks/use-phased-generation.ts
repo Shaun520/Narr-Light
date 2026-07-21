@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/client';
 import { createSSEClient } from '@/lib/ai/stream/sse-handler';
 import type { ScriptGenerationParams } from '@/lib/ai/prompts/script-generation';
 import type { StoryBibleJson } from '@/lib/ai/prompts/story-bible';
+import { createDefaultNickname, isDefaultNicknameConflict } from '@/lib/users/default-nickname';
 
 // ===== 绫诲瀷瀹氫箟 =====
 
@@ -649,10 +650,37 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         // 纭繚 public.users 涓瓨鍦ㄥ綋鍓嶇敤鎴疯褰曪紝鍥犱负 scripts.author_id
         console.log('[generate] auth user:', { id: user.id, email: user.email });
         if (user.email) {
-          const { error: upsertError } = await supabase.from('users').upsert(
-            { id: user.id, email: user.email, nickname: user.user_metadata?.nickname ?? '' },
-            { onConflict: 'id' }
-          );
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('id')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          let upsertError: { code?: string; message?: string } | null = null;
+          if (!existingUser) {
+            for (let attempt = 0; attempt < 8; attempt += 1) {
+              const nickname =
+                typeof user.user_metadata?.nickname === 'string' && user.user_metadata.nickname.trim()
+                  ? user.user_metadata.nickname.trim()
+                  : await createDefaultNickname(supabase);
+              const { error } = await supabase.from('users').insert({
+                id: user.id,
+                email: user.email,
+                nickname,
+              });
+
+              if (!error) {
+                await supabase.auth.updateUser({ data: { nickname } });
+                upsertError = null;
+                break;
+              }
+
+              upsertError = error;
+              if (!isDefaultNicknameConflict(error)) {
+                break;
+              }
+            }
+          }
           console.log('[generate] upsert public.users result:', { upsertError });
           if (upsertError) {
             console.error('鍚屾 public.users 澶辫触:', upsertError);

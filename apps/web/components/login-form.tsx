@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { EMAIL_REGEX, EmailInput } from "@/components/email-input";
 import { VerificationCodeInput } from "@/components/phone-input";
 import { PasswordInput } from "@/components/password-input";
+import { createDefaultNickname, isDefaultNicknameConflict } from "@/lib/users/default-nickname";
 
 /**
  * 登录表单 - 邮箱 + 密码 / 验证码（双模式）
@@ -130,11 +131,25 @@ async function syncPublicUser(
     .eq("id", user.id)
     .maybeSingle();
   if (existing) return;
-  await supabase.from("users").insert({
-    id: user.id,
-    email: user.email ?? fallbackEmail,
-    nickname: "",
-  });
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const nickname = await createDefaultNickname(supabase);
+    const { error } = await supabase.from("users").insert({
+      id: user.id,
+      email: user.email ?? fallbackEmail,
+      nickname,
+    });
+
+    if (!error) {
+      await supabase.auth.updateUser({ data: { nickname } });
+      return;
+    }
+
+    if (error.code === "23505" && !isDefaultNicknameConflict(error)) {
+      return;
+    }
+  }
+
+  throw new Error("生成默认昵称失败，请稍后重试");
 }
 
 /**

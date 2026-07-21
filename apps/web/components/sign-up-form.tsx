@@ -9,11 +9,12 @@ import {
   EmailInput,
 } from "@/components/email-input";
 import { PasswordInput, PASSWORD_MIN_LENGTH } from "@/components/password-input";
+import { createDefaultNickname, isDefaultNicknameConflict } from "@/lib/users/default-nickname";
 
 /**
- * 注册表单 - 邮箱 + 密码 + 昵称
+ * 注册表单 - 邮箱 + 密码
  * 使用 Supabase Auth Email/Password Provider:
- *   - 注册: supabase.auth.signUp({ email, password, options: { data: { nickname } } })
+ *   - 注册: supabase.auth.signUp({ email, password })
  *   - 成功后在 public.users 表创建用户记录
  * 注册成功后跳转 /dashboard
  */
@@ -24,7 +25,6 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [nickname, setNickname] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -45,10 +45,6 @@ export function SignUpForm({
       setError("两次输入的密码不一致");
       return;
     }
-    if (!nickname.trim()) {
-      setError("请输入昵称");
-      return;
-    }
     const supabase = createClient();
     setLoading(true);
     try {
@@ -56,7 +52,6 @@ export function SignUpForm({
       const { error: signUpError } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { nickname: nickname.trim() } },
       });
       if (signUpError) throw signUpError;
 
@@ -66,17 +61,7 @@ export function SignUpForm({
         data: { user },
       } = await supabase.auth.getUser();
       if (user) {
-        const { error: insertError } = await supabase
-          .from("users")
-          .insert({
-            id: user.id,
-            email: email,
-            nickname: nickname.trim(),
-          });
-        // 23505 = unique_violation，邮箱已存在记录（重复注册）时忽略，保证登录顺畅
-        if (insertError && insertError.code !== "23505") {
-          throw insertError;
-        }
+        await insertPublicUserWithDefaultNickname(supabase, user.id, email);
       }
       // signUp 成功后会话已建立，但 cookie 写入是异步的
       // 用完整页面导航确保 cookie 写入后再跳转，避免 middleware 判定未登录
@@ -146,21 +131,6 @@ function mapSignUpError(err: unknown): string {
             autoComplete="new-password"
           />
         </div>
-        <div className="auth-field">
-          <label htmlFor="su-nickname" className="auth-label">
-            昵称
-          </label>
-          <input
-            id="su-nickname"
-            type="text"
-            placeholder="请输入昵称"
-            value={nickname}
-            onChange={(e) => setNickname(e.target.value)}
-            disabled={loading}
-            maxLength={50}
-            className="auth-input"
-          />
-        </div>
         {error && <p className="auth-error">{error}</p>}
         <button
           type="submit"
@@ -178,4 +148,31 @@ function mapSignUpError(err: unknown): string {
       </form>
     </div>
   );
+}
+
+async function insertPublicUserWithDefaultNickname(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  email: string,
+) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const nickname = await createDefaultNickname(supabase);
+    const { error } = await supabase.from("users").insert({
+      id: userId,
+      email,
+      nickname,
+    });
+
+    if (!error) {
+      await supabase.auth.updateUser({ data: { nickname } });
+      return;
+    }
+
+    // 23505 = unique_violation。邮箱/用户已存在时视为成功；默认昵称碰撞则重试。
+    if (error.code === "23505" && !isDefaultNicknameConflict(error)) {
+      return;
+    }
+  }
+
+  throw new Error("生成默认昵称失败，请稍后重试");
 }

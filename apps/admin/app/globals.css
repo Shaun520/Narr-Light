@@ -371,6 +371,10 @@ a {
   width: 220px;
 }
 
+.input-wide {
+  width: 260px;
+}
+
 .select {
   min-width: 120px;
 }
@@ -540,8 +544,18 @@ a {
   background: #fafafa;
 }
 
+.table tbody tr.table-row-selected {
+  background: var(--admin-primary-bg);
+}
+
 .table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.table-empty {
+  height: 160px;
+  color: var(--admin-text-secondary);
+  text-align: center;
 }
 
 .tag {
@@ -607,8 +621,17 @@ a {
   font-size: 13px;
 }
 
+.link-btn:disabled {
+  color: var(--admin-text-tertiary);
+  cursor: not-allowed;
+}
+
 .link-btn.danger {
   color: var(--admin-error);
+}
+
+.link-btn.danger:disabled {
+  color: var(--admin-text-tertiary);
 }
 
 .user-cell {
@@ -920,6 +943,16 @@ a {
 
 .placeholder-meta {
   color: var(--admin-text-secondary);
+}
+
+.admin-inline-alert {
+  margin: 12px 20px 0;
+  padding: 10px 12px;
+  border: 1px solid #ffe58f;
+  border-radius: 6px;
+  background: #fffbe6;
+  color: #ad6800;
+  font-size: 13px;
 }
 
 .login-page {
