@@ -12,9 +12,9 @@ values
       "playerClueRatio": 0.8,
       "durationBands": [
         { "minDuration": 2, "maxDuration": 3, "actCount": 3, "searchRoundCount": 3 },
-        { "minDuration": 4, "maxDuration": 5, "actCount": 4, "searchRoundCount": 4 },
-        { "minDuration": 6, "maxDuration": 7, "actCount": 5, "searchRoundCount": 5 },
-        { "minDuration": 8, "maxDuration": 8, "actCount": 6, "searchRoundCount": 6 }
+        { "minDuration": 3, "maxDuration": 5, "actCount": 4, "searchRoundCount": 4 },
+        { "minDuration": 5, "maxDuration": 7, "actCount": 5, "searchRoundCount": 5 },
+        { "minDuration": 7, "maxDuration": 8, "actCount": 6, "searchRoundCount": 6 }
       ],
       "difficultyMultipliers": {
         "beginner": 0.85,

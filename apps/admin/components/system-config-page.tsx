@@ -15,6 +15,11 @@ import type {
   TextProviderConfig,
   TextProviderName,
 } from "@narrlight/shared";
+import {
+  findSpecError,
+  validateGenerationSpecConfig,
+  type GenerationSpecValidationError,
+} from "@narrlight/shared";
 import type { SystemConfigSnapshot } from "@/lib/services/system-config";
 
 type TextProviderMeta = {
@@ -185,6 +190,13 @@ export function SystemConfigPage({
     [textConfig, imageConfig, contentSafety, quotaDefaults, generationSpec],
   );
 
+  // 实时校验生成规格配置，错误以 field 路径索引，便于在对应输入框下方显示提示
+  const specErrors: GenerationSpecValidationError[] = useMemo(
+    () => validateGenerationSpecConfig(generationSpec),
+    [generationSpec],
+  );
+  const hasSpecErrors = specErrors.length > 0;
+
   // 确认保存时只校验 reason 非空，实际提交交给 form action；
   // 关闭 modal 放在 useEffect 的 success 分支中，避免提前移除 submit 按钮导致表单未提交。
 
@@ -215,9 +227,10 @@ export function SystemConfigPage({
         actions={
           <button
             className="admin-btn primary"
-            disabled={pending}
+            disabled={pending || hasSpecErrors}
             type="button"
             onClick={() => setModalOpen(true)}
+            title={hasSpecErrors ? "生成规格配置存在错误，请先修复" : undefined}
           >
             {pending ? <Loader2 size={14} className="spin" /> : <Save size={14} />}
             {pending ? "保存中..." : "保存变更"}
@@ -228,6 +241,20 @@ export function SystemConfigPage({
       {saved && !toast && (
         <div className="admin-inline-alert" role="status">
           配置已保存，变更原因已写入审计日志。
+        </div>
+      )}
+
+      {hasSpecErrors && (
+        <div className="admin-inline-alert admin-inline-alert-error" role="alert">
+          <div className="admin-inline-alert-title">
+            <TriangleAlert size={14} />
+            <span>生成规格配置存在 {specErrors.length} 个问题，保存已禁用</span>
+          </div>
+          <ul className="admin-inline-alert-list">
+            {specErrors.map((err, index) => (
+              <li key={`${err.field}-${index}`}>{err.message}</li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -247,27 +274,33 @@ export function SystemConfigPage({
             <div className="admin-card-sub">控制时长、人数、题材和难度如何换算为最低结构与字数。</div>
           </div>
           <div className="admin-card-body">
-            {SPEC_BASE_ROWS.map((row) => (
-              <div className="config-row" key={row.key}>
-                <div className="config-info">
-                  <div className="config-label">{row.label}</div>
-                  <div className="config-desc">{row.desc}</div>
+            {SPEC_BASE_ROWS.map((row) => {
+              const error = findSpecError(specErrors, row.key);
+              return (
+                <div className="config-row" key={row.key}>
+                  <div className="config-info">
+                    <div className="config-label">{row.label}</div>
+                    <div className="config-desc">{row.desc}</div>
+                  </div>
+                  <div className="config-input-group">
+                    <input
+                      className={`input config-number-input${error ? " input-error" : ""}`}
+                      min="0"
+                      step={row.step}
+                      type="number"
+                      value={generationSpec[row.key]}
+                      onChange={(event) =>
+                        setGenerationSpec((current) => ({
+                          ...current,
+                          [row.key]: Number(event.target.value) || 0,
+                        }))
+                      }
+                    />
+                    {error && <div className="config-input-error">{error}</div>}
+                  </div>
                 </div>
-                <input
-                  className="input config-number-input"
-                  min="0"
-                  step={row.step}
-                  type="number"
-                  value={generationSpec[row.key]}
-                  onChange={(event) =>
-                    setGenerationSpec((current) => ({
-                      ...current,
-                      [row.key]: Number(event.target.value) || 0,
-                    }))
-                  }
-                />
-              </div>
-            ))}
+              );
+            })}
 
             <div className="config-subtitle">玩家剧本配置</div>
             <div className="config-row">
@@ -295,19 +328,28 @@ export function SystemConfigPage({
                 <div className="config-label">每名玩家剧本数</div>
                 <div className="config-desc">仅在“自定义每人本数”模式下使用</div>
               </div>
-              <input
-                className="input config-number-input"
-                disabled={generationSpec.characterScriptMode !== "custom"}
-                min="1"
-                type="number"
-                value={generationSpec.customScriptsPerPlayer}
-                onChange={(event) =>
-                  setGenerationSpec((current) => ({
-                    ...current,
-                    customScriptsPerPlayer: Number(event.target.value) || 1,
-                  }))
-                }
-              />
+              <div className="config-input-group">
+                <input
+                  className={`input config-number-input${
+                    findSpecError(specErrors, "customScriptsPerPlayer") ? " input-error" : ""
+                  }`}
+                  disabled={generationSpec.characterScriptMode !== "custom"}
+                  min="1"
+                  type="number"
+                  value={generationSpec.customScriptsPerPlayer}
+                  onChange={(event) =>
+                    setGenerationSpec((current) => ({
+                      ...current,
+                      customScriptsPerPlayer: Number(event.target.value) || 1,
+                    }))
+                  }
+                />
+                {findSpecError(specErrors, "customScriptsPerPlayer") && (
+                  <div className="config-input-error">
+                    {findSpecError(specErrors, "customScriptsPerPlayer")}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="config-subtitle">时长档位</div>
@@ -318,99 +360,136 @@ export function SystemConfigPage({
               <span>生成幕数</span>
               <span>搜证轮次</span>
             </div>
-            {generationSpec.durationBands.map((band, index) => (
-              <div className="spec-band-row" key={`${band.minDuration}-${band.maxDuration}`}>
-                <div className="config-info">
-                  <div className="config-label">
-                    {band.minDuration}-{band.maxDuration} 小时
+            {generationSpec.durationBands.map((band, index) => {
+              const bandField = `durationBands[${index}]`;
+              const minErr = findSpecError(specErrors, `${bandField}.minDuration`);
+              const maxErr = findSpecError(specErrors, `${bandField}.maxDuration`);
+              const actErr = findSpecError(specErrors, `${bandField}.actCount`);
+              const roundErr = findSpecError(specErrors, `${bandField}.searchRoundCount`);
+              const bandErr = findSpecError(specErrors, bandField);
+              const hasBandError = Boolean(minErr || maxErr || actErr || roundErr || bandErr);
+              return (
+                <div
+                  className={`spec-band-row${hasBandError ? " spec-band-row-error" : ""}`}
+                  key={`${band.minDuration}-${band.maxDuration}`}
+                >
+                  <div className="config-info">
+                    <div className="config-label">
+                      {band.minDuration}-{band.maxDuration} 小时
+                    </div>
+                    <div className="config-desc">该范围触发对应规格</div>
+                    {bandErr && <div className="config-input-error">{bandErr}</div>}
                   </div>
-                  <div className="config-desc">该范围触发对应规格</div>
+                  <div className="config-input-group">
+                    <input
+                      aria-label="最小时长"
+                      className={`input spec-number-input${minErr ? " input-error" : ""}`}
+                      min="1"
+                      type="number"
+                      value={band.minDuration}
+                      onChange={(event) => updateDurationBand(index, "minDuration", Number(event.target.value) || 0)}
+                    />
+                    {minErr && <div className="config-input-error">{minErr}</div>}
+                  </div>
+                  <div className="config-input-group">
+                    <input
+                      aria-label="最大时长"
+                      className={`input spec-number-input${maxErr ? " input-error" : ""}`}
+                      min="1"
+                      type="number"
+                      value={band.maxDuration}
+                      onChange={(event) => updateDurationBand(index, "maxDuration", Number(event.target.value) || 0)}
+                    />
+                    {maxErr && <div className="config-input-error">{maxErr}</div>}
+                  </div>
+                  <div className="config-input-group">
+                    <input
+                      aria-label="幕数"
+                      className={`input spec-number-input${actErr ? " input-error" : ""}`}
+                      min="1"
+                      type="number"
+                      value={band.actCount}
+                      onChange={(event) => updateDurationBand(index, "actCount", Number(event.target.value) || 0)}
+                    />
+                    {actErr && <div className="config-input-error">{actErr}</div>}
+                  </div>
+                  <div className="config-input-group">
+                    <input
+                      aria-label="搜证轮次"
+                      className={`input spec-number-input${roundErr ? " input-error" : ""}`}
+                      min="1"
+                      type="number"
+                      value={band.searchRoundCount}
+                      onChange={(event) =>
+                        updateDurationBand(index, "searchRoundCount", Number(event.target.value) || 0)
+                      }
+                    />
+                    {roundErr && <div className="config-input-error">{roundErr}</div>}
+                  </div>
                 </div>
-                <input
-                  aria-label="最小时长"
-                  className="input spec-number-input"
-                  min="1"
-                  type="number"
-                  value={band.minDuration}
-                  onChange={(event) => updateDurationBand(index, "minDuration", Number(event.target.value) || 0)}
-                />
-                <input
-                  aria-label="最大时长"
-                  className="input spec-number-input"
-                  min="1"
-                  type="number"
-                  value={band.maxDuration}
-                  onChange={(event) => updateDurationBand(index, "maxDuration", Number(event.target.value) || 0)}
-                />
-                <input
-                  aria-label="幕数"
-                  className="input spec-number-input"
-                  min="1"
-                  type="number"
-                  value={band.actCount}
-                  onChange={(event) => updateDurationBand(index, "actCount", Number(event.target.value) || 0)}
-                />
-                <input
-                  aria-label="搜证轮次"
-                  className="input spec-number-input"
-                  min="1"
-                  type="number"
-                  value={band.searchRoundCount}
-                  onChange={(event) =>
-                    updateDurationBand(index, "searchRoundCount", Number(event.target.value) || 0)
-                  }
-                />
-              </div>
-            ))}
+              );
+            })}
+            {/*
+              durationBands 整体区间覆盖/空档错误统一在顶部 admin-inline-alert-error 中展示，
+              此处不再重复显示，避免档位行下方重复信息干扰。
+            */}
 
             <div className="config-subtitle">难度系数</div>
             <div className="spec-factor-grid">
-              {DIFFICULTY_SPEC_ROWS.map((row) => (
-                <label className="config-field" key={row.key}>
-                  <span>{row.label}</span>
-                  <input
-                    className="input"
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={generationSpec.difficultyMultipliers[row.key]}
-                    onChange={(event) =>
-                      setGenerationSpec((current) => ({
-                        ...current,
-                        difficultyMultipliers: {
-                          ...current.difficultyMultipliers,
-                          [row.key]: Number(event.target.value) || 0,
-                        },
-                      }))
-                    }
-                  />
-                </label>
-              ))}
+              {DIFFICULTY_SPEC_ROWS.map((row) => {
+                const error = findSpecError(specErrors, `difficultyMultipliers.${row.key}`);
+                return (
+                  <label className="config-field" key={row.key}>
+                    <span>{row.label}</span>
+                    <input
+                      className={`input${error ? " input-error" : ""}`}
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={generationSpec.difficultyMultipliers[row.key]}
+                      onChange={(event) =>
+                        setGenerationSpec((current) => ({
+                          ...current,
+                          difficultyMultipliers: {
+                            ...current.difficultyMultipliers,
+                            [row.key]: Number(event.target.value) || 0,
+                          },
+                        }))
+                      }
+                    />
+                    {error && <div className="config-input-error">{error}</div>}
+                  </label>
+                );
+              })}
             </div>
 
             <div className="config-subtitle">题材系数</div>
             <div className="spec-factor-grid">
-              {GENRE_SPEC_ROWS.map((row) => (
-                <label className="config-field" key={row.key}>
-                  <span>{row.label}</span>
-                  <input
-                    className="input"
-                    min="0"
-                    step="0.01"
-                    type="number"
-                    value={generationSpec.genreMultipliers[row.key]}
-                    onChange={(event) =>
-                      setGenerationSpec((current) => ({
-                        ...current,
-                        genreMultipliers: {
-                          ...current.genreMultipliers,
-                          [row.key]: Number(event.target.value) || 0,
-                        },
-                      }))
-                    }
-                  />
-                </label>
-              ))}
+              {GENRE_SPEC_ROWS.map((row) => {
+                const error = findSpecError(specErrors, `genreMultipliers.${row.key}`);
+                return (
+                  <label className="config-field" key={row.key}>
+                    <span>{row.label}</span>
+                    <input
+                      className={`input${error ? " input-error" : ""}`}
+                      min="0"
+                      step="0.01"
+                      type="number"
+                      value={generationSpec.genreMultipliers[row.key]}
+                      onChange={(event) =>
+                        setGenerationSpec((current) => ({
+                          ...current,
+                          genreMultipliers: {
+                            ...current.genreMultipliers,
+                            [row.key]: Number(event.target.value) || 0,
+                          },
+                        }))
+                      }
+                    />
+                    {error && <div className="config-input-error">{error}</div>}
+                  </label>
+                );
+              })}
             </div>
           </div>
         </section>

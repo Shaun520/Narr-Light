@@ -36,7 +36,6 @@ import {
 } from '@/lib/ai/prompts/timeline-structure';
 import { illustrationWorkflowService } from '@/lib/services/illustration-workflow-service';
 import {
-  GENERATION_CREDIT_COSTS,
   QuotaService,
   type GenerationCreditPhase,
 } from '@/lib/services/quota-service';
@@ -99,10 +98,6 @@ function isMissingTableError(error: { code?: string; message?: string } | null):
 
 function buildError(message: string, status = 500): Response {
   return Response.json({ error: message }, { status });
-}
-
-function isGenerationCreditPhase(phase: string): phase is GenerationCreditPhase {
-  return Object.prototype.hasOwnProperty.call(GENERATION_CREDIT_COSTS, phase);
 }
 
 function getGenerationMode(): GenerationMode {
@@ -1788,44 +1783,7 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
   });
 }
 
-async function proxySupabaseGenerate(
-  request: NextRequest,
-  phase: string,
-  body: GenerateRequestBody,
-): Promise<Response> {
-  const authorization = request.headers.get('authorization');
-  const apikey = request.headers.get('apikey') ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!authorization) {
-    return buildError('Missing authorization header', 401);
-  }
-
-  if (!apikey) {
-    return buildError('Missing Supabase anon key', 500);
-  }
-
-  const upstream = await fetch(`${SUPABASE_URL}/functions/v1/generate/${phase}`, {
-    method: 'POST',
-    headers: {
-      Authorization: authorization,
-      apikey,
-      'Content-Type': 'application/json',
-      Accept: request.headers.get('accept') ?? 'text/event-stream',
-    },
-    body: JSON.stringify(body),
-  });
-
-  return new Response(upstream.body, {
-    status: upstream.status,
-    statusText: upstream.statusText,
-    headers: {
-      'Content-Type': upstream.headers.get('content-type') ?? 'text/event-stream; charset=utf-8',
-      'Cache-Control': upstream.headers.get('cache-control') ?? 'no-cache, no-transform',
-    },
-  });
-}
-
-async function resolveRequestUserId(request: NextRequest): Promise<string | null> {
+async function resolveAuthenticatedUser(request: NextRequest): Promise<{ id: string; isBanned: boolean } | null> {
   const authorization = request.headers.get('authorization');
   const token = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -1840,14 +1798,41 @@ async function resolveRequestUserId(request: NextRequest): Promise<string | null
     const {
       data: { user },
     } = await supabase.auth.getUser(token);
-    if (user) return user.id;
+    if (user) {
+      const isBanned = await checkUserBanned(user.id);
+      return { id: user.id, isBanned };
+    }
   }
 
   const supabase = await createServerSupabaseClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  if (!user) return null;
+  const isBanned = await checkUserBanned(user.id);
+  return { id: user.id, isBanned };
+}
+
+/**
+ * 查询用户封禁状态。
+ * admin 端可通过 users.is_banned 字段封禁用户，封禁后应阻止新的生成请求。
+ * 由于此 API 在用户 JWT 上下文中运行（不能直接读 users 表的 RLS），
+ * 使用 service role client 绕过 RLS 读取 is_banned 字段。
+ */
+async function checkUserBanned(userId: string): Promise<boolean> {
+  const supabase = await createGenerationDbClient();
+  const { data, error } = await supabase
+    .from('users')
+    .select('is_banned')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !data) {
+    // 查询失败时保守处理：不阻断（避免 DB 故障导致所有用户无法生成）
+    // 但记录告警便于后续排查
+    console.warn(`Failed to check is_banned for user ${userId}: ${error?.message ?? 'no row'}`);
+    return false;
+  }
+  return data.is_banned === true;
 }
 
 async function wrapMeteredSseResponse(
@@ -1937,10 +1922,15 @@ async function runMeteredGeneration(
   body: GenerateRequestBody,
   execute: () => Promise<Response>,
 ): Promise<Response> {
-  const userId = await resolveRequestUserId(request);
-  if (!userId) {
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
     return buildError('未登录或登录状态已失效', 401);
   }
+  // admin 端封禁用户后阻止新的生成请求；token 失效前已签发的请求也会被拦截
+  if (user.isBanned) {
+    return buildError('账号已被封禁，无法生成剧本', 403);
+  }
+  const userId = user.id;
 
   const quotaService = new QuotaService();
   const charge = await quotaService.consumeGenerationPhase(userId, phase, body.scriptId);
@@ -2049,12 +2039,8 @@ export async function POST(
     return runMeteredGeneration(request, phase, body, () => handleTimelineStructureMock(body));
   }
 
-  const body: unknown = await request.json().catch(() => null);
-  if (!validateBody(body)) {
-    return buildError('Invalid parameters', 400);
-  }
-  if (isGenerationCreditPhase(phase)) {
-    return runMeteredGeneration(request, phase, body, () => proxySupabaseGenerate(request, phase, body));
-  }
-  return proxySupabaseGenerate(request, phase, body);
+  // 未知阶段：早期通过 proxySupabaseGenerate 兜底代理到 Supabase Edge Function，
+  // 但分阶段编排上线后所有已知 phase 都已分支处理，Edge Function 已废弃移除，
+  // 未知 phase 直接返回 404，避免静默调用不存在的上游。
+  return buildError(`Unknown generation phase: ${phase}`, 404);
 }

@@ -11,6 +11,7 @@ export type AdminGenerationTaskFilters = {
   taskType?: "all" | string;
   selectedTaskId?: string;
   selectedScriptId?: string;
+  page?: number;
 };
 
 export type AdminGenerationTaskScript = {
@@ -86,6 +87,13 @@ type TaskRecord = {
   created_at: string;
 };
 
+type GenerationTaskStatsRpc = {
+  running: number | null;
+  completed: number | null;
+  failed: number | null;
+  charged_credits: number | null;
+};
+
 type ScriptRecord = {
   id: string;
   title: string;
@@ -122,6 +130,9 @@ export async function getAdminGenerationTasks(
   const matchedScriptIds = keyword ? await getMatchingScriptIds(keyword) : [];
   const matchedAuthorScriptIds = keyword ? await getMatchingAuthorScriptIds(keyword) : [];
   const matchedIds = [...new Set([...matchedScriptIds, ...matchedAuthorScriptIds])];
+  const page = Math.max(1, filters.page ?? 1);
+  const rangeFrom = (page - 1) * PAGE_SIZE;
+  const rangeTo = rangeFrom + PAGE_SIZE - 1;
 
   let query = supabase
     .from("generation_tasks")
@@ -130,7 +141,7 @@ export async function getAdminGenerationTasks(
       { count: "exact" },
     )
     .order("created_at", { ascending: false })
-    .range(0, PAGE_SIZE - 1);
+    .range(rangeFrom, rangeTo);
 
   query = applyFilters(query, filters, keyword, matchedIds);
 
@@ -260,6 +271,40 @@ async function buildStats(
   keyword: string,
   matchedScriptIds: string[],
 ) {
+  // 优先调用 RPC admin_get_generation_task_stats 一次 SQL 聚合返回 4 个指标，
+  // 替代原来 3 次 count + 1 次 select+reduce 的 4 次查询方案。
+  // RPC 缺失（migration 024 未应用）时回退到原方案，保证向前兼容。
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) return { running: 0, completed: 0, failed: 0, chargedCredits: 0 };
+
+  const rpcParams = {
+    p_task_type: filters.taskType && filters.taskType !== "all" ? filters.taskType : null,
+    p_script_id: filters.selectedScriptId ?? null,
+    p_q: keyword || null,
+    p_matched_script_ids: matchedScriptIds.length > 0 ? matchedScriptIds : null,
+  };
+
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc("admin_get_generation_task_stats", rpcParams)
+    .maybeSingle();
+
+  if (!rpcError && rpcData) {
+    const stats = rpcData as unknown as GenerationTaskStatsRpc;
+    return {
+      running: Number(stats.running ?? 0),
+      completed: Number(stats.completed ?? 0),
+      failed: Number(stats.failed ?? 0),
+      chargedCredits: Number(stats.charged_credits ?? 0),
+    };
+  }
+
+  // 回退方案：migration 024 未应用时使用原 4 次查询
+  if (rpcError) {
+    console.warn(
+      `[generation-tasks] RPC admin_get_generation_task_stats 失败，回退到 4 次查询方案：${rpcError.message}。请应用 supabase/migrations/024_admin_task_stats_rpc.sql。`,
+    );
+  }
+
   const [running, completed, failed, chargedCredits] = await Promise.all([
     countRows({ ...filters, status: "running" }, keyword, matchedScriptIds),
     countRows({ ...filters, status: "completed" }, keyword, matchedScriptIds),

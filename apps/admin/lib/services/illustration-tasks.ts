@@ -13,6 +13,7 @@ export type AdminIllustrationTaskFilters = {
   quality?: "all" | IllustrationQualityStatus;
   model?: string;
   selectedTaskId?: string;
+  page?: number;
 };
 
 export type AdminIllustrationTaskRow = {
@@ -125,6 +126,13 @@ type AssetRecord = {
   progress: number | null;
 };
 
+type IllustrationTaskStatsRpc = {
+  running: number | null;
+  completed: number | null;
+  unchecked: number | null;
+  failed: number | null;
+};
+
 const PAGE_SIZE = 20;
 const TASK_SELECT_WITH_QUALITY =
   "id,script_id,asset_id,market_item_id,task_key,task_type,source_type,source_id,title,subtitle,prompt,status,progress_percent,sort_order,selected_model,selected_ratio,selected_count,result_image_url,error_message,quality_status,quality_message,started_at,completed_at,created_at,updated_at";
@@ -186,12 +194,13 @@ export async function getAdminIllustrationTasks(
 
   const rows = data ?? [];
   const tasks = await hydrateTasks(rows);
+  const stats = await buildStats(filters, keyword, matchingScriptIds, tasks);
 
   return {
     tasks,
     total: count ?? tasks.length,
     selectedTask: resolveSelectedTask(tasks, filters.selectedTaskId),
-    stats: composeStats(tasks),
+    stats,
     error: hasQualityColumns
       ? undefined
       : "当前数据库未应用插画质检迁移，质检状态已临时按“未检查”展示。",
@@ -214,11 +223,15 @@ async function queryTasks(
     };
   }
 
+  const page = Math.max(1, filters.page ?? 1);
+  const rangeFrom = (page - 1) * PAGE_SIZE;
+  const rangeTo = rangeFrom + PAGE_SIZE - 1;
+
   let query = supabase
     .from("illustration_tasks")
     .select(includeQualityColumns ? TASK_SELECT_WITH_QUALITY : TASK_SELECT_BASE, { count: "exact" })
     .order("updated_at", { ascending: false })
-    .range(0, PAGE_SIZE - 1);
+    .range(rangeFrom, rangeTo);
 
   if (filters.status && filters.status !== "all") {
     query = query.eq("status", filters.status);
@@ -413,6 +426,49 @@ function resolveSelectedTask(tasks: AdminIllustrationTaskRow[], selectedTaskId?:
   }
 
   return tasks.find((task) => task.id === selectedTaskId) ?? tasks[0] ?? null;
+}
+
+async function buildStats(
+  filters: AdminIllustrationTaskFilters,
+  keyword: string,
+  matchingScriptIds: string[],
+  currentPageTasks: AdminIllustrationTaskRow[],
+): Promise<AdminIllustrationTaskStats> {
+  // 优先调用 RPC admin_get_illustration_task_stats 一次 SQL 聚合返回 4 个指标，
+  // 替代原来 composeStats 基于当前页 20 条 reduce 的方案（统计值不准确）。
+  // RPC 缺失（migration 024 未应用）时回退到当前页 reduce，保证向前兼容。
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) return composeStats(currentPageTasks);
+
+  const rpcParams = {
+    p_task_type: filters.taskType && filters.taskType !== "all" ? filters.taskType : null,
+    p_quality_status: filters.quality && filters.quality !== "all" ? filters.quality : null,
+    p_selected_model: filters.model && filters.model !== "all" ? filters.model : null,
+    p_q: keyword || null,
+    p_matched_script_ids: matchingScriptIds.length > 0 ? matchingScriptIds : null,
+  };
+
+  const { data: rpcData, error: rpcError } = await supabase
+    .rpc("admin_get_illustration_task_stats", rpcParams)
+    .maybeSingle();
+
+  if (!rpcError && rpcData) {
+    const stats = rpcData as unknown as IllustrationTaskStatsRpc;
+    return {
+      running: Number(stats.running ?? 0),
+      completed: Number(stats.completed ?? 0),
+      unchecked: Number(stats.unchecked ?? 0),
+      failed: Number(stats.failed ?? 0),
+    };
+  }
+
+  if (rpcError) {
+    console.warn(
+      `[illustration-tasks] RPC admin_get_illustration_task_stats 失败，回退到当前页 reduce：${rpcError.message}。请应用 supabase/migrations/024_admin_task_stats_rpc.sql。`,
+    );
+  }
+
+  return composeStats(currentPageTasks);
 }
 
 function composeStats(tasks: AdminIllustrationTaskRow[]): AdminIllustrationTaskStats {

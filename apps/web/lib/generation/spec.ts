@@ -88,11 +88,14 @@ export const DEFAULT_GENERATION_SPEC_CONFIG: GenerationSpecConfig = {
   minScenesPerAct: 3,
   minCluesPerRoundBase: 4,
   playerClueRatio: 0.8,
+  // 相邻档位边界相接（minDuration == 上一档 maxDuration），确保 [2, 8] 实数区间无盲区。
+  // buildGenerationSpecWithConfig 用 find(min<=d<=max) 查找档位，若存在空档会回退到第一档，
+  // 导致 admin 端配置改动不生效。校验函数 validateGenerationSpecConfig 会强制此约束。
   durationBands: [
     { minDuration: 2, maxDuration: 3, actCount: 3, searchRoundCount: 3 },
-    { minDuration: 4, maxDuration: 5, actCount: 4, searchRoundCount: 4 },
-    { minDuration: 6, maxDuration: 7, actCount: 5, searchRoundCount: 5 },
-    { minDuration: 8, maxDuration: 8, actCount: 6, searchRoundCount: 6 },
+    { minDuration: 3, maxDuration: 5, actCount: 4, searchRoundCount: 4 },
+    { minDuration: 5, maxDuration: 7, actCount: 5, searchRoundCount: 5 },
+    { minDuration: 7, maxDuration: 8, actCount: 6, searchRoundCount: 6 },
   ],
   difficultyMultipliers: {
     beginner: 0.85,

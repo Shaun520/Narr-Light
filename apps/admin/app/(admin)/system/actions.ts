@@ -10,6 +10,7 @@ import type {
   QuotaDefaultsConfig,
   TextProviderConfig,
 } from "@narrlight/shared";
+import { validateGenerationSpecConfig } from "@narrlight/shared";
 
 export type SaveSystemConfigResult = {
   error?: string;
@@ -44,6 +45,16 @@ export async function saveSystemConfig(
       payload = JSON.parse(payloadRaw) as SavePayload;
     } catch {
       return { error: "配置数据格式异常，无法解析 JSON" };
+    }
+
+    // 服务端防御性校验：前端禁用保存可被绕过（直接构造 FormData 提交），
+    // 此处必须再校验一次 generationSpec，避免不合规配置写入 system_configs
+    // 导致 buildGenerationSpecWithConfig 回退默认档位或字数为 0。
+    const specErrors = validateGenerationSpecConfig(payload.generationSpec);
+    if (specErrors.length > 0) {
+      return {
+        error: `生成规格配置校验失败：${specErrors[0].message}`,
+      };
     }
 
     const entries = [

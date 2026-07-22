@@ -84,7 +84,9 @@ export function AdminTable({
           </tbody>
         </table>
       </div>
-      <Pagination total={total} />
+      <div className="pagination">
+        <span className="page-total">{total}</span>
+      </div>
     </>
   );
 }
@@ -277,25 +279,80 @@ export function SaveButton() {
   );
 }
 
-function Pagination({ total }: { total: string }) {
+/**
+ * 分页组件。
+ * 基于 searchParams 生成页码链接，保留其他筛选参数；Server Component 友好。
+ * baseHref: 不含 page 参数的查询字符串前缀，如 "/tasks/generation?q=foo&status=failed"
+ * total: 总条数；page: 当前页（1-based）；pageSize: 每页条数
+ */
+export function Pagination({
+  baseHref,
+  total,
+  page,
+  pageSize,
+}: {
+  baseHref: string;
+  total: number;
+  page: number;
+  pageSize: number;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(Math.max(1, page), totalPages);
+  if (total === 0) return null;
+
+  const pageHref = (p: number) => {
+    const separator = baseHref.includes("?") ? "&" : "?";
+    return `${baseHref}${separator}page=${p}`;
+  };
+
+  // 生成页码：始终显示首页、末页、当前页前后 2 页，省略号用 … 占位
+  const pageNumbers: Array<number | "ellipsis"> = [];
+  const add = (p: number | "ellipsis") => pageNumbers.push(p);
+  add(1);
+  if (currentPage - 2 > 2) add("ellipsis");
+  for (let p = Math.max(2, currentPage - 1); p <= Math.min(totalPages - 1, currentPage + 1); p++) {
+    add(p);
+  }
+  if (currentPage + 2 < totalPages - 1) add("ellipsis");
+  if (totalPages > 1) add(totalPages);
+
+  const from = (currentPage - 1) * pageSize + 1;
+  const to = Math.min(currentPage * pageSize, total);
+
   return (
     <div className="pagination">
-      <span className="page-total">{total}</span>
-      <button className="page-btn" type="button">
-        ‹
-      </button>
-      <button className="page-btn active" type="button">
-        1
-      </button>
-      <button className="page-btn" type="button">
-        2
-      </button>
-      <button className="page-btn" type="button">
-        3
-      </button>
-      <button className="page-btn" type="button">
-        ›
-      </button>
+      <span className="page-total">
+        共 {total.toLocaleString("zh-CN")} 条，当前显示 {from.toLocaleString("zh-CN")}-
+        {to.toLocaleString("zh-CN")} 条
+      </span>
+      <div className="page-btns">
+        {currentPage > 1 && (
+          <a className="page-btn" href={pageHref(currentPage - 1)} aria-label="上一页">
+            ‹
+          </a>
+        )}
+        {pageNumbers.map((p, index) =>
+          p === "ellipsis" ? (
+            <span className="page-ellipsis" key={`ellipsis-${index}`}>
+              …
+            </span>
+          ) : (
+            <a
+              aria-current={p === currentPage ? "page" : undefined}
+              className={`page-btn${p === currentPage ? " active" : ""}`}
+              href={pageHref(p)}
+              key={p}
+            >
+              {p}
+            </a>
+          ),
+        )}
+        {currentPage < totalPages && (
+          <a className="page-btn" href={pageHref(currentPage + 1)} aria-label="下一页">
+            ›
+          </a>
+        )}
+      </div>
     </div>
   );
 }
