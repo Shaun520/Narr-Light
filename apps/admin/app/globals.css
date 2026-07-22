@@ -344,6 +344,11 @@ a {
   color: #fff;
 }
 
+.admin-btn.danger {
+  border-color: #ffccc7;
+  color: var(--admin-error);
+}
+
 .admin-btn:hover {
   border-color: var(--admin-primary-hover);
   color: var(--admin-primary-hover);
@@ -352,6 +357,12 @@ a {
 .admin-btn.primary:hover {
   color: #fff;
   background: var(--admin-primary-hover);
+}
+
+.admin-btn.danger:hover {
+  border-color: var(--admin-error);
+  background: #fff2f0;
+  color: var(--admin-error);
 }
 
 .input,
@@ -789,7 +800,8 @@ a {
 }
 
 .table-wrap {
-  overflow-x: auto;
+  max-height: min(560px, calc(100vh - 300px));
+  overflow: auto;
 }
 
 .table {
@@ -799,6 +811,9 @@ a {
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   padding: 12px 16px;
   background: #fafafa;
   border-bottom: 1px solid var(--admin-border);
@@ -831,6 +846,28 @@ a {
   height: 160px;
   color: var(--admin-text-secondary);
   text-align: center;
+}
+
+.audit-reason-cell {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.audit-payload {
+  max-height: 260px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  background: #fafafa;
+  color: var(--admin-text);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .tag {
