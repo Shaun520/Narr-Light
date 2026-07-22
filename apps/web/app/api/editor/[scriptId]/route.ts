@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { VersionService } from '@/lib/services/version-service';
 import {
   deleteVersionResponse,
   getVersionPreviewResponse,
@@ -28,6 +27,12 @@ interface EditorVersionItem {
   time: string;
   note: string;
   isCurrent?: boolean;
+}
+
+interface VersionSnapshotListRow {
+  version_number: number;
+  change_summary: string | null;
+  created_at: string;
 }
 
 function escapeHtml(value: unknown): string {
@@ -96,12 +101,19 @@ function formatVersionTime(createdAt: string): string {
 }
 
 async function loadVersions(supabase: SupabaseClient, scriptId: string): Promise<EditorVersionItem[]> {
-  const snapshots = await new VersionService(supabase).getSnapshots(scriptId);
-  return snapshots.map((snapshot, index) => ({
-    version: `v${snapshot.versionNumber}`,
-    versionNumber: snapshot.versionNumber,
-    time: formatVersionTime(snapshot.createdAt),
-    note: snapshot.changeSummary || snapshot.operationType,
+  const { data, error } = await supabase
+    .from('version_snapshots')
+    .select('version_number, change_summary, created_at')
+    .eq('script_id', scriptId)
+    .order('version_number', { ascending: false });
+
+  if (error) throw new Error(`获取版本列表失败: ${error.message}`);
+
+  return ((data ?? []) as VersionSnapshotListRow[]).map((snapshot, index) => ({
+    version: `v${snapshot.version_number}`,
+    versionNumber: snapshot.version_number,
+    time: formatVersionTime(snapshot.created_at),
+    note: snapshot.change_summary || '保存版本',
     isCurrent: index === 0,
   }));
 }
