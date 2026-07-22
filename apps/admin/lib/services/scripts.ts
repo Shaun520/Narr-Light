@@ -12,7 +12,16 @@ export type AdminScriptListFilters = {
 
 export type ScriptGenre = "hardcore" | "emotion" | "horror" | "funny" | "mechanism";
 export type ScriptDifficulty = "beginner" | "intermediate" | "advanced" | "expert";
-export type ScriptStatus = "draft" | "generating" | "completed" | "archived";
+// 状态值需与 supabase/migrations/025_scripts_status_review.sql 中 scripts_status_check 约束保持一致
+export type ScriptStatus =
+  | "draft"
+  | "generating"
+  | "completed"
+  | "archived"
+  | "reviewing"
+  | "approved"
+  | "rejected"
+  | "taken_down";
 export type TaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
 export type AdminScriptAuthor = {

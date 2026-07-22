@@ -13,6 +13,7 @@ import type {
 } from "@narrlight/shared";
 import type { AdminUser } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { headers } from "next/headers";
 
 // 默认配置：与 supabase/migrations/014_system_configs.sql 保持一致
 const DEFAULT_TEXT_CONFIG: TextProviderConfig = {
@@ -53,11 +54,13 @@ const DEFAULT_GENERATION_SPEC: GenerationSpecConfig = {
   minScenesPerAct: 3,
   minCluesPerRoundBase: 4,
   playerClueRatio: 0.8,
+  // 相邻档位边界相接（minDuration == 上一档 maxDuration），确保 [2, 8] 实数区间无盲区。
+  // 与 apps/web/lib/generation/spec.ts 中 DEFAULT_GENERATION_SPEC_CONFIG 保持一致。
   durationBands: [
     { minDuration: 2, maxDuration: 3, actCount: 3, searchRoundCount: 3 },
-    { minDuration: 4, maxDuration: 5, actCount: 4, searchRoundCount: 4 },
-    { minDuration: 6, maxDuration: 7, actCount: 5, searchRoundCount: 5 },
-    { minDuration: 8, maxDuration: 8, actCount: 6, searchRoundCount: 6 },
+    { minDuration: 3, maxDuration: 5, actCount: 4, searchRoundCount: 4 },
+    { minDuration: 5, maxDuration: 7, actCount: 5, searchRoundCount: 5 },
+    { minDuration: 7, maxDuration: 8, actCount: 6, searchRoundCount: 6 },
   ],
   difficultyMultipliers: {
     beginner: 0.85,
@@ -222,7 +225,15 @@ export async function updateSystemConfig(
     .maybeSingle();
   const previous = (existingRow as { value?: unknown } | null)?.value ?? null;
 
-  // 2. upsert 写入新值
+  // 2. 获取请求头信息用于审计日志
+  // next/headers 在 server-only 模块中可用，需 await（Next.js 15+ async API）
+  const requestHeaders = await headers();
+  const clientIp = requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+  const userAgent = requestHeaders.get("user-agent");
+
+  // 3. upsert 写入新值
+  // updated_by 写入 admin.id（migration 026 已把 updated_by 放宽为 VARCHAR(60)，
+  // 不再是 auth.users(id) 外键，因此可以写入 admin 端的字符串 id）
   const { error: upsertError } = await supabase
     .from("system_configs")
     .upsert(
@@ -230,7 +241,7 @@ export async function updateSystemConfig(
         key,
         value: value as never,
         description: CONFIG_DESCRIPTIONS[key],
-        updated_by: null,
+        updated_by: admin.id,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "key" },
@@ -240,7 +251,7 @@ export async function updateSystemConfig(
     return { ok: false, error: `更新 system_configs 失败：${upsertError.message}` };
   }
 
-  // 3. 写审计日志
+  // 4. 写审计日志（补齐 ip / user_agent，与其它 admin 写操作保持一致）
   const { error: auditError } = await supabase.from("admin_audit_logs").insert({
     admin_id: admin.id,
     action: `system.config.update`,
@@ -248,6 +259,8 @@ export async function updateSystemConfig(
     target_id: key,
     payload: { before: previous, after: value },
     reason: trimmedReason,
+    ip: clientIp,
+    user_agent: userAgent,
     created_at: new Date().toISOString(),
   });
 

@@ -1,10 +1,15 @@
 import Link from "next/link";
 import {
+  AdminGenerationTaskCancelButton,
+  AdminGenerationTaskRetryButton,
+} from "@/components/admin-task-actions";
+import {
   AdminGenerationTaskDeleteButton,
   AdminGenerationTaskDeleteForm,
   AdminGenerationTaskSelectAllCheckbox,
 } from "@/components/admin-generation-task-delete-form";
-import { DetailPreview, PageHeader, RefreshButton, StatGrid, Tag, UserCell } from "@/components/admin-static";
+import { DetailPreview, PageHeader, Pagination, RefreshButton, StatGrid, Tag, UserCell } from "@/components/admin-static";
+import { JsonPreview } from "@/components/json-preview";
 import {
   getAdminGenerationTasks,
   type AdminGenerationTaskFilters,
@@ -13,12 +18,17 @@ import {
   type GenerationTaskStatus,
 } from "@/lib/services/generation-tasks";
 
+const DELETE_FORM_ID = "admin-generation-task-delete-form";
+
+const PAGE_SIZE = 20;
+
 type SearchParams = {
   q?: string;
   status?: string;
   type?: string;
   taskId?: string;
   scriptId?: string;
+  page?: string;
 };
 
 type NormalizedFilters = AdminGenerationTaskFilters & {
@@ -103,104 +113,120 @@ export default async function GenerationTasksPage({
             </div>
           )}
 
-          <AdminGenerationTaskDeleteForm returnTo={buildGenerationReturnHref(filters)}>
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th className="table-checkbox-cell">
-                      <AdminGenerationTaskSelectAllCheckbox />
-                    </th>
-                    <th>任务 / 剧本</th>
-                    <th>作者</th>
-                    <th>类型</th>
-                    <th>状态</th>
-                    <th>进度</th>
-                    <th>扣费</th>
-                    <th>质量</th>
-                    <th>开始时间</th>
-                    <th>操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {result.tasks.map((task) => (
-                    <tr
-                      className={task.id === result.selectedTask?.id ? "table-row-selected" : ""}
-                      key={task.id}
-                    >
-                      <td className="table-checkbox-cell">
-                        <input
-                          aria-label={`选择生成任务 ${shortId(task.id)}`}
-                          className="table-checkbox"
-                          name="taskIds"
-                          type="checkbox"
-                          value={task.id}
+          <AdminGenerationTaskDeleteForm returnTo={buildGenerationReturnHref(filters)} />
+
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th className="table-checkbox-cell">
+                    <AdminGenerationTaskSelectAllCheckbox />
+                  </th>
+                  <th>任务 / 剧本</th>
+                  <th>作者</th>
+                  <th>类型</th>
+                  <th>状态</th>
+                  <th>进度</th>
+                  <th>扣费</th>
+                  <th>质量</th>
+                  <th>开始时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.tasks.map((task) => (
+                  <tr
+                    className={task.id === result.selectedTask?.id ? "table-row-selected" : ""}
+                    key={task.id}
+                  >
+                    <td className="table-checkbox-cell">
+                      <input
+                        aria-label={`选择生成任务 ${shortId(task.id)}`}
+                        className="table-checkbox"
+                        form={DELETE_FORM_ID}
+                        name="taskIds"
+                        type="checkbox"
+                        value={task.id}
+                      />
+                    </td>
+                    <td>
+                      <div>
+                        <b>{shortId(task.id)}</b>
+                        <div className="placeholder-meta">
+                          {task.script?.title ?? "剧本不存在"} / {shortId(task.scriptId)}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      {task.author ? (
+                        <UserCell
+                          avatar={avatarText(task)}
+                          name={task.author.nickname}
+                          sub={task.author.email || shortId(task.author.id)}
                         />
-                      </td>
-                      <td>
-                        <div>
-                          <b>{shortId(task.id)}</b>
-                          <div className="placeholder-meta">
-                            {task.script?.title ?? "剧本不存在"} / {shortId(task.scriptId)}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        {task.author ? (
-                          <UserCell
-                            avatar={avatarText(task)}
-                            name={task.author.nickname}
-                            sub={task.author.email || shortId(task.author.id)}
+                      ) : (
+                        <span className="placeholder-meta">作者不存在</span>
+                      )}
+                    </td>
+                    <td>{taskTypeTag(task.taskType)}</td>
+                    <td>{statusTag(task.status)}</td>
+                    <td>{task.progressPercent}%</td>
+                    <td>
+                      {task.chargedCredits}
+                      {task.refundCredits > 0 ? ` / 退 ${task.refundCredits}` : ""}
+                    </td>
+                    <td>{qualityTag(task.qualityStatus)}</td>
+                    <td>{task.startedAt ? formatDateTime(task.startedAt) : "未开始"}</td>
+                    <td>
+                      <div className="row-actions">
+                        <Link className="link-btn" href={buildTaskHref(filters, task.id)}>
+                          详情
+                        </Link>
+                        {task.status === "failed" && (
+                          <AdminGenerationTaskRetryButton
+                            returnTo={buildGenerationReturnHref(filters)}
+                            taskId={task.id}
                           />
-                        ) : (
-                          <span className="placeholder-meta">作者不存在</span>
                         )}
-                      </td>
-                      <td>{taskTypeTag(task.taskType)}</td>
-                      <td>{statusTag(task.status)}</td>
-                      <td>{task.progressPercent}%</td>
-                      <td>
-                        {task.chargedCredits}
-                        {task.refundCredits > 0 ? ` / 退 ${task.refundCredits}` : ""}
-                      </td>
-                      <td>{qualityTag(task.qualityStatus)}</td>
-                      <td>{task.startedAt ? formatDateTime(task.startedAt) : "未开始"}</td>
-                      <td>
-                        <div className="row-actions">
-                          <Link className="link-btn" href={buildTaskHref(filters, task.id)}>
-                            详情
+                        {(task.status === "pending" || task.status === "running") && (
+                          <AdminGenerationTaskCancelButton
+                            returnTo={buildGenerationReturnHref(filters)}
+                            taskId={task.id}
+                          />
+                        )}
+                        {task.script && (
+                          <Link className="link-btn" href={`/scripts?scriptId=${task.script.id}`}>
+                            剧本
                           </Link>
-                          {task.script && (
-                            <Link className="link-btn" href={`/scripts?scriptId=${task.script.id}`}>
-                              剧本
-                            </Link>
-                          )}
-                          {task.author && (
-                            <Link className="link-btn" href={`/users?userId=${task.author.id}`}>
-                              作者
-                            </Link>
-                          )}
-                          <AdminGenerationTaskDeleteButton taskId={task.id} />
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                  {result.tasks.length === 0 && (
-                    <tr>
-                      <td className="table-empty" colSpan={10}>
-                        暂无匹配生成任务
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </AdminGenerationTaskDeleteForm>
+                        )}
+                        {task.author && (
+                          <Link className="link-btn" href={`/users?userId=${task.author.id}`}>
+                            作者
+                          </Link>
+                        )}
+                        <AdminGenerationTaskDeleteButton taskId={task.id} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {result.tasks.length === 0 && (
+                  <tr>
+                    <td className="table-empty" colSpan={10}>
+                      暂无匹配生成任务
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
           <div className="pagination">
-            <span className="page-total">
-              共 {result.total.toLocaleString("zh-CN")} 条，当前显示 {result.tasks.length} 条
-            </span>
+            <Pagination
+              baseHref={buildGenerationBaseHref(filters)}
+              page={filters.page ?? 1}
+              pageSize={PAGE_SIZE}
+              total={result.total}
+            />
           </div>
         </section>
 
@@ -238,8 +264,8 @@ function TaskDetail({ task }: { task: AdminGenerationTaskRow | null }) {
         ["重试", `${task.retryCount} / ${task.maxRetries}${task.retryOfTaskId ? `，源任务 ${shortId(task.retryOfTaskId)}` : ""}`],
         ["失败原因", task.failureReason || task.errorMessage || "无"],
         ["用户反馈", task.userFeedback || "无"],
-        ["参数", compactJson(task.params)],
-        ["结果", compactJson(task.resultData)],
+        ["参数", <JsonPreview key="params" value={task.params} />],
+        ["结果", <JsonPreview key="result" value={task.resultData} />],
         ["开始时间", task.startedAt ? formatDateTime(task.startedAt) : "未开始"],
         ["完成时间", task.completedAt ? formatDateTime(task.completedAt) : "未完成"],
         ["创建时间", formatDateTime(task.createdAt)],
@@ -249,13 +275,27 @@ function TaskDetail({ task }: { task: AdminGenerationTaskRow | null }) {
 }
 
 function normalizeFilters(params: SearchParams): NormalizedFilters {
+  const page = params.page ? Math.max(1, Math.floor(Number(params.page) || 1)) : 1;
   return {
     q: params.q?.trim() ?? "",
     status: isTaskStatus(params.status) ? params.status : "all",
     taskType: params.type?.trim() || "all",
     selectedTaskId: params.taskId,
     selectedScriptId: isUuid(params.scriptId) ? params.scriptId : undefined,
+    page,
   };
+}
+
+/** 构造分页基础链接：保留筛选参数，但排除 page（由 Pagination 组件追加） */
+function buildGenerationBaseHref(filters: ReturnType<typeof normalizeFilters>): string {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.status !== "all") params.set("status", filters.status);
+  if (filters.taskType !== "all") params.set("type", filters.taskType);
+  if (filters.selectedScriptId) params.set("scriptId", filters.selectedScriptId);
+  if (filters.selectedTaskId) params.set("taskId", filters.selectedTaskId);
+  const query = params.toString();
+  return query ? `/tasks/generation?${query}` : "/tasks/generation";
 }
 
 function buildTaskHref(filters: ReturnType<typeof normalizeFilters>, taskId: string) {
@@ -336,16 +376,6 @@ function qualityTag(status: GenerationTaskQualityStatus) {
 
 function avatarText(task: AdminGenerationTaskRow) {
   return (task.author?.nickname || task.author?.email || "作").slice(0, 1).toUpperCase();
-}
-
-function compactJson(value: unknown) {
-  if (!value) return "无";
-  try {
-    const text = JSON.stringify(value);
-    return text.length > 240 ? `${text.slice(0, 240)}...` : text;
-  } catch {
-    return "无法序列化";
-  }
 }
 
 function shortId(id: string) {

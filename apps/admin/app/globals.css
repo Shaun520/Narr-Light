@@ -848,6 +848,35 @@ a {
   padding: 20px;
 }
 
+/* 剧本审核状态变更表单 */
+.script-status-card {
+  margin-top: 16px;
+}
+
+.script-status-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.script-status-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.script-status-label {
+  min-width: 70px;
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+}
+
+.script-status-form-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .toolbar {
   padding: 16px 20px;
   border-bottom: 1px solid var(--admin-border);
@@ -1072,14 +1101,21 @@ a {
   border-top: 1px solid var(--admin-border);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .page-total {
-  margin-right: 12px;
   color: var(--admin-text-secondary);
   font-size: 13px;
+}
+
+.page-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 .page-btn {
@@ -1090,9 +1126,87 @@ a {
   border-radius: 6px;
   background: #fff;
   color: var(--admin-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.page-btn:hover {
+  border-color: var(--admin-primary);
+  color: var(--admin-primary);
 }
 
 .page-btn.active {
+  border-color: var(--admin-primary);
+  background: var(--admin-primary);
+  color: #fff;
+  pointer-events: none;
+}
+
+.page-ellipsis {
+  min-width: 24px;
+  text-align: center;
+  color: var(--admin-text-secondary);
+  user-select: none;
+}
+
+/* JSON 预览组件：折叠/展开完整 JSON 内容 */
+.json-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.json-preview-empty {
+  color: var(--admin-text-secondary);
+}
+
+.json-preview-label {
+  font-size: 12px;
+  color: var(--admin-text-secondary);
+}
+
+.json-preview-text {
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--admin-bg-muted, #fafafa);
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--admin-text);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 80px;
+  overflow: hidden;
+  position: relative;
+}
+
+.json-preview-text.json-preview-expanded {
+  max-height: 480px;
+  overflow-y: auto;
+}
+
+.json-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--admin-primary);
+  font-size: 12px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.json-preview-toggle:hover {
   border-color: var(--admin-primary);
   background: var(--admin-primary);
   color: #fff;
@@ -1286,6 +1400,63 @@ a {
 
 .config-field .input {
   width: 100%;
+}
+
+/* 校验错误相关样式：输入框红框、错误提示文本、错误汇总条 */
+.input-error {
+  border-color: #ff4d4f !important;
+  background: #fff1f0;
+}
+
+.input-error:focus {
+  border-color: #ff7875 !important;
+  box-shadow: 0 0 0 2px rgba(255, 77, 79, 0.15);
+}
+
+.config-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.config-input-error {
+  font-size: 11px;
+  line-height: 1.4;
+  color: #cf1322;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.spec-band-row-error {
+  background: #fff1f0;
+  border-radius: 4px;
+}
+
+.admin-inline-alert-error {
+  border-color: #ffa39e;
+  background: #fff1f0;
+  color: #a8071a;
+}
+
+.admin-inline-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.admin-inline-alert-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.admin-inline-alert-list li {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 2px;
 }
 
 .config-select {

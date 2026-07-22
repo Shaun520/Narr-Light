@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { DetailPreview, PageHeader, RefreshButton, StatGrid, Tag, UserCell } from "@/components/admin-static";
+import {
+  AdminIllustrationTaskCancelButton,
+  AdminIllustrationTaskRetryButton,
+} from "@/components/admin-task-actions";
+import { DetailPreview, PageHeader, Pagination, RefreshButton, StatGrid, Tag, UserCell } from "@/components/admin-static";
+import { JsonPreview } from "@/components/json-preview";
 import {
   getAdminIllustrationTasks,
   type AdminIllustrationTaskRow,
@@ -8,6 +13,8 @@ import {
   type IllustrationTaskType,
 } from "@/lib/services/illustration-tasks";
 
+const PAGE_SIZE = 20;
+
 type SearchParams = {
   q?: string;
   status?: string;
@@ -15,6 +22,7 @@ type SearchParams = {
   quality?: string;
   model?: string;
   taskId?: string;
+  page?: string;
 };
 
 export default async function IllustrationTasksPage({
@@ -150,6 +158,18 @@ export default async function IllustrationTasksPage({
                         <Link className="link-btn" href={buildTaskHref(filters, task.id)}>
                           详情
                         </Link>
+                        {task.status === "failed" && (
+                          <AdminIllustrationTaskRetryButton
+                            returnTo={buildIllustrationReturnHref(filters)}
+                            taskId={task.id}
+                          />
+                        )}
+                        {(task.status === "pending" || task.status === "running") && (
+                          <AdminIllustrationTaskCancelButton
+                            returnTo={buildIllustrationReturnHref(filters)}
+                            taskId={task.id}
+                          />
+                        )}
                         {task.script && (
                           <Link className="link-btn" href={`/scripts?scriptId=${task.script.id}`}>
                             剧本
@@ -176,9 +196,12 @@ export default async function IllustrationTasksPage({
           </div>
 
           <div className="pagination">
-            <span className="page-total">
-              共 {result.total.toLocaleString("zh-CN")} 条，当前显示 {result.tasks.length} 条
-            </span>
+            <Pagination
+              baseHref={buildIllustrationBaseHref(filters)}
+              page={filters.page ?? 1}
+              pageSize={PAGE_SIZE}
+              total={result.total}
+            />
           </div>
         </section>
 
@@ -218,7 +241,7 @@ function TaskDetail({ task }: { task: AdminIllustrationTaskRow | null }) {
         ["质检说明", task.qualityMessage || "无"],
         ["资产", task.asset ? `${task.asset.title} / ${task.asset.status} / ${task.asset.progress}%` : "未关联资产"],
         ["错误信息", task.errorMessage || "无"],
-        ["提示词", task.prompt || "无"],
+        ["提示词", task.prompt ? <JsonPreview key="prompt" value={task.prompt} /> : "无"],
         ["开始时间", task.startedAt ? formatDateTime(task.startedAt) : "未开始"],
         ["完成时间", task.completedAt ? formatDateTime(task.completedAt) : "未完成"],
         ["更新时间", formatDateTime(task.updatedAt)],
@@ -229,6 +252,7 @@ function TaskDetail({ task }: { task: AdminIllustrationTaskRow | null }) {
 
 function normalizeFilters(params: SearchParams) {
   const model = params.model?.trim() || "all";
+  const page = params.page ? Math.max(1, Math.floor(Number(params.page) || 1)) : 1;
 
   return {
     q: params.q?.trim() ?? "",
@@ -237,7 +261,26 @@ function normalizeFilters(params: SearchParams) {
     quality: isQualityStatus(params.quality) ? params.quality : "all",
     model,
     selectedTaskId: params.taskId,
+    page,
   } as const;
+}
+
+/** 构造分页基础链接：保留筛选参数，但排除 page（由 Pagination 组件追加） */
+function buildIllustrationBaseHref(filters: ReturnType<typeof normalizeFilters>): string {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.status !== "all") params.set("status", filters.status);
+  if (filters.taskType !== "all") params.set("type", filters.taskType);
+  if (filters.quality !== "all") params.set("quality", filters.quality);
+  if (filters.model !== "all") params.set("model", filters.model);
+  if (filters.selectedTaskId) params.set("taskId", filters.selectedTaskId);
+  const query = params.toString();
+  return query ? `/tasks/illustration?${query}` : "/tasks/illustration";
+}
+
+/** 构造操作后跳转链接：保留筛选参数与当前选中任务，与 buildIllustrationBaseHref 一致 */
+function buildIllustrationReturnHref(filters: ReturnType<typeof normalizeFilters>): string {
+  return buildIllustrationBaseHref(filters);
 }
 
 function buildTaskHref(filters: ReturnType<typeof normalizeFilters>, taskId: string) {
