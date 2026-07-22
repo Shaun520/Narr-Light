@@ -88,11 +88,14 @@ export interface RelationGraphData {
 
 /** 已存在的关系行（与 character_relations 表对齐） */
 export interface ExistingRelationRow {
+  id?: string;
   source: string;
   target: string;
   relationType: RelationType;
+  label?: string;
   isVisible: boolean;
   isHiddenRelation: boolean;
+  hiddenLabel?: string;
 }
 
 /** 推断暗线时所需的最小剧本数据（避免强依赖完整 Script 类型） */
@@ -104,6 +107,10 @@ export interface ScriptRelationInput {
     isMurderer: boolean;
     backgroundStory?: string;
     personalTask?: string;
+    gender?: RelationNode['gender'];
+    age?: number | null;
+    personality?: string;
+    sortOrder?: number;
   }>;
   /** 已存在的明线关系（可选，避免重复推断） */
   existingRelations?: ExistingRelationRow[];
@@ -218,16 +225,16 @@ export class RelationExtractor {
       id: c.id,
       name: c.name,
       roleIdentity: c.roleIdentity,
-      gender: 'unknown',
-      age: null,
-      personality: '',
+      gender: c.gender ?? 'unknown',
+      age: c.age ?? null,
+      personality: c.personality ?? '',
       backgroundStory: c.backgroundStory ?? '',
       personalTask: c.personalTask ?? '',
       isMurderer: c.isMurderer,
       camp: inferCamp(c.roleIdentity, c.isMurderer, c.name, deceasedNames),
       color: getRoleColor(c.roleIdentity),
       radius: getRoleRadius(c.roleIdentity),
-      sortOrder: 0,
+      sortOrder: c.sortOrder ?? 0,
     }));
 
     // 明线：取已存在的可见关系
@@ -349,12 +356,12 @@ export class RelationExtractor {
     strength: RelationStrength,
   ): RelationEdge {
     return {
-      id,
+      id: r.id ?? id,
       source: r.source,
       target: r.target,
       relationType: r.relationType,
-      label: isVisible ? this.guessLightLabel(r.relationType) : '',
-      hiddenLabel: isHidden ? this.guessDarkLabel(r.relationType) : '',
+      label: isVisible ? r.label || this.guessLightLabel(r.relationType) : '',
+      hiddenLabel: isHidden ? r.hiddenLabel || this.guessDarkLabel(r.relationType) : '',
       isVisible,
       isHiddenRelation: isHidden,
       strength,
@@ -406,233 +413,3 @@ export class RelationExtractor {
  * 单例：供客户端组件直接调用
  */
 export const relationExtractor = new RelationExtractor();
-
-/**
- * 默认 Mock 数据：用于关系图谱页在没有数据库连接时展示原型效果。
- * 严格对齐原型 workbench2.html #view-relations 中的 6 人关系结构。
- */
-export const DEFAULT_RELATION_GRAPH: RelationGraphData = {
-  nodes: [
-    {
-      id: 'char-shen-mobai',
-      name: '沈墨白',
-      roleIdentity: '死者',
-      gender: 'male',
-      age: 38,
-      personality: '多疑寡恩',
-      backgroundStory:
-        '三十八岁，沈家长子，过继而来。十年前离乡经商，案发前夜归家，意图整顿家业、清算旧账。性格多疑寡恩，与诸人皆有龃龉。',
-      personalTask: '清算旧账，重振家业',
-      isMurderer: false,
-      camp: 'deceased',
-      color: '#8a1c1c',
-      radius: 34,
-      sortOrder: 0,
-    },
-    {
-      id: 'char-shen-mochen',
-      name: '沈墨尘',
-      roleIdentity: '凶手',
-      gender: 'male',
-      age: 35,
-      personality: '阴沉隐忍',
-      backgroundStory:
-        '沈家次子，长年居于兄长阴影之下。表面恭顺，暗中负债累累，对兄长怀恨已久。',
-      personalTask: '掩盖债务，夺取家主之位',
-      isMurderer: true,
-      camp: 'murderer',
-      color: '#b08d57',
-      radius: 30,
-      sortOrder: 1,
-    },
-    {
-      id: 'char-liu-ruyan',
-      name: '柳如烟',
-      roleIdentity: '医者',
-      gender: 'female',
-      age: 28,
-      personality: '冷静克制',
-      backgroundStory:
-        '城中女医，与沈家有旧。医术精湛，与沈墨白少年相识，关系暧昧。',
-      personalTask: '查清父亲死因',
-      isMurderer: false,
-      camp: 'healer',
-      color: '#4a7c59',
-      radius: 28,
-      sortOrder: 2,
-    },
-    {
-      id: 'char-chen-shouyi',
-      name: '陈守义',
-      roleIdentity: '管家',
-      gender: 'male',
-      age: 52,
-      personality: '忠厚本分',
-      backgroundStory:
-        '沈家老管家，侍奉两代家主，知晓诸多家事隐秘。',
-      personalTask: '守护沈家安宁',
-      isMurderer: false,
-      camp: 'shen',
-      color: '#3a5a7a',
-      radius: 26,
-      sortOrder: 3,
-    },
-    {
-      id: 'char-xiao-cui',
-      name: '小翠',
-      roleIdentity: '丫鬟',
-      gender: 'female',
-      age: 19,
-      personality: '机灵胆小',
-      backgroundStory:
-        '沈墨白贴身丫鬟，案发当夜曾听见异响，是关键证人之一。',
-      personalTask: '明哲保身',
-      isMurderer: false,
-      camp: 'shen',
-      color: '#7a5c3a',
-      radius: 24,
-      sortOrder: 4,
-    },
-    {
-      id: 'char-zhou-banxian',
-      name: '周半仙',
-      roleIdentity: '药商',
-      gender: 'male',
-      age: 46,
-      personality: '圆滑世故',
-      backgroundStory:
-        '游走四方的药商，与沈墨白有暗中交易，私下贩卖乌头等管制药材。',
-      personalTask: '牟利避祸',
-      isMurderer: false,
-      camp: 'outsider',
-      color: '#6a4a8a',
-      radius: 24,
-      sortOrder: 5,
-    },
-  ],
-  edges: [
-    // 明线（金色实线）
-    {
-      id: 'rel-light-1',
-      source: 'char-shen-mobai',
-      target: 'char-shen-mochen',
-      relationType: 'family',
-      label: '兄弟',
-      hiddenLabel: '',
-      isVisible: true,
-      isHiddenRelation: false,
-      strength: 'strong',
-    },
-    {
-      id: 'rel-light-2',
-      source: 'char-shen-mobai',
-      target: 'char-liu-ruyan',
-      relationType: 'friend',
-      label: '旧识',
-      hiddenLabel: '',
-      isVisible: true,
-      isHiddenRelation: false,
-      strength: 'medium',
-    },
-    {
-      id: 'rel-light-3',
-      source: 'char-shen-mobai',
-      target: 'char-chen-shouyi',
-      relationType: 'colleague',
-      label: '主仆',
-      hiddenLabel: '',
-      isVisible: true,
-      isHiddenRelation: false,
-      strength: 'medium',
-    },
-    {
-      id: 'rel-light-4',
-      source: 'char-shen-mobai',
-      target: 'char-xiao-cui',
-      relationType: 'colleague',
-      label: '恩客',
-      hiddenLabel: '',
-      isVisible: true,
-      isHiddenRelation: false,
-      strength: 'medium',
-    },
-    {
-      id: 'rel-light-5',
-      source: 'char-shen-mochen',
-      target: 'char-chen-shouyi',
-      relationType: 'colleague',
-      label: '兄弟(明)',
-      hiddenLabel: '',
-      isVisible: true,
-      isHiddenRelation: false,
-      strength: 'medium',
-    },
-    {
-      id: 'rel-light-6',
-      source: 'char-liu-ruyan',
-      target: 'char-zhou-banxian',
-      relationType: 'colleague',
-      label: '旧识(明)',
-      hiddenLabel: '',
-      isVisible: true,
-      isHiddenRelation: false,
-      strength: 'medium',
-    },
-    // 暗线（朱砂虚线）
-    {
-      id: 'rel-dark-1',
-      source: 'char-shen-mobai',
-      target: 'char-zhou-banxian',
-      relationType: 'other',
-      label: '',
-      hiddenLabel: '债主',
-      isVisible: false,
-      isHiddenRelation: true,
-      strength: 'fatal',
-    },
-    {
-      id: 'rel-dark-2',
-      source: 'char-shen-mobai',
-      target: 'char-shen-mochen',
-      relationType: 'conspiracy',
-      label: '',
-      hiddenLabel: '债主',
-      isVisible: false,
-      isHiddenRelation: true,
-      strength: 'fatal',
-    },
-    {
-      id: 'rel-dark-3',
-      source: 'char-shen-mobai',
-      target: 'char-liu-ruyan',
-      relationType: 'conspiracy',
-      label: '',
-      hiddenLabel: '共谋',
-      isVisible: false,
-      isHiddenRelation: true,
-      strength: 'fatal',
-    },
-    {
-      id: 'rel-dark-4',
-      source: 'char-shen-mochen',
-      target: 'char-shen-mobai',
-      relationType: 'enemy',
-      label: '',
-      hiddenLabel: '灭口',
-      isVisible: false,
-      isHiddenRelation: true,
-      strength: 'fatal',
-    },
-    {
-      id: 'rel-dark-5',
-      source: 'char-liu-ruyan',
-      target: 'char-zhou-banxian',
-      relationType: 'conspiracy',
-      label: '',
-      hiddenLabel: '私采乌头',
-      isVisible: false,
-      isHiddenRelation: true,
-      strength: 'strong',
-    },
-  ],
-};

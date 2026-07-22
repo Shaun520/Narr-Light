@@ -17,7 +17,7 @@
  */
 'use client';
 
-import { use, useMemo, useRef, useState, type ReactNode } from 'react';
+import { use, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RotateCcw, Download } from 'lucide-react';
 import RelationGraph, {
   type RelationLayout,
@@ -25,7 +25,6 @@ import RelationGraph, {
 import RelationDetailPanel from '@/components/visualization/relation-detail-panel';
 import RelationEditor from '@/components/visualization/relation-editor';
 import {
-  DEFAULT_RELATION_GRAPH,
   type CharacterCamp,
   type RelationEdge,
   type RelationGraphData,
@@ -129,7 +128,6 @@ interface PageProps {
  */
 export default function RelationsPage({ params }: PageProps) {
   const { scriptId } = use(params);
-  void scriptId; // 后续接入 ScriptService 时使用
 
   // ===== 状态 =====
   const [activeView, setActiveView] = useState<ViewTab['view']>('all');
@@ -138,18 +136,50 @@ export default function RelationsPage({ params }: PageProps) {
   const [showLight, setShowLight] = useState(true);
   const [showDark, setShowDark] = useState(true);
   const [showLabel, setShowLabel] = useState(true);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(
-    'char-shen-mobai',
-  );
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('edit');
   const [editorEdge, setEditorEdge] = useState<RelationEdge | null>(null);
 
-  // 图数据（当前为 Mock，后续可由 ScriptService 注入）
-  const [graphData, setGraphData] = useState<RelationGraphData>(DEFAULT_RELATION_GRAPH);
+  const [graphData, setGraphData] = useState<RelationGraphData>({ nodes: [], edges: [] });
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // 关系图容器引用：用于导出
   const graphContainerRef = useRef<HTMLDivElement>(null);
+
+  const loadRelations = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await fetch(`/api/editor/${scriptId}/relations`, {
+        cache: 'no-store',
+      });
+      const payload = (await response.json()) as {
+        graphData?: RelationGraphData;
+        error?: string;
+      };
+      if (!response.ok || !payload.graphData) {
+        throw new Error(payload.error || '读取人物关系失败');
+      }
+      setGraphData(payload.graphData);
+      setSelectedNodeId((prev) => {
+        if (prev && payload.graphData?.nodes.some((node) => node.id === prev)) return prev;
+        return payload.graphData?.nodes[0]?.id ?? null;
+      });
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : '读取人物关系失败');
+      setGraphData({ nodes: [], edges: [] });
+      setSelectedNodeId(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadRelations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scriptId]);
 
   // ===== 派生：根据 VIEW / FILTER 计算可见节点 =====
   const visibleData = useMemo(() => {
@@ -247,26 +277,39 @@ export default function RelationsPage({ params }: PageProps) {
   };
 
   // ===== 事件：编辑器提交 =====
-  const handleEditorSubmit = (edge: RelationEdge) => {
-    setGraphData((prev) => {
-      const exists = prev.edges.some((e) => e.id === edge.id);
-      const edges = exists
-        ? prev.edges.map((e) => (e.id === edge.id ? edge : e))
-        : [...prev.edges, { ...edge, id: edge.id || `rel-${Date.now()}` }];
-      return { ...prev, edges };
-    });
-    setEditorOpen(false);
-    setEditorEdge(null);
+  const handleEditorSubmit = async (edge: RelationEdge) => {
+    try {
+      const response = await fetch(`/api/editor/${scriptId}/relations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edge }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || '保存人物关系失败');
+      setEditorOpen(false);
+      setEditorEdge(null);
+      await loadRelations();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : '保存人物关系失败');
+    }
   };
 
   // ===== 事件：编辑器删除 =====
-  const handleEditorDelete = (edgeId: string) => {
-    setGraphData((prev) => ({
-      ...prev,
-      edges: prev.edges.filter((e) => e.id !== edgeId),
-    }));
-    setEditorOpen(false);
-    setEditorEdge(null);
+  const handleEditorDelete = async (edgeId: string) => {
+    try {
+      const response = await fetch(`/api/editor/${scriptId}/relations`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ relationId: edgeId }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(payload.error || '删除人物关系失败');
+      setEditorOpen(false);
+      setEditorEdge(null);
+      await loadRelations();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : '删除人物关系失败');
+    }
   };
 
   // ===== 事件：AI 快捷指令 =====
@@ -317,7 +360,11 @@ export default function RelationsPage({ params }: PageProps) {
             人物关系图谱 <span className="seal">{graphData.nodes.length} 人</span>
           </h1>
           <div className="page-desc">
-            明暗双线可视化 · SVG 节点可拖拽 · 实时联动剧本段落
+            {loading
+              ? '正在加载当前剧本人物关系…'
+              : loadError
+                ? loadError
+                : '明暗双线可视化 · SVG 节点可拖拽 · 实时联动剧本段落'}
           </div>
         </div>
         <div className="page-actions">

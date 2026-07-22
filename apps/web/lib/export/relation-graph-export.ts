@@ -43,7 +43,7 @@ export interface RelationExportOptions {
 }
 
 /** 默认背景色：与关系图容器一致 */
-const DEFAULT_BG = '#25211c';
+const DEFAULT_BG = '#f7ecdc';
 
 /** 等待延迟（ms），用于字体 / 布局就绪 */
 const RENDER_READY_DELAY = 350;
