@@ -110,7 +110,7 @@ export const ADMIN_PERMISSIONS = [
   "moderation:read",
   "moderation:write",
   "moderation:appeal:write",
-  // 数据看板
+  // 工作台数据总览
   "dashboard:read",
   // 系统配置
   "system:config:write",
@@ -310,12 +310,11 @@ web 端通过 `lib/services/ai-config-service.ts` 读取本表，用 React `cach
 - 操作：内容下架、警告作者、封禁用户、举报驳回（带原因）。
 - 申诉处理：`moderation:appeal:write` 专用入口。
 
-### 模块 7：数据看板
+### 模块 7：数据总览（并入工作台）
 
-- 创作侧：剧本数量分布（题材/难度）、字数分布、生成阶段耗时分布。
-- 用户侧：留存曲线、付费转化漏斗、配额使用分布。
-- AI 资源侧：各 provider 调用次数、token 消耗趋势、图片生成成本。
-- 导出：CSV / PDF，复用 web 端 `@react-pdf/renderer` 方案。
+- 当前阶段不保留独立 `数据看板` 入口，避免与工作台的指标卡、趋势图、运营待办重复。
+- 创作侧、用户侧、AI 资源侧的核心概览指标统一并入工作台。
+- 后续若需要留存曲线、付费漏斗、成本核算、报表导出等深度分析，再从工作台拆出独立数据分析模块。
 
 ### 模块 8：系统配置
 
@@ -359,10 +358,7 @@ apps/admin/
 │   │   │   ├── content/page.tsx
 │   │   │   ├── reports/page.tsx
 │   │   │   └── appeals/page.tsx
-│   │   ├── analytics/
-│   │   │   ├── creation/page.tsx
-│   │   │   ├── users/page.tsx
-│   │   │   └── ai-usage/page.tsx
+│   │   ├── analytics/page.tsx         # 兼容旧路径，重定向到工作台
 │   │   ├── system/
 │   │   │   ├── ai-providers/page.tsx
 │   │   │   ├── quotas/page.tsx
@@ -497,13 +493,13 @@ apps/admin/
 ### Phase 3 — 审核与数据
 
 11. 社区内容审核 + 举报队列 + 申诉。
-12. 数据看板（创作 / 用户 / AI 三视图）。
+12. 工作台增强（创作 / 用户 / AI 数据总览）。
 13. 审计日志 diff viewer + 导出。
 
 ### Phase 4 — 系统配置
 
 14. 系统配置（AI 提供商 + 配额 + 内容安全）。
-15. 数据看板导出。
+15. 工作台数据导出。
 
 ---
 

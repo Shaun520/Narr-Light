@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Activity,
-  BarChart3,
   BookOpen,
   ClipboardList,
   FileText,
@@ -39,10 +38,7 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
   },
   {
     title: "审核运营",
-    items: [
-      { href: "/moderation", label: "社区审核", Icon: ShieldAlert },
-      { href: "/analytics", label: "数据看板", Icon: BarChart3 },
-    ],
+    items: [{ href: "/moderation", label: "社区审核", Icon: ShieldAlert }],
   },
   {
     title: "系统",
