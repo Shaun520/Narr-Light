@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { parseJSONWithTolerance } from '@/lib/ai/providers/deepseek-provider';
 import {
   getTextProviderInstance,
+  getGenerationSpecConfig,
   isProviderKeyConfigured,
 } from '@/lib/services/ai-config-service';
 import { buildStoryBiblePrompt, type StoryBibleJson } from '@/lib/ai/prompts/story-bible';
@@ -39,6 +40,7 @@ import {
   QuotaService,
   type GenerationCreditPhase,
 } from '@/lib/services/quota-service';
+import { buildGenerationSpec } from '@/lib/generation/spec';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 
@@ -51,6 +53,9 @@ interface GenerateRequestBody {
   scriptId: string;
   params: ScriptGenerationParams;
   characterId?: string;
+  scriptPartIndex?: number;
+  scriptPartLabel?: string;
+  actOrder?: number;
   storyBible?: StoryBibleJson;
   characterProfiles?: CharacterProfilesJson;
   actStructure?: ActStructureJson;
@@ -701,15 +706,18 @@ async function handleMockPhase(
           return;
         }
 
+        const specConfig = await getGenerationSpecConfig();
+        const spec = buildGenerationSpec(params, specConfig);
         const json = buildMockActStructure(params, storyBible);
         const sceneCount = await persistActStructure(scriptId, params, json);
+        const result = { ...json, generationSpec: spec };
         controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'mock' }));
         controller.enqueue(
           encodeSse(encoder, 'completed', {
             scriptId,
             actCount: json.acts.length,
             sceneCount,
-            result: json,
+            result,
           }),
         );
       } catch (error) {
@@ -847,7 +855,13 @@ async function handleActStructure(body: GenerateRequestBody): Promise<Response> 
         }
 
         const storyBible = await getStoryBibleForPhase(body);
-        const { systemPrompt, userPrompt } = buildActStructurePrompt({ params, storyBible });
+        const specConfig = await getGenerationSpecConfig();
+        const spec = buildGenerationSpec(params, specConfig);
+        const { systemPrompt, userPrompt } = buildActStructurePrompt({
+          params,
+          storyBible,
+          spec,
+        });
 
         controller.enqueue(encodeSse(encoder, 'start', { scriptId, stage: 'act-structure-init', ...generationMeta() }));
         for await (const chunk of provider.generateStream({
@@ -874,12 +888,13 @@ async function handleActStructure(body: GenerateRequestBody): Promise<Response> 
         }
 
         const sceneCount = await persistActStructure(scriptId, params, json);
+        const result = { ...json, generationSpec: spec };
         controller.enqueue(
           encodeSse(encoder, 'completed', {
             scriptId,
             actCount: json.acts.length,
             sceneCount,
-            result: json,
+            result,
           }),
         );
       } catch (error) {
@@ -953,10 +968,15 @@ async function persistCharacterScript(
   }
 
   const wordCount = JSON.stringify(json.actScripts).length;
+  const partIndex = Math.max(1, body.scriptPartIndex ?? 1);
+  const partLabel = body.scriptPartLabel || '完整角色本';
   const { error } = await supabase.from('character_scripts').upsert(
     {
       script_id: body.scriptId,
       character_id: characterId,
+      part_index: partIndex,
+      part_label: partLabel,
+      act_order: body.actOrder ?? null,
       act_scripts: json.actScripts,
       personal_arc: json.personalArc,
       visible_clue_titles: json.visibleClueTitles,
@@ -965,7 +985,7 @@ async function persistCharacterScript(
       word_count: wordCount,
       generation_status: 'completed',
     },
-    { onConflict: 'script_id,character_id' },
+    { onConflict: 'script_id,character_id,part_index' },
   );
 
   if (error) {
@@ -976,6 +996,8 @@ async function persistCharacterScript(
       await persistFallbackGenerationResult(body.scriptId, `character-script:${character.name}`, body.params, {
         characterId,
         characterName: character.name,
+        partIndex,
+        partLabel,
         script: json,
       });
       return;
@@ -1286,17 +1308,28 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
           getActStructureForPhase(body),
         ]);
         const character = getCharacterForScript(body, characterProfiles);
+        const specConfig = await getGenerationSpecConfig();
+        const partIndex = Math.max(1, body.scriptPartIndex ?? 1);
+        const partLabel = body.scriptPartLabel || '完整角色本';
         const { systemPrompt, userPrompt } = buildCharacterScriptPrompt({
           params,
           storyBible,
           character,
           actStructure,
+          spec: buildGenerationSpec(params, specConfig),
+          part: {
+            index: partIndex,
+            label: partLabel,
+            actOrder: body.actOrder,
+          },
         });
 
         controller.enqueue(
           encodeSse(encoder, 'start', {
             scriptId,
             characterId: body.characterId,
+            partIndex,
+            partLabel,
             stage: 'character-script-init',
             ...generationMeta(),
           }),
@@ -1349,6 +1382,8 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
           encodeSse(encoder, 'completed', {
             scriptId,
             characterId: body.characterId,
+            partIndex,
+            partLabel,
             result: json,
           }),
         );
@@ -1375,10 +1410,12 @@ async function handleClues(body: GenerateRequestBody): Promise<Response> {
     getStoryBibleForPhase(body),
     getActStructureForPhase(body),
   ]);
+  const specConfig = await getGenerationSpecConfig();
   const { systemPrompt, userPrompt } = buildCluesPrompt({
     params: body.params,
     storyBible,
     actStructure,
+    spec: buildGenerationSpec(body.params, specConfig),
   });
   return runJsonPhase<CluesJson>('clues', body.scriptId, systemPrompt, userPrompt, 0.6, (json) =>
     persistClues(body.scriptId, body.params, json),

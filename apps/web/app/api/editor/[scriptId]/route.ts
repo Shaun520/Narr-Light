@@ -145,8 +145,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
         queryOrThrow(
           supabase
             .from('character_scripts')
-            .select('character_id, act_scripts, personal_arc, perspective_note')
-            .eq('script_id', scriptId),
+            .select('character_id, part_index, part_label, act_order, act_scripts, personal_arc, perspective_note')
+            .eq('script_id', scriptId)
+            .order('part_index'),
           '读取人物剧本失败',
         ),
         queryOrThrow(
@@ -185,55 +186,66 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
     const groups: TreeGroup[] = [];
     const scriptTitle = String((script as Record<string, unknown>).title ?? '');
 
-    const scriptsByCharacter = new Map<string, Record<string, unknown>>();
+    const scriptsByCharacter = new Map<string, Array<Record<string, unknown>>>();
     for (const row of (characterScripts ?? []) as Array<Record<string, unknown>>) {
-      scriptsByCharacter.set(String(row.character_id), row);
+      const characterId = String(row.character_id);
+      const rows = scriptsByCharacter.get(characterId) ?? [];
+      rows.push(row);
+      scriptsByCharacter.set(characterId, rows);
     }
 
     const colors = ['#8a1c1c', '#b08d57', '#4a7c59', '#3a5a7a', '#7a5c3a', '#6a4a8a', '#8a4a6a'];
     const charNodeIds: string[] = [];
     for (const [index, character] of ((characters ?? []) as Array<Record<string, unknown>>).entries()) {
-      const characterScript = scriptsByCharacter.get(String(character.id));
-      if (!characterScript) continue;
-
-      const actScripts = Array.isArray(characterScript.act_scripts)
-        ? (characterScript.act_scripts as Array<Record<string, unknown>>)
-        : [];
-      const perspectiveNote = String(characterScript.perspective_note ?? '');
-      const personalArc = paragraphsFromText(characterScript.personal_arc);
-      const pages: CharacterPage[] = actScripts.length
-        ? actScripts
-            .map((act, actIndex) => ({
-              act: String(act.actTitle ?? `第${actIndex + 1}幕`),
-              title: String(act.actTitle ?? `第${actIndex + 1}幕`),
-              subtitle: perspectiveNote,
-              paragraphs: paragraphsFromText(act.content),
-            }))
-            .filter((page) => page.paragraphs.length > 0)
-        : personalArc.length
-          ? [
-              {
-                act: '全本',
-                title: '人物设定',
-                subtitle: String(character.role_identity ?? ''),
-                paragraphs: personalArc,
-              },
-            ]
+      const characterScriptRows = scriptsByCharacter.get(String(character.id)) ?? [];
+      for (const characterScript of characterScriptRows) {
+        const actScripts = Array.isArray(characterScript.act_scripts)
+          ? (characterScript.act_scripts as Array<Record<string, unknown>>)
           : [];
+        const perspectiveNote = String(characterScript.perspective_note ?? '');
+        const personalArc = paragraphsFromText(characterScript.personal_arc);
+        const pages: CharacterPage[] = actScripts.length
+          ? actScripts
+              .map((act, actIndex) => ({
+                act: String(act.actTitle ?? `第${actIndex + 1}幕`),
+                title: String(act.actTitle ?? `第${actIndex + 1}幕`),
+                subtitle: perspectiveNote,
+                paragraphs: paragraphsFromText(act.content),
+              }))
+              .filter((page) => page.paragraphs.length > 0)
+          : personalArc.length
+            ? [
+                {
+                  act: '全本',
+                  title: '人物设定',
+                  subtitle: String(character.role_identity ?? ''),
+                  paragraphs: personalArc,
+                },
+              ]
+            : [];
 
-      if (!pages.length) continue;
+        if (!pages.length) continue;
 
-      const nodeId = `char-${character.id}`;
-      dataMap[nodeId] = {
-        type: 'character',
-        id: nodeId,
-        name: String(character.name ?? `角色 ${index + 1}`),
-        role: `${character.is_murderer ? '凶手' : '角色'} · ${String(character.role_identity ?? '')}`,
-        color: colors[index % colors.length],
-        pages,
-      };
-      labels[nodeId] = `${String(character.name ?? `角色 ${index + 1}`)}${character.is_murderer ? '（凶手）' : ''}`;
-      charNodeIds.push(nodeId);
+        const partIndex = Number(characterScript.part_index ?? 1) || 1;
+        const partLabel = String(characterScript.part_label ?? '完整角色本');
+        const nodeId =
+          characterScriptRows.length === 1 && partIndex === 1 && partLabel === '完整角色本'
+            ? `char-${character.id}`
+            : `char-${character.id}-part-${partIndex}`;
+        const name = String(character.name ?? `角色 ${index + 1}`);
+        dataMap[nodeId] = {
+          type: 'character',
+          id: nodeId,
+          name,
+          partLabel,
+          role: `${character.is_murderer ? '凶手' : '角色'} · ${String(character.role_identity ?? '')}`,
+          color: colors[index % colors.length],
+          pages,
+        };
+        labels[nodeId] =
+          `${name}${character.is_murderer ? '（凶手）' : ''}${partLabel === '完整角色本' ? '' : ` · ${partLabel}`}`;
+        charNodeIds.push(nodeId);
+      }
     }
 
     if (charNodeIds.length) {

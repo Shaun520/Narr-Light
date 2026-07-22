@@ -36,6 +36,21 @@ export interface PhaseSubItem {
   error?: string;
 }
 
+interface CharacterScriptGenerationSpec {
+  characterScriptMode?: 'single' | 'per_act' | 'custom';
+  scriptsPerPlayer?: number;
+  actCount?: number;
+}
+
+interface CharacterScriptTask {
+  id: string;
+  characterId: string;
+  label: string;
+  scriptPartIndex: number;
+  scriptPartLabel: string;
+  actOrder?: number;
+}
+
 /** 鍗曢樁娈佃繍琛屾椂淇℃伅 */
 export interface PhaseState {
   id: PhaseId;
@@ -122,6 +137,35 @@ const PHASE_LABELS: Record<PhaseId, string> = {
 
 /** 闃舵 2 瑙掕壊鍓ф湰鐨勫苟鍙戜笂闄?*/
 const CHARACTER_SCRIPT_CONCURRENCY = 4;
+
+function getCharacterScriptSpec(result: PhaseState['result']): CharacterScriptGenerationSpec {
+  const spec = result?.generationSpec as CharacterScriptGenerationSpec | undefined;
+  return spec ?? {};
+}
+
+function buildCharacterScriptTasks(
+  characters: Array<{ id: string; name: string }>,
+  spec: CharacterScriptGenerationSpec,
+): CharacterScriptTask[] {
+  const scriptsPerPlayer = Math.max(1, Math.round(spec.scriptsPerPlayer ?? 1));
+  const mode = spec.characterScriptMode ?? 'single';
+
+  return characters.flatMap((character) =>
+    Array.from({ length: scriptsPerPlayer }, (_, index) => {
+      const partIndex = index + 1;
+      const isPerAct = mode === 'per_act';
+      const scriptPartLabel = isPerAct ? `第${partIndex}幕角色本` : scriptsPerPlayer === 1 ? '完整角色本' : `第${partIndex}份角色本`;
+      return {
+        id: `${character.id}:part:${partIndex}`,
+        characterId: character.id,
+        label: scriptsPerPlayer === 1 ? character.name : `${character.name} · ${scriptPartLabel}`,
+        scriptPartIndex: partIndex,
+        scriptPartLabel,
+        actOrder: isPerAct ? partIndex : undefined,
+      };
+    }),
+  );
+}
 
 // ===== 鍒濆鐘舵€佸伐鍘?=====
 
@@ -455,12 +499,12 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
   // ===== runCharacterScriptSubTask锛氬崟涓鑹插墽鏈瓙浠诲姟 =====
   const runCharacterScriptSubTask = useCallback(
     async (
-      characterId: string,
+      task: CharacterScriptTask,
       params: ScriptGenerationParams,
     ): Promise<void> => {
       // 鏍囪瀛愰」涓?running
       setState((prev) =>
-        updateSubItem(prev, 'character_script', characterId, {
+        updateSubItem(prev, 'character_script', task.id, {
           status: 'running',
           error: undefined,
         }),
@@ -478,7 +522,10 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       const url = '/api/generate/character-script';
       const body = {
         scriptId,
-        characterId,
+        characterId: task.characterId,
+        scriptPartIndex: task.scriptPartIndex,
+        scriptPartLabel: task.scriptPartLabel,
+        actOrder: task.actOrder,
         params,
         storyBible: stateRef.current.storyBible,
         characterProfiles: stateRef.current.phases.character_profiles.result,
@@ -510,7 +557,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
               if (eventType === 'completed') {
                 subTaskCompleted = true;
                 setState((prev) =>
-                  updateSubItem(prev, 'character_script', characterId, {
+                  updateSubItem(prev, 'character_script', task.id, {
                     status: 'completed',
                   }),
                 );
@@ -521,7 +568,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
                   (parsed.message as string) ||
                   '瑙掕壊鍓ф湰鐢熸垚澶辫触';
                 setState((prev) =>
-                  updateSubItem(prev, 'character_script', characterId, {
+                  updateSubItem(prev, 'character_script', task.id, {
                     status: 'failed',
                     error: errorMsg,
                   }),
@@ -549,7 +596,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           onError: (err) => {
             subTaskFailed = true;
             setState((prev) =>
-              updateSubItem(prev, 'character_script', characterId, {
+              updateSubItem(prev, 'character_script', task.id, {
                 status: 'failed',
                 error: err.message,
               }),
@@ -558,7 +605,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           onClose: () => {
             if (controller.signal.aborted) {
               setState((prev) =>
-                updateSubItem(prev, 'character_script', characterId, {
+                updateSubItem(prev, 'character_script', task.id, {
                   status: 'failed',
                   error: '鐢ㄦ埛涓柇',
                 }),
@@ -566,7 +613,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
             } else if (!subTaskCompleted && !subTaskFailed) {
               // 娴佸叧闂絾鏈敹鍒?completed/error 浜嬩欢
               setState((prev) =>
-                updateSubItem(prev, 'character_script', characterId, {
+                updateSubItem(prev, 'character_script', task.id, {
                   status: 'failed',
                   error: '流意外关闭',
                 }),
@@ -584,30 +631,30 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
   // ===== runPhaseBatch锛氶樁娈?2 瑙掕壊鍓ф湰鎵规璋冨害 =====
   const runPhaseBatch = useCallback(
     async (
-      characterIds: string[],
+      tasks: CharacterScriptTask[],
       params: ScriptGenerationParams,
     ): Promise<void> => {
       // 鍒濆鍖?/ 澶嶇敤 subItems
       setState((prev) => {
         const phase = prev.phases.character_script;
-        if (phase.subItems && phase.subItems.length === characterIds.length) {
+        if (phase.subItems && phase.subItems.length === tasks.length) {
           return updatePhase(prev, 'character_script', { status: 'running' });
         }
         return updatePhase(prev, 'character_script', {
           status: 'running',
-          subItems: characterIds.map((id) => ({
-            id,
-            label: id,
+          subItems: tasks.map((task) => ({
+            id: task.id,
+            label: task.label,
             status: 'pending' as const,
           })),
         });
       });
 
       // 分批处理，每批 CHARACTER_SCRIPT_CONCURRENCY 个
-      for (let i = 0; i < characterIds.length; i += CHARACTER_SCRIPT_CONCURRENCY) {
-        const batch = characterIds.slice(i, i + CHARACTER_SCRIPT_CONCURRENCY);
+      for (let i = 0; i < tasks.length; i += CHARACTER_SCRIPT_CONCURRENCY) {
+        const batch = tasks.slice(i, i + CHARACTER_SCRIPT_CONCURRENCY);
         await Promise.all(
-          batch.map((characterId) => runCharacterScriptSubTask(characterId, params)),
+          batch.map((task) => runCharacterScriptSubTask(task, params)),
         );
       }
 
@@ -808,22 +855,24 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           throw new Error('阶段 1a 未产出角色');
         }
 
-        // 阶段 2：N 个角色剧本分批并行
+        const characterScriptTasks = buildCharacterScriptTasks(
+          characterList,
+          getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
+        );
+
+        // 阶段 2：按角色剧本份数分批并行
         setState((prev) =>
           updatePhase(prev, 'character_script', {
-            subItems: characterList.map((c) => ({
-              id: c.id,
-              label: c.name,
+            subItems: characterScriptTasks.map((task) => ({
+              id: task.id,
+              label: task.label,
               status: 'pending' as const,
             })),
           }),
         );
 
         setState((prev) => ({ ...prev, currentPhase: 'character_script' }));
-        await runPhaseBatch(
-          characterList.map((c) => c.id),
-          params,
-        );
+        await runPhaseBatch(characterScriptTasks, params);
 
         // 闃舵 3锛氱嚎绱㈠崱 + 缁勭粐鑰呮墜鍐?+ 鐪熺浉澶嶇洏 骞惰
         setState((prev) => ({ ...prev, currentPhase: 'clues' }));
@@ -928,13 +977,17 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           }
 
           const characterList = characters as Array<{ id: string; name: string }>;
+          const characterScriptTasks = buildCharacterScriptTasks(
+            characterList,
+            getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
+          );
 
           // 閲嶇疆 subItems
           setState((prev) =>
             updatePhase(prev, 'character_script', {
-              subItems: characterList.map((c) => ({
-                id: c.id,
-                label: c.name,
+              subItems: characterScriptTasks.map((task) => ({
+                id: task.id,
+                label: task.label,
                 status: 'pending' as const,
               })),
             }),
@@ -946,10 +999,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
             currentPhase: 'character_script',
           }));
 
-          await runPhaseBatch(
-            characterList.map((c) => c.id),
-            params,
-          );
+          await runPhaseBatch(characterScriptTasks, params);
         } else {
           setState((prev) => ({
             ...prev,

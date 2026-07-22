@@ -5,6 +5,7 @@
 import { cache } from "react";
 import type {
   ContentSafetyConfig,
+  GenerationSpecConfig,
   ImageProviderConfig,
   ImageProviderName,
   ProviderRuntimeConfig,
@@ -16,6 +17,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { Json } from "@/lib/supabase/types";
 import { getProvider } from "@/lib/ai/providers/base-provider";
 import type { AIProvider } from "@/lib/ai/providers/base-provider";
+import { DEFAULT_GENERATION_SPEC_CONFIG } from "@/lib/generation/spec";
 
 /** 文本 provider 环境变量 key 映射 */
 const TEXT_PROVIDER_ENV_KEY: Record<TextProviderName, string> = {
@@ -133,6 +135,14 @@ export const getContentSafetyConfig = cache(async (): Promise<ContentSafetyConfi
 export const getQuotaDefaults = cache(async (): Promise<QuotaDefaultsConfig> => {
   const raw = await fetchConfigs(["quota_defaults"]);
   return safeParse<QuotaDefaultsConfig>(raw["quota_defaults"], DEFAULT_QUOTA_DEFAULTS);
+});
+
+export const getGenerationSpecConfig = cache(async (): Promise<GenerationSpecConfig> => {
+  const raw = await fetchConfigs(["generation_spec"]);
+  return safeParse<GenerationSpecConfig>(
+    raw["generation_spec"],
+    DEFAULT_GENERATION_SPEC_CONFIG,
+  );
 });
 
 /** 移除对象中值为 undefined 的字段，避免覆盖默认值 */

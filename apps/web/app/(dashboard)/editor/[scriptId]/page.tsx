@@ -180,6 +180,7 @@ interface SaveEditorNodeRequest {
   title: string;
   html: string;
   plainText: string;
+  partLabel?: string;
   pages?: CharacterPage[];
   sections?: Array<{ actNum: string; title: string; text: string }>;
   clues?: Array<{ no: string; title: string; tag: string; loc: string }>;
@@ -385,6 +386,7 @@ function buildSavePayload(
           [page.act, page.title, page.subtitle, ...page.paragraphs].filter(Boolean).join('\n'),
         )
         .join('\n\n'),
+      partLabel: currentNode.partLabel,
       pages: parseCharacterPages(contentEl, currentNode),
     };
   }
@@ -517,6 +519,7 @@ export default function EditorPage({ params }: PageProps) {
       })
       .catch((error) => {
         console.warn(`Failed to load editor data for ${scriptId}:`, error);
+        if (!cancelled) setEditorData(null);
       });
     return () => {
       cancelled = true;
@@ -706,7 +709,8 @@ export default function EditorPage({ params }: PageProps) {
         : `加载于 ${ts}`;
     if (currentNode.type === 'character') {
       const c = currentNode as CharacterNode;
-      setToolbarLabel(`人物剧本 · ${c.name} · ${status}`);
+      const part = c.partLabel && c.partLabel !== '完整角色本' ? ` · ${c.partLabel}` : '';
+      setToolbarLabel(`人物剧本 · ${c.name}${part} · ${status}`);
     } else if (currentNode.type === 'clue-overview') {
       const c = currentNode as ClueOverviewNode;
       setToolbarLabel(`${c.fullTitle} · ${hasDirtyDrafts ? status : `加载于 ${ts}`}`);
@@ -891,7 +895,12 @@ export default function EditorPage({ params }: PageProps) {
       const ts = formatNow();
       const labelPrefix =
         currentNode.type === 'character'
-          ? `人物剧本 · ${(currentNode as CharacterNode).name}`
+          ? `人物剧本 · ${(currentNode as CharacterNode).name}${
+              (currentNode as CharacterNode).partLabel &&
+              (currentNode as CharacterNode).partLabel !== '完整角色本'
+                ? ` · ${(currentNode as CharacterNode).partLabel}`
+                : ''
+            }`
           : (currentNode as SimpleNode | ClueOverviewNode).fullTitle;
       setToolbarLabel(`${labelPrefix} · 已保存于 ${ts}`);
 

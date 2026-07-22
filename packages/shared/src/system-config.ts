@@ -8,6 +8,7 @@ export const SYSTEM_CONFIG_KEYS = [
   "image_provider",
   "content_safety",
   "quota_defaults",
+  "generation_spec",
 ] as const;
 export type SystemConfigKey = (typeof SYSTEM_CONFIG_KEYS)[number];
 
@@ -51,4 +52,24 @@ export interface QuotaDefaultsConfig {
   free_quota_limit: number;
   pro_monthly_quota: number;
   max_script_words: number;
+}
+
+export interface GenerationDurationBand {
+  minDuration: number;
+  maxDuration: number;
+  actCount: number;
+  searchRoundCount: number;
+}
+
+export interface GenerationSpecConfig {
+  baseWordsPerHour: number;
+  characterScriptShare: number;
+  characterScriptMode: "single" | "per_act" | "custom";
+  customScriptsPerPlayer: number;
+  minScenesPerAct: number;
+  minCluesPerRoundBase: number;
+  playerClueRatio: number;
+  durationBands: GenerationDurationBand[];
+  difficultyMultipliers: Record<"beginner" | "intermediate" | "advanced" | "expert", number>;
+  genreMultipliers: Record<"hardcore" | "emotion" | "horror" | "funny" | "mechanism", number>;
 }

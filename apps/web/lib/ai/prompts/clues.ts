@@ -14,6 +14,7 @@ import type {
 import type { ScriptGenre, ScriptDifficulty } from '@/types';
 import type { StoryBibleJson } from '@/lib/ai/prompts/story-bible';
 import type { ActStructureJson } from '@/lib/ai/prompts/act-structure';
+import type { GenerationSpec } from '@/lib/generation/spec';
 
 export type { ScriptGenerationParams, AgeRating, WritingStyle };
 
@@ -25,6 +26,7 @@ export interface CluesParams {
   storyBible: StoryBibleJson;
   /** 阶段 1b 分幕结构 */
   actStructure: ActStructureJson;
+  spec?: GenerationSpec;
 }
 
 /** 单个线索卡 */
@@ -163,7 +165,7 @@ JSON 结构如下：
  * 构造用户提示词：将创作参数、设定本与分幕结构注入自然语言描述
  */
 export function buildCluesUserPrompt(input: CluesParams): string {
-  const { params, storyBible, actStructure } = input;
+  const { params, storyBible, actStructure, spec } = input;
 
   const lines: string[] = ['创作参数：'];
   lines.push(`剧本标题：${params.title}`);
@@ -173,6 +175,14 @@ export function buildCluesUserPrompt(input: CluesParams): string {
   lines.push(`难度：${DIFFICULTY_LABEL[params.difficulty]}`);
   lines.push(`适龄分级：${AGE_RATING_LABEL[params.ageRating]}`);
   lines.push(`写作风格：${params.writingStyle}`);
+  if (spec) {
+    lines.push('');
+    lines.push('最低线索规格（必须满足）：');
+    lines.push(`- 全本至少 ${spec.minClueCount} 条线索`);
+    lines.push(`- 全本至少 ${spec.searchRoundCount} 轮搜证`);
+    lines.push(`- 每轮搜证都必须有可落地 location 和可分发线索`);
+  }
+
   if (params.extraReq) {
     lines.push(`附加要求：${params.extraReq}`);
   }

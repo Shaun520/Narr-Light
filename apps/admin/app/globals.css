@@ -365,6 +365,76 @@ a {
   color: var(--admin-error);
 }
 
+.admin-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.admin-tab {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.admin-tab.active {
+  background: var(--admin-primary-bg);
+  color: var(--admin-primary);
+  font-weight: 600;
+}
+
+.config-subtitle {
+  margin: 18px 0 10px;
+  color: var(--admin-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.spec-band-header,
+.spec-band-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  align-items: center;
+}
+
+.spec-number-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.spec-band-header {
+  min-height: 36px;
+  padding: 0 0 8px;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+}
+
+.spec-band-row {
+  min-height: 64px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.spec-band-row:last-of-type {
+  border-bottom: 0;
+}
+
+.spec-factor-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .input,
 .select,
 .textarea {

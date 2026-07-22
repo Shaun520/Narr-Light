@@ -13,6 +13,8 @@ import type {
 } from '@/lib/ai/prompts/script-generation';
 import type { ScriptGenre, ScriptDifficulty } from '@/types';
 import type { StoryBibleJson } from '@/lib/ai/prompts/story-bible';
+import type { GenerationSpec } from '@/lib/generation/spec';
+import { formatGenerationSpec } from '@/lib/generation/spec';
 
 export type { ScriptGenerationParams, AgeRating, WritingStyle };
 
@@ -22,6 +24,7 @@ export interface ActStructureParams {
   params: ScriptGenerationParams;
   /** 阶段 0 设定本 */
   storyBible: StoryBibleJson;
+  spec?: GenerationSpec;
 }
 
 /** 搜证轮次（为阶段 3 线索卡提供地点框架） */
@@ -171,7 +174,7 @@ JSON 结构如下：
  * 构造用户提示词：将创作参数与阶段 0 设定本注入自然语言描述
  */
 export function buildActStructureUserPrompt(input: ActStructureParams): string {
-  const { params, storyBible } = input;
+  const { params, storyBible, spec } = input;
 
   const lines: string[] = ['创作参数：'];
   lines.push(`剧本标题：${params.title}`);
@@ -181,6 +184,12 @@ export function buildActStructureUserPrompt(input: ActStructureParams): string {
   lines.push(`难度：${DIFFICULTY_LABEL[params.difficulty]}`);
   lines.push(`适龄分级：${AGE_RATING_LABEL[params.ageRating]}`);
   lines.push(`写作风格：${params.writingStyle}`);
+
+  if (spec) {
+    lines.push('');
+    lines.push('最低结构规格（必须满足）：');
+    lines.push(formatGenerationSpec(spec));
+  }
 
   if (params.switches.mechanismRules) {
     lines.push('特殊要求：生成机制规则（机制本，分幕需包含机制环节）');

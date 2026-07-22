@@ -33,6 +33,7 @@ interface SaveEditorNodeRequest {
   title: string;
   html: string;
   plainText: string;
+  partLabel?: string;
   pages?: CharacterPageInput[];
   sections?: SectionInput[];
   clues?: ClueInput[];
@@ -97,6 +98,23 @@ function mapClueType(tag: string, fallback: string): string {
   return fallback || 'physical';
 }
 
+function parseCharacterNodeId(nodeId: string): { characterId: string; partIndex: number } | null {
+  const partMatch = nodeId.match(/^char-(.+)-part-(\d+)$/);
+  if (partMatch) {
+    return {
+      characterId: partMatch[1],
+      partIndex: Math.max(1, Number(partMatch[2]) || 1),
+    };
+  }
+  if (nodeId.startsWith('char-')) {
+    return {
+      characterId: nodeId.replace(/^char-/, ''),
+      partIndex: 1,
+    };
+  }
+  return null;
+}
+
 async function safeRows<T>(
   query: PromiseLike<{ data: T | null; error: { message: string } | null }>,
 ): Promise<T | null> {
@@ -120,8 +138,8 @@ async function saveCharacterNode(
   scriptId: string,
   payload: SaveEditorNodeRequest,
 ): Promise<void> {
-  const characterId = payload.nodeId.replace(/^char-/, '');
-  if (!characterId || characterId === payload.nodeId) {
+  const parsedNode = parseCharacterNodeId(payload.nodeId);
+  if (!parsedNode?.characterId) {
     throw new Error('人物节点 ID 无效');
   }
 
@@ -144,7 +162,10 @@ async function saveCharacterNode(
   const { error } = await supabase.from('character_scripts').upsert(
     {
       script_id: scriptId,
-      character_id: characterId,
+      character_id: parsedNode.characterId,
+      part_index: parsedNode.partIndex,
+      part_label: payload.partLabel || (parsedNode.partIndex === 1 ? '完整角色本' : `第${parsedNode.partIndex}份角色本`),
+      act_order: null,
       act_scripts: actScripts as unknown as Json,
       personal_arc: payload.plainText,
       visible_clue_titles: [],
@@ -152,7 +173,7 @@ async function saveCharacterNode(
       word_count: wordCount(payload.plainText),
       generation_status: 'completed',
     },
-    { onConflict: 'script_id,character_id' },
+    { onConflict: 'script_id,character_id,part_index' },
   );
 
   if (error) throw new Error(`保存人物剧本失败: ${error.message}`);

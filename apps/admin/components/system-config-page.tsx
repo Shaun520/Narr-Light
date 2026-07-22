@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/admin-static";
 import { saveSystemConfig, type SaveSystemConfigResult } from "@/app/(admin)/system/actions";
 import type {
   ContentSafetyConfig,
+  GenerationSpecConfig,
   ImageProviderConfig,
   ImageProviderName,
   ProviderRuntimeConfig,
@@ -83,6 +84,49 @@ const QUOTA_ROWS: Array<{
   { key: "max_script_words", label: "单剧本最大字数", desc: "超出后前端提示拆分", width: "140" },
 ];
 
+type ConfigTab = "model" | "generation" | "policy";
+
+const SPEC_BASE_ROWS: Array<{
+  key: keyof Pick<
+    GenerationSpecConfig,
+    | "baseWordsPerHour"
+    | "characterScriptShare"
+    | "minScenesPerAct"
+    | "minCluesPerRoundBase"
+    | "playerClueRatio"
+  >;
+  label: string;
+  desc: string;
+  step: string;
+}> = [
+  { key: "baseWordsPerHour", label: "每小时目标字数", desc: "用于推导总字数目标", step: "100" },
+  { key: "characterScriptShare", label: "角色剧本占比", desc: "总字数中分配给角色剧本的比例", step: "0.01" },
+  { key: "minScenesPerAct", label: "每幕最低场景数", desc: "幕数乘以该值生成最低场景数", step: "1" },
+  { key: "minCluesPerRoundBase", label: "每轮最低线索基数", desc: "和人数比例计算后取较大值", step: "1" },
+  { key: "playerClueRatio", label: "人数线索比例", desc: "ceil(玩家人数 × 该比例)", step: "0.1" },
+];
+
+const DIFFICULTY_SPEC_ROWS: Array<{
+  key: keyof GenerationSpecConfig["difficultyMultipliers"];
+  label: string;
+}> = [
+  { key: "beginner", label: "新手" },
+  { key: "intermediate", label: "进阶" },
+  { key: "advanced", label: "烧脑" },
+  { key: "expert", label: "专家" },
+];
+
+const GENRE_SPEC_ROWS: Array<{
+  key: keyof GenerationSpecConfig["genreMultipliers"];
+  label: string;
+}> = [
+  { key: "hardcore", label: "硬核" },
+  { key: "emotion", label: "情感" },
+  { key: "horror", label: "恐怖" },
+  { key: "funny", label: "欢乐" },
+  { key: "mechanism", label: "机制" },
+];
+
 export function SystemConfigPage({
   initialConfig,
   saved,
@@ -95,6 +139,8 @@ export function SystemConfigPage({
   const [imageConfig, setImageConfig] = useState<ImageProviderConfig>(initialConfig.imageProvider);
   const [contentSafety, setContentSafety] = useState<ContentSafetyConfig>(initialConfig.contentSafety);
   const [quotaDefaults, setQuotaDefaults] = useState<QuotaDefaultsConfig>(initialConfig.quotaDefaults);
+  const [generationSpec, setGenerationSpec] = useState<GenerationSpecConfig>(initialConfig.generationSpec);
+  const [activeTab, setActiveTab] = useState<ConfigTab>("model");
   const [modalOpen, setModalOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -134,8 +180,9 @@ export function SystemConfigPage({
         imageProvider: imageConfig,
         contentSafety,
         quotaDefaults,
+        generationSpec,
       }),
-    [textConfig, imageConfig, contentSafety, quotaDefaults],
+    [textConfig, imageConfig, contentSafety, quotaDefaults, generationSpec],
   );
 
   // 确认保存时只校验 reason 非空，实际提交交给 form action；
@@ -147,6 +194,18 @@ export function SystemConfigPage({
   const imageFallbackMeta = imageConfig.fallback
     ? IMAGE_PROVIDERS.find((p) => p.id === imageConfig.fallback)
     : null;
+  const updateDurationBand = (
+    index: number,
+    key: keyof GenerationSpecConfig["durationBands"][number],
+    value: number,
+  ) => {
+    setGenerationSpec((current) => ({
+      ...current,
+      durationBands: current.durationBands.map((band, bandIndex) =>
+        bandIndex === index ? { ...band, [key]: value } : band,
+      ),
+    }));
+  };
 
   return (
     <form action={formAction} className="page-stack" id="systemConfigForm">
@@ -175,6 +234,190 @@ export function SystemConfigPage({
       <input name="payload" type="hidden" value={payload} />
       <input name="reason" type="hidden" value={reason} />
 
+      <div className="admin-tabs" role="tablist" aria-label="系统配置分类">
+        <TabButton active={activeTab === "model"} label="模型配置" onClick={() => setActiveTab("model")} />
+        <TabButton active={activeTab === "generation"} label="生成规格" onClick={() => setActiveTab("generation")} />
+        <TabButton active={activeTab === "policy"} label="配额与安全" onClick={() => setActiveTab("policy")} />
+      </div>
+
+      {activeTab === "generation" && (
+        <section className="admin-card">
+          <div className="admin-card-head">
+            <div className="admin-card-title">生成规格</div>
+            <div className="admin-card-sub">控制时长、人数、题材和难度如何换算为最低结构与字数。</div>
+          </div>
+          <div className="admin-card-body">
+            {SPEC_BASE_ROWS.map((row) => (
+              <div className="config-row" key={row.key}>
+                <div className="config-info">
+                  <div className="config-label">{row.label}</div>
+                  <div className="config-desc">{row.desc}</div>
+                </div>
+                <input
+                  className="input config-number-input"
+                  min="0"
+                  step={row.step}
+                  type="number"
+                  value={generationSpec[row.key]}
+                  onChange={(event) =>
+                    setGenerationSpec((current) => ({
+                      ...current,
+                      [row.key]: Number(event.target.value) || 0,
+                    }))
+                  }
+                />
+              </div>
+            ))}
+
+            <div className="config-subtitle">角色剧本数量</div>
+            <div className="config-row">
+              <div className="config-info">
+                <div className="config-label">角色剧本发放模式</div>
+                <div className="config-desc">控制每个玩家生成一份还是多份角色剧本</div>
+              </div>
+              <select
+                className="select"
+                value={generationSpec.characterScriptMode}
+                onChange={(event) =>
+                  setGenerationSpec((current) => ({
+                    ...current,
+                    characterScriptMode: event.target.value as GenerationSpecConfig["characterScriptMode"],
+                  }))
+                }
+              >
+                <option value="single">每人一份</option>
+                <option value="per_act">按幕发放</option>
+                <option value="custom">自定义份数</option>
+              </select>
+            </div>
+            <div className="config-row">
+              <div className="config-info">
+                <div className="config-label">自定义每人份数</div>
+                <div className="config-desc">仅在自定义份数模式下使用</div>
+              </div>
+              <input
+                className="input config-number-input"
+                disabled={generationSpec.characterScriptMode !== "custom"}
+                min="1"
+                type="number"
+                value={generationSpec.customScriptsPerPlayer}
+                onChange={(event) =>
+                  setGenerationSpec((current) => ({
+                    ...current,
+                    customScriptsPerPlayer: Number(event.target.value) || 1,
+                  }))
+                }
+              />
+            </div>
+
+            <div className="config-subtitle">时长档位</div>
+            <div className="spec-band-header" aria-hidden="true">
+              <span>适用时长</span>
+              <span>最小时长</span>
+              <span>最大时长</span>
+              <span>生成幕数</span>
+              <span>搜证轮次</span>
+            </div>
+            {generationSpec.durationBands.map((band, index) => (
+              <div className="spec-band-row" key={`${band.minDuration}-${band.maxDuration}`}>
+                <div className="config-info">
+                  <div className="config-label">
+                    {band.minDuration}-{band.maxDuration} 小时
+                  </div>
+                  <div className="config-desc">该范围触发对应规格</div>
+                </div>
+                <input
+                  aria-label="最小时长"
+                  className="input spec-number-input"
+                  min="1"
+                  type="number"
+                  value={band.minDuration}
+                  onChange={(event) => updateDurationBand(index, "minDuration", Number(event.target.value) || 0)}
+                />
+                <input
+                  aria-label="最大时长"
+                  className="input spec-number-input"
+                  min="1"
+                  type="number"
+                  value={band.maxDuration}
+                  onChange={(event) => updateDurationBand(index, "maxDuration", Number(event.target.value) || 0)}
+                />
+                <input
+                  aria-label="幕数"
+                  className="input spec-number-input"
+                  min="1"
+                  type="number"
+                  value={band.actCount}
+                  onChange={(event) => updateDurationBand(index, "actCount", Number(event.target.value) || 0)}
+                />
+                <input
+                  aria-label="搜证轮次"
+                  className="input spec-number-input"
+                  min="1"
+                  type="number"
+                  value={band.searchRoundCount}
+                  onChange={(event) =>
+                    updateDurationBand(index, "searchRoundCount", Number(event.target.value) || 0)
+                  }
+                />
+              </div>
+            ))}
+
+            <div className="config-subtitle">难度系数</div>
+            <div className="spec-factor-grid">
+              {DIFFICULTY_SPEC_ROWS.map((row) => (
+                <label className="config-field" key={row.key}>
+                  <span>{row.label}</span>
+                  <input
+                    className="input"
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={generationSpec.difficultyMultipliers[row.key]}
+                    onChange={(event) =>
+                      setGenerationSpec((current) => ({
+                        ...current,
+                        difficultyMultipliers: {
+                          ...current.difficultyMultipliers,
+                          [row.key]: Number(event.target.value) || 0,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+
+            <div className="config-subtitle">题材系数</div>
+            <div className="spec-factor-grid">
+              {GENRE_SPEC_ROWS.map((row) => (
+                <label className="config-field" key={row.key}>
+                  <span>{row.label}</span>
+                  <input
+                    className="input"
+                    min="0"
+                    step="0.01"
+                    type="number"
+                    value={generationSpec.genreMultipliers[row.key]}
+                    onChange={(event) =>
+                      setGenerationSpec((current) => ({
+                        ...current,
+                        genreMultipliers: {
+                          ...current.genreMultipliers,
+                          [row.key]: Number(event.target.value) || 0,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === "model" && (
+        <>
       <section className="admin-card">
         <div className="admin-card-head">
           <div className="admin-card-title">模型配置</div>
@@ -356,6 +599,11 @@ export function SystemConfigPage({
         </div>
       </section>
 
+        </>
+      )}
+
+      {activeTab === "policy" && (
+        <>
       <section className="admin-card">
         <div className="admin-card-head">
           <div className="admin-card-title">配额默认值</div>
@@ -418,6 +666,9 @@ export function SystemConfigPage({
           </div>
         </div>
       </section>
+
+        </>
+      )}
 
       {modalOpen && (
         <div className="modal-backdrop" role="presentation">
@@ -483,6 +734,28 @@ export function SystemConfigPage({
         </div>
       )}
     </form>
+  );
+}
+
+function TabButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-selected={active}
+      className={`admin-tab${active ? " active" : ""}`}
+      role="tab"
+      type="button"
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 

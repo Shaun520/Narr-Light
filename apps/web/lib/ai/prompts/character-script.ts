@@ -15,6 +15,7 @@ import type { ScriptGenre, ScriptDifficulty } from '@/types';
 import type { StoryBibleJson } from '@/lib/ai/prompts/story-bible';
 import type { CharacterProfile } from '@/lib/ai/prompts/character-profiles';
 import type { ActStructureJson } from '@/lib/ai/prompts/act-structure';
+import type { GenerationSpec } from '@/lib/generation/spec';
 
 export type { ScriptGenerationParams, AgeRating, WritingStyle };
 
@@ -28,6 +29,12 @@ export interface CharacterScriptParams {
   character: CharacterProfile;
   /** 阶段 1b 分幕结构 */
   actStructure: ActStructureJson;
+  spec?: GenerationSpec;
+  part?: {
+    index: number;
+    label: string;
+    actOrder?: number;
+  };
 }
 
 /** 单个幕次的角色剧本内容 */
@@ -144,7 +151,7 @@ JSON 结构如下：
  * 构造用户提示词：将创作参数、人物设定、设定本与分幕结构注入自然语言描述
  */
 export function buildCharacterScriptUserPrompt(input: CharacterScriptParams): string {
-  const { params, storyBible, character, actStructure } = input;
+  const { params, storyBible, character, actStructure, spec, part } = input;
   const lines: string[] = ['创作参数：'];
   lines.push(`剧本标题：${params.title}`);
   lines.push(`题材：${GENRE_LABEL[params.genre]}`);
@@ -153,6 +160,27 @@ export function buildCharacterScriptUserPrompt(input: CharacterScriptParams): st
   lines.push(`难度：${DIFFICULTY_LABEL[params.difficulty]}`);
   lines.push(`适龄分级：${AGE_RATING_LABEL[params.ageRating]}`);
   lines.push(`写作风格：${params.writingStyle}`);
+
+  if (spec) {
+    lines.push('');
+    lines.push('最低字数规格（必须满足）：');
+    lines.push(`- 本角色所有剧本合计不少于 ${spec.minCharacterScriptWords} 字`);
+    lines.push(`- 当前这一份角色剧本不少于 ${spec.minWordsPerCharacterScriptPiece} 字`);
+    lines.push(`- 每名玩家 ${spec.scriptsPerPlayer} 份角色剧本，全本共 ${spec.totalCharacterScriptCount} 份`);
+    if (part?.actOrder) {
+      lines.push(`- 当前只覆盖第 ${part.actOrder} 幕，并让内容服务于角色视角与搜证推进`);
+    } else {
+      lines.push(`- 必须覆盖 ${spec.actCount} 幕，并让每幕内容服务于角色视角与搜证推进`);
+    }
+  }
+  if (part) {
+    lines.push('');
+    lines.push('当前角色剧本份数：');
+    lines.push(`- 当前份数：第 ${part.index} 份（${part.label}）`);
+    if (part.actOrder) {
+      lines.push(`- 当前只生成第 ${part.actOrder} 幕对应的角色剧本内容`);
+    }
+  }
 
   if (params.switches.noEdgeRole) {
     lines.push('特殊要求：无边缘位（所有角色戏份均衡）');

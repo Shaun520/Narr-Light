@@ -327,12 +327,15 @@ async function handleRequest(request: Request): Promise<Response> {
           return sum + act.content.length + act.scenes.reduce((s, sc) => s + sc.content.length, 0);
         }, 0);
 
-        // b. upsert 到 character_scripts 表（基于 script_id+character_id 唯一约束）
+        // b. upsert 到 character_scripts 表（默认写入第 1 份完整角色本）
         const { data: upsertedData, error: upsertError } = await supabase
           .from('character_scripts')
           .upsert({
             script_id: scriptId,
             character_id: characterId,
+            part_index: 1,
+            part_label: '完整角色本',
+            act_order: null,
             act_scripts: json.actScripts,
             personal_arc: json.personalArc,
             visible_clue_titles: json.visibleClueTitles,
@@ -340,7 +343,7 @@ async function handleRequest(request: Request): Promise<Response> {
             is_murderer_script: character.isMurderer,
             word_count: wordCount,
             generation_status: 'completed',
-          }, { onConflict: 'script_id,character_id' })
+          }, { onConflict: 'script_id,character_id,part_index' })
           .select('id')
           .single();
         if (upsertError) throw new Error(`角色剧本入库失败: ${upsertError.message}`);

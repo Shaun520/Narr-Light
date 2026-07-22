@@ -2,6 +2,7 @@ import "server-only";
 
 import type {
   ContentSafetyConfig,
+  GenerationSpecConfig,
   ImageProviderConfig,
   ImageProviderName,
   ProviderRuntimeConfig,
@@ -44,11 +45,41 @@ const DEFAULT_QUOTA_DEFAULTS: QuotaDefaultsConfig = {
   max_script_words: 150000,
 };
 
+const DEFAULT_GENERATION_SPEC: GenerationSpecConfig = {
+  baseWordsPerHour: 7500,
+  characterScriptShare: 0.62,
+  characterScriptMode: "single",
+  customScriptsPerPlayer: 1,
+  minScenesPerAct: 3,
+  minCluesPerRoundBase: 4,
+  playerClueRatio: 0.8,
+  durationBands: [
+    { minDuration: 2, maxDuration: 3, actCount: 3, searchRoundCount: 3 },
+    { minDuration: 4, maxDuration: 5, actCount: 4, searchRoundCount: 4 },
+    { minDuration: 6, maxDuration: 7, actCount: 5, searchRoundCount: 5 },
+    { minDuration: 8, maxDuration: 8, actCount: 6, searchRoundCount: 6 },
+  ],
+  difficultyMultipliers: {
+    beginner: 0.85,
+    intermediate: 1,
+    advanced: 1.15,
+    expert: 1.3,
+  },
+  genreMultipliers: {
+    hardcore: 1.15,
+    emotion: 1.05,
+    horror: 1,
+    funny: 0.95,
+    mechanism: 1.1,
+  },
+};
+
 export type SystemConfigSnapshot = {
   textProvider: TextProviderConfig;
   imageProvider: ImageProviderConfig;
   contentSafety: ContentSafetyConfig;
   quotaDefaults: QuotaDefaultsConfig;
+  generationSpec: GenerationSpecConfig;
 };
 
 type SystemConfigRow = {
@@ -108,6 +139,7 @@ export async function getSystemConfigSnapshot(): Promise<SystemConfigSnapshot> {
       imageProvider: DEFAULT_IMAGE_CONFIG,
       contentSafety: DEFAULT_CONTENT_SAFETY,
       quotaDefaults: DEFAULT_QUOTA_DEFAULTS,
+      generationSpec: DEFAULT_GENERATION_SPEC,
     };
   }
 
@@ -121,6 +153,7 @@ export async function getSystemConfigSnapshot(): Promise<SystemConfigSnapshot> {
       imageProvider: DEFAULT_IMAGE_CONFIG,
       contentSafety: DEFAULT_CONTENT_SAFETY,
       quotaDefaults: DEFAULT_QUOTA_DEFAULTS,
+      generationSpec: DEFAULT_GENERATION_SPEC,
     };
   }
 
@@ -143,17 +176,25 @@ export async function getSystemConfigSnapshot(): Promise<SystemConfigSnapshot> {
     map.get("quota_defaults")?.value,
     DEFAULT_QUOTA_DEFAULTS,
   );
+  const generationSpec = parseConfig<GenerationSpecConfig>(
+    map.get("generation_spec")?.value,
+    DEFAULT_GENERATION_SPEC,
+  );
 
-  return { textProvider, imageProvider, contentSafety, quotaDefaults };
+  return { textProvider, imageProvider, contentSafety, quotaDefaults, generationSpec };
 }
 
-type UpdateableKey = Extract<SystemConfigKey, "text_provider" | "image_provider" | "content_safety" | "quota_defaults">;
+type UpdateableKey = Extract<
+  SystemConfigKey,
+  "text_provider" | "image_provider" | "content_safety" | "quota_defaults" | "generation_spec"
+>;
 
 const CONFIG_DESCRIPTIONS: Record<UpdateableKey, string> = {
   text_provider: "文本生成 provider 路由（剧本生成 / 校验 / 润色）",
   image_provider: "插画生成 provider 路由（封面 / 场景 / 线索卡 / 人物）",
   content_safety: "内容安全开关与人工复核策略",
   quota_defaults: "配额默认值（新用户与各套餐）",
+  generation_spec: "剧本生成规格控制（时长、结构、线索与字数）",
 };
 
 /** 更新单个配置项并落审计日志 */

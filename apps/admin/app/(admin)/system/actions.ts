@@ -5,6 +5,7 @@ import { requireAdmin } from "@/lib/auth/admin";
 import { updateSystemConfig } from "@/lib/services/system-config";
 import type {
   ContentSafetyConfig,
+  GenerationSpecConfig,
   ImageProviderConfig,
   QuotaDefaultsConfig,
   TextProviderConfig,
@@ -21,6 +22,7 @@ type SavePayload = {
   imageProvider: ImageProviderConfig;
   contentSafety: ContentSafetyConfig;
   quotaDefaults: QuotaDefaultsConfig;
+  generationSpec: GenerationSpecConfig;
 };
 
 export async function saveSystemConfig(
@@ -49,6 +51,7 @@ export async function saveSystemConfig(
       { key: "image_provider", value: payload.imageProvider },
       { key: "content_safety", value: payload.contentSafety },
       { key: "quota_defaults", value: payload.quotaDefaults },
+      { key: "generation_spec", value: payload.generationSpec },
     ] as const;
 
     for (const entry of entries) {
