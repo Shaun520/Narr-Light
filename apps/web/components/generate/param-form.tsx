@@ -1,11 +1,3 @@
-/**
- * 创作参数表单组件
- *
- * 受控表单：题材/难度 chip 单选、人数/时长/分级/风格 select、
- * 背景与立意 input、3 个开关、附加要求 textarea、生成按钮。
- * 含参数合理性校验（如低人数硬核本提示）。
- * 对齐原型 #view-generate 左侧 .card 表单结构。
- */
 'use client';
 
 import React from 'react';
@@ -13,12 +5,14 @@ import { PenLine, Play, Square } from 'lucide-react';
 import type { ScriptDifficulty, ScriptGenre } from '@/types';
 import type {
   AgeRating,
+  CaseType,
+  CulturalFrame,
   ScriptGenerationParams,
+  StoryTone,
   WritingStyle,
 } from '@/lib/ai/prompts/script-generation';
 import { validateScriptParams } from '@/lib/utils/script-param-validation';
 
-/** 题材选项 */
 const GENRE_OPTIONS: Array<{ value: ScriptGenre; label: string }> = [
   { value: 'hardcore', label: '硬核' },
   { value: 'emotion', label: '情感' },
@@ -27,7 +21,6 @@ const GENRE_OPTIONS: Array<{ value: ScriptGenre; label: string }> = [
   { value: 'mechanism', label: '机制' },
 ];
 
-/** 难度选项 */
 const DIFFICULTY_OPTIONS: Array<{ value: ScriptDifficulty; label: string }> = [
   { value: 'beginner', label: '新手' },
   { value: 'intermediate', label: '进阶' },
@@ -35,20 +28,16 @@ const DIFFICULTY_OPTIONS: Array<{ value: ScriptDifficulty; label: string }> = [
   { value: 'expert', label: '专家' },
 ];
 
-/** 适龄分级选项（对齐原型 select：全员/16+/18+） */
 const AGE_RATING_OPTIONS: Array<{ value: AgeRating; label: string }> = [
   { value: 'ALL', label: '全员' },
   { value: 'SIXTEEN_PLUS', label: '16+' },
   { value: 'EIGHTEEN_PLUS', label: '18+' },
 ];
 
-/** 写作风格选项 */
-const WRITING_STYLE_OPTIONS: WritingStyle[] = [
-  '古风沉稳',
-  '白描清雅',
-  '悬疑冷峻',
-  '诙谐明快',
-];
+const WRITING_STYLE_OPTIONS: WritingStyle[] = ['古风沉稳', '白描清雅', '悬疑冷峻', '诙谐明快'];
+const CULTURAL_FRAME_OPTIONS: CulturalFrame[] = ['中国本土', '架空东方', '架空西方', '民国近代', '现代都市', '不限'];
+const STORY_TONE_OPTIONS: StoryTone[] = ['本格推理', '社会派', '情感沉浸', '惊悚压迫', '黑色幽默', '机制博弈'];
+const CASE_TYPE_OPTIONS: CaseType[] = ['密室', '时间线诡计', '身份错认', '叙述性诡计', '连环事件', '无明确偏好'];
 
 export interface ParamFormProps {
   params: ScriptGenerationParams;
@@ -95,13 +84,14 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
           </label>
           <div className="chip-group">
             {GENRE_OPTIONS.map((g) => (
-              <span
+              <button
+                type="button"
                 key={g.value}
                 className={`chip ${params.genre === g.value ? 'active' : ''}`}
                 onClick={() => onChange({ genre: g.value })}
               >
                 {g.label}
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -147,15 +137,62 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
           </label>
           <div className="chip-group">
             {DIFFICULTY_OPTIONS.map((d) => (
-              <span
+              <button
+                type="button"
                 key={d.value}
                 className={`chip ${params.difficulty === d.value ? 'active' : ''}`}
                 onClick={() => onChange({ difficulty: d.value })}
               >
                 {d.label}
-              </span>
+              </button>
             ))}
           </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label className="form-label">文化框架</label>
+            <select
+              className="form-select"
+              value={params.culturalFrame ?? '中国本土'}
+              onChange={(e) => onChange({ culturalFrame: e.target.value as CulturalFrame })}
+            >
+              {CULTURAL_FRAME_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">故事气质</label>
+            <select
+              className="form-select"
+              value={params.storyTone ?? '本格推理'}
+              onChange={(e) => onChange({ storyTone: e.target.value as StoryTone })}
+            >
+              {STORY_TONE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">案件类型</label>
+          <select
+            className="form-select"
+            value={params.caseType ?? '无明确偏好'}
+            onChange={(e) => onChange({ caseType: e.target.value as CaseType })}
+          >
+            {CASE_TYPE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="form-group">
@@ -169,12 +206,32 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
         </div>
 
         <div className="form-group">
+          <label className="form-label">关键场景</label>
+          <input
+            className="form-input"
+            value={params.keyLocations ?? ''}
+            onChange={(e) => onChange({ keyLocations: e.target.value })}
+            placeholder="如：雪山别馆、封山索道、旧钟楼、藏书室"
+          />
+        </div>
+
+        <div className="form-group">
           <label className="form-label">核心立意</label>
           <input
             className="form-input"
             value={params.theme}
             onChange={(e) => onChange({ theme: e.target.value })}
             placeholder="如：家国亲情 · 旧恨新仇"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">避免元素</label>
+          <input
+            className="form-input"
+            value={params.avoidElements ?? ''}
+            onChange={(e) => onChange({ avoidElements: e.target.value })}
+            placeholder="如：不要日式学校、神社、温泉、财阀、过度漫画化命名"
           />
         </div>
 
@@ -198,9 +255,7 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
           <select
             className="form-select"
             value={params.writingStyle}
-            onChange={(e) =>
-              onChange({ writingStyle: e.target.value as WritingStyle })
-            }
+            onChange={(e) => onChange({ writingStyle: e.target.value as WritingStyle })}
           >
             {WRITING_STYLE_OPTIONS.map((s) => (
               <option key={s} value={s}>
@@ -212,11 +267,11 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
 
         <div className="switch-row">
           <span className="sr-label">无边缘位（戏份均衡）</span>
-          <div
+          <button
+            type="button"
             className={`switch ${params.switches.noEdgeRole ? 'on' : ''}`}
             role="switch"
             aria-checked={params.switches.noEdgeRole}
-            tabIndex={0}
             onClick={() =>
               onChange({
                 switches: {
@@ -229,11 +284,11 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
         </div>
         <div className="switch-row">
           <span className="sr-label">合规预检（屏蔽敏感词）</span>
-          <div
+          <button
+            type="button"
             className={`switch ${params.switches.compliancePreCheck ? 'on' : ''}`}
             role="switch"
             aria-checked={params.switches.compliancePreCheck}
-            tabIndex={0}
             onClick={() =>
               onChange({
                 switches: {
@@ -246,11 +301,11 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
         </div>
         <div className="switch-row">
           <span className="sr-label">生成机制规则（机制本）</span>
-          <div
+          <button
+            type="button"
             className={`switch ${params.switches.mechanismRules ? 'on' : ''}`}
             role="switch"
             aria-checked={params.switches.mechanismRules}
-            tabIndex={0}
             onClick={() =>
               onChange({
                 switches: {
@@ -268,7 +323,7 @@ export function ParamForm({ params, onChange, onGenerate, onAbort, isGenerating 
             className="form-textarea"
             value={params.extraReq}
             onChange={(e) => onChange({ extraReq: e.target.value })}
-            placeholder="如：增加一轮公共搜证、强化凶手反侦意识…"
+            placeholder="如：增加一轮公共搜证、强化凶手反侦察意识、第二幕必须出现公开对峙"
           />
         </div>
 

@@ -1,11 +1,11 @@
-/**
- * 分阶段生成进度看板
+﻿/**
+ * 鍒嗛樁娈电敓鎴愯繘搴︾湅鏉?
  *
- * 替换 gen-progress.tsx 的 Mock 进度条，基于真实 PhasedGenerationState 渲染 7 阶段进度。
- * - 每阶段独立进度条 + 状态图标（✓ 完成 / ▶ 运行中 / ⏳ 待启动 / ✗ 失败）
- * - 阶段 2 角色剧本展开显示各角色子状态
- * - 失败阶段附错误原因与重试按钮
- * - 流式内容预览（可折叠）
+ * 鏇挎崲 gen-progress.tsx 鐨?Mock 杩涘害鏉★紝鍩轰簬鐪熷疄 PhasedGenerationState 娓叉煋 7 闃舵杩涘害銆?
+ * - 姣忛樁娈电嫭绔嬭繘搴︽潯 + 鐘舵€佸浘鏍囷紙鉁?瀹屾垚 / 鈻?杩愯涓?/ 鈴?寰呭惎鍔?/ 鉁?澶辫触锛?
+ * - 闃舵 2 瑙掕壊鍓ф湰灞曞紑鏄剧ず鍚勮鑹插瓙鐘舵€?
+ * - 澶辫触闃舵闄勯敊璇師鍥犱笌閲嶈瘯鎸夐挳
+ * - 娴佸紡鍐呭棰勮锛堝彲鎶樺彔锛?
  */
 'use client';
 
@@ -17,9 +17,9 @@ import type {
 } from '@/lib/hooks/use-phased-generation';
 
 export interface PhasedGenProgressProps {
-  /** 编排器状态 */
+  /** 缂栨帓鍣ㄧ姸鎬?*/
   state: PhasedGenerationState;
-  /** 重试指定阶段 */
+  /** 閲嶈瘯鎸囧畾闃舵 */
   onRetryPhase: (phaseId: PhaseId) => void;
 }
 
@@ -38,7 +38,7 @@ const PHASE_LABELS: Record<PhaseId, string> = {
   story_bible: '设定本',
   character_profiles: '人物设定',
   act_structure: '分幕结构',
-  character_script: '角色剧本',
+  character_script: '玩家剧本',
   clues: '线索卡',
   organizer_manual: '组织者手册',
   truth_review: '真相复盘',
@@ -50,11 +50,11 @@ function getStatusIcon(status: PhaseState['status']): string {
     case 'completed':
       return '✓';
     case 'running':
-      return '▶';
+      return '…';
     case 'failed':
-      return '✗';
+      return '✕';
     case 'skipped':
-      return '–';
+      return '-';
     default:
       return '⏳';
   }
@@ -162,7 +162,7 @@ function PhaseRow({
         <div className="phased-subitems">
           {phase.subItems!.map((sub) => (
             <div key={sub.id} className="phased-subitem">
-              <span style={{ color: getStatusColor(sub.status) }}>
+              <span className="phased-subitem-status" style={{ color: getStatusColor(sub.status) }}>
                 {getStatusIcon(sub.status)}
               </span>
               <span>{sub.label}</span>

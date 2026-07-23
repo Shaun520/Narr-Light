@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+﻿import { NextRequest } from 'next/server';
 import { parseJSONWithTolerance } from '@/lib/ai/providers/deepseek-provider';
 import {
   getTextProviderInstance,
@@ -34,6 +34,8 @@ import {
   type TimelineStructureJson,
   type TimelineStructureEvent,
 } from '@/lib/ai/prompts/timeline-structure';
+import type { AIProvider } from '@/lib/ai/providers/base-provider';
+import type { PlayerPackageContent } from '@narrlight/shared';
 import { illustrationWorkflowService } from '@/lib/services/illustration-workflow-service';
 import {
   QuotaService,
@@ -61,7 +63,7 @@ interface GenerateRequestBody {
   actStructure?: ActStructureJson;
   characterScripts?: CharacterScriptJson[];
   clues?: CluesJson;
-  /** truth_reviews.timeline_full 原文（timeline-structure 阶段使用） */
+  /** truth_reviews.timeline_full 鍘熸枃锛坱imeline-structure 闃舵浣跨敤锛?*/
   timelineFull?: string;
 }
 
@@ -360,7 +362,7 @@ function formatStoryBibleValidationErrors(errors: string[]): string {
 }
 
 function buildMockStoryBible(params: ScriptGenerationParams): StoryBibleJson {
-  const names = ['林少衡', '苏晚晴', '周知远', '许望', '陈泠舟', '顾明岚', '沈砚'];
+  const names = ['林少衡', '苏晚晴', '周知远', '许望', '陈沐舟', '顾明岚', '沈砚'];
   const nodes = Array.from({ length: params.players }, (_, index) => ({
     name: names[index] ?? `角色${index + 1}`,
     identity: index === 0 ? '旧案幸存者' : index === 1 ? '被害者亲属' : '受邀来客',
@@ -415,7 +417,6 @@ function buildMockStoryBible(params: ScriptGenerationParams): StoryBibleJson {
     ],
   };
 }
-
 async function persistStoryBible(
   scriptId: string,
   params: ScriptGenerationParams,
@@ -497,19 +498,19 @@ function buildMockActStructure(params: ScriptGenerationParams, storyBible: Story
         sortOrder,
         content:
           sortOrder === 1
-            ? `众人因${params.title}聚集，${storyBible.coreTrick}的第一处伏笔被埋下。`
+            ? `众人因《${params.title}》聚集，${storyBible.coreTrick}的第一处伏笔被埋下。`
             : sortOrder === actCount
               ? `回收${storyBible.murderMethod}与关键证词，揭开${storyBible.murdererName}的动机链。`
               : '玩家通过证词冲突、地点搜证和人物秘密逐步逼近死亡时间真相。',
         scenes: [
           {
-            title: sortOrder === 1 ? '抵达古镇' : `搜证现场 ${sortOrder}`,
+            title: sortOrder === 1 ? '抵达旧镇' : `搜证现场 ${sortOrder}`,
             location: sortOrder === 1 ? '古镇客栈' : ['祠堂', '书房', '码头', '药铺'][index % 4],
             content: '玩家收集证词，发现时间线与人物陈述存在细微矛盾。',
             sortOrder: 1,
           },
           {
-            title: sortOrder === actCount ? '终局复盘' : `秘密交锋 ${sortOrder}`,
+            title: sortOrder === actCount ? '终局复盘' : `秘密交错 ${sortOrder}`,
             location: sortOrder === actCount ? '旧钟楼' : ['后院', '档案室', '茶室', '暗巷'][index % 4],
             content: '关键人物暴露隐藏关系，新的线索指向旧案真相。',
             sortOrder: 2,
@@ -525,7 +526,6 @@ function buildMockActStructure(params: ScriptGenerationParams, storyBible: Story
     }),
   };
 }
-
 async function getStoryBibleForPhase(body: GenerateRequestBody): Promise<StoryBibleJson> {
   if (body.storyBible) {
     return body.storyBible;
@@ -752,7 +752,7 @@ async function runJsonPhase<T>(
         if (!isProviderKeyConfigured(name)) {
           controller.enqueue(
             encodeSse(encoder, 'error', {
-              message: `AI provider ${name} ? API Key ?????????????`,
+              message: `AI provider ${name} 的 API Key 未配置，无法生成剧本`,
             }),
           );
           return;
@@ -981,7 +981,7 @@ async function handleCharacterProfiles(body: GenerateRequestBody): Promise<Respo
         if (!isProviderKeyConfigured(name)) {
           controller.enqueue(
             encodeSse(encoder, 'error', {
-              message: `AI provider ${name} ? API Key ?????????????`,
+              message: `AI provider ${name} 的 API Key 未配置，无法生成剧本`,
             }),
           );
           return;
@@ -1053,7 +1053,7 @@ async function handleActStructure(body: GenerateRequestBody): Promise<Response> 
         if (!isProviderKeyConfigured(name)) {
           controller.enqueue(
             encodeSse(encoder, 'error', {
-              message: `AI provider ${name} ? API Key ?????????????`,
+              message: `AI provider ${name} 的 API Key 未配置，无法生成剧本`,
             }),
           );
           return;
@@ -1152,6 +1152,41 @@ function countCharacterScriptWords(json: CharacterScriptJson): number {
   );
 }
 
+function resolveCharacterScriptMaxTokens(minWords: number): number {
+  return Math.min(32000, Math.max(8000, Math.ceil(minWords * 2.4)));
+}
+
+async function expandCharacterScriptToMinimum(args: {
+  provider: AIProvider;
+  json: CharacterScriptJson;
+  minWords: number;
+  currentWords: number;
+  character: CharacterProfile;
+  partLabel: string;
+}): Promise<CharacterScriptJson> {
+  const { provider, json, minWords, currentWords, character, partLabel } = args;
+  const prompt = [
+    `当前玩家：${character.name}（${character.roleIdentity}）`,
+    `当前分册：${partLabel}`,
+    `当前可读正文约 ${currentWords} 字，最低要求 ${minWords} 字。`,
+    '',
+    '请在不改变事实、不改变 JSON 结构、不新增字段的前提下扩写下面的玩家剧本 JSON。',
+    '扩写重点：actScripts[].content、actScripts[].scenes[].content、personalArc、perspectiveNote。',
+    '要求：只返回合法 JSON；最终可读正文必须不少于最低字数；不要用重复句、空话或字段名凑字数。',
+    '',
+    JSON.stringify(json),
+  ].join('\n');
+
+  const expanded = await provider.generate({
+    systemPrompt: '你是剧本杀玩家剧本扩写编辑。只返回合法 JSON，不要 markdown，不要解释。',
+    prompt,
+    temperature: 0.5,
+    maxTokens: resolveCharacterScriptMaxTokens(minWords),
+  });
+
+  return parseOrRepairJson<CharacterScriptJson>(expanded, 'CharacterScriptJson');
+}
+
 async function ensurePlayerIdentityAssignment(args: {
   supabase: Awaited<ReturnType<typeof createGenerationDbClient>>;
   scriptId: string;
@@ -1213,6 +1248,84 @@ async function ensurePlayerIdentityAssignment(args: {
   }
 
   return { playerSeatId: seat.id, identityAssignmentId: assignment.id };
+}
+
+function buildPlayerPackageContent(args: {
+  character: CharacterProfile;
+  json: CharacterScriptJson;
+  partLabel: string;
+  partIndex: number;
+  actOrder?: number;
+}): PlayerPackageContent {
+  const { character, json, partLabel, partIndex, actOrder } = args;
+  return {
+    cover: {
+      title: partLabel || `第${partIndex}本玩家资料包`,
+      subtitle: character.roleIdentity || character.name,
+    },
+    prologue: json.actScripts[0]?.content,
+    publicIdentity: character.roleIdentity,
+    privateBackground: character.backgroundStory,
+    hiddenSecrets: json.perspectiveNote ? [json.perspectiveNote] : [],
+    globalObjectives: character.personalTask ? [character.personalTask] : [],
+    actMaterials: json.actScripts.map((act, index) => ({
+      actOrder: actOrder ?? index + 1,
+      actTitle: act.actTitle || `第${index + 1}幕`,
+      mainText: act.content,
+      knownFacts: json.visibleClueTitles,
+      objectives: character.personalTask ? [character.personalTask] : [],
+      pauseInstruction: `${character.name}，先在这里等一等吧。`,
+    })),
+    endingPrompt: json.personalArc,
+  };
+}
+
+async function persistPlayerPackage(args: {
+  supabase: Awaited<ReturnType<typeof createGenerationDbClient>>;
+  body: GenerateRequestBody;
+  character: CharacterProfile;
+  json: CharacterScriptJson;
+  playerSeatId: string | null;
+  identityAssignmentId: string | null;
+  partIndex: number;
+  partLabel: string;
+  wordCount: number;
+}): Promise<void> {
+  const { supabase, body, character, json, playerSeatId, identityAssignmentId, partIndex, partLabel, wordCount } = args;
+  if (!playerSeatId) return;
+
+  const content = buildPlayerPackageContent({
+    character,
+    json,
+    partLabel,
+    partIndex,
+    actOrder: body.actOrder,
+  });
+
+  const { error } = await supabase.from('player_packages').upsert(
+    {
+      script_id: body.scriptId,
+      player_seat_id: playerSeatId,
+      identity_assignment_id: identityAssignmentId,
+      package_order: partIndex,
+      package_title: partLabel,
+      current_identity: character.roleIdentity || character.name,
+      read_order: partIndex,
+      package_type: body.actOrder ? 'act' : partIndex === 1 ? 'initial' : 'supplement',
+      content_json: content,
+      word_count: wordCount,
+      generation_status: 'completed',
+    },
+    { onConflict: 'script_id,player_seat_id,package_order' },
+  );
+
+  if (error) {
+    if (isMissingTableError(error)) {
+      console.warn(`player_packages table is missing; skipped player package persistence: ${error.message}`);
+      return;
+    }
+    throw new Error(`Player package upsert failed: ${error.message}`);
+  }
 }
 
 async function persistCharacterScript(
@@ -1313,6 +1426,18 @@ async function persistCharacterScript(
     }
     throw new Error(`Character script upsert failed: ${error.message}`);
   }
+
+  await persistPlayerPackage({
+    supabase,
+    body,
+    character,
+    json,
+    playerSeatId,
+    identityAssignmentId,
+    partIndex,
+    partLabel,
+    wordCount,
+  });
 
   await updateGenerationTaskResult(body.generationTaskId, {
     characterId,
@@ -1473,8 +1598,8 @@ async function persistTruthReview(
 }
 
 /**
- * 鎸佷箙鍖?timeline-structure 闃舵浜у嚭鐨勭粨鏋勫寲鏃堕棿绾夸簨浠躲€? *
- * 瀛楁鏄犲皠锛欰I 杈撳嚭鐨?characterName 闇€鍏堟煡 characters 琛ㄨ浆鎴?character_id锛? * 鎵句笉鍒板搴旇鑹插垯璺宠繃璇ヤ簨浠躲€俢haracter_scripts 琛ㄧ己澶憋紙isMissingTableError锛? * 鏃朵粎 console.warn 涓嶆姏閿欙紝淇濊瘉闃舵涓嶅洜琛ㄧ己澶辫€屽け璐ャ€? */
+ * 閹镐椒绠欓崠?timeline-structure 闂冭埖顔屾禍褍鍤惃鍕波閺嬪嫬瀵查弮鍫曟？缁惧じ绨ㄦ禒韬测偓? *
+ * 鐎涙顔岄弰鐘茬殸閿涙I 鏉堟挸鍤惃?characterName 闂団偓閸忓牊鐓?characters 鐞涖劏娴嗛幋?character_id閿? * 閹靛彞绗夐崚鏉款嚠鎼存棁顫楅懝鎻掑灟鐠哄疇绻冪拠銉ょ皑娴犺翰鈧竣haracter_scripts 鐞涖劎宸辨径鎲嬬礄isMissingTableError閿? * 閺冩湹绮?console.warn 娑撳秵濮忛柨娆欑礉娣囨繆鐦夐梼鑸殿唽娑撳秴娲滅悰銊у繁婢惰精鈧苯銇戠拹銉ｂ偓? */
 async function persistTimelineEvents(
   scriptId: string,
   params: ScriptGenerationParams,
@@ -1483,7 +1608,7 @@ async function persistTimelineEvents(
 ): Promise<void> {
   const supabase = await createGenerationDbClient();
 
-  // 1. 鏌?characters 琛紝鏋勫缓 name 鈫?id 鏄犲皠
+  // 1. 閺?characters 鐞涱煉绱濋弸鍕紦 name 閳?id 閺勭姴鐨?
   const { data: characterRows, error: characterError } = await supabase
     .from('characters')
     .select('id, name')
@@ -1503,7 +1628,7 @@ async function persistTimelineEvents(
     (characterRows ?? []).map((row) => [row.name, row.id]),
   );
 
-  // 2. 鍒犻櫎璇?scriptId 鐨勬棫 timeline_events 鏁版嵁
+  // 2. 閸掔娀娅庣拠?scriptId 閻ㄥ嫭妫?timeline_events 閺佺増宓?
   const { error: deleteError } = await supabase
     .from('timeline_events')
     .delete()
@@ -1518,7 +1643,7 @@ async function persistTimelineEvents(
     throw new Error(`Timeline event cleanup failed: ${deleteError.message}`);
   }
 
-  // 3. 鎵归噺 insert锛坈haracterName 鎵句笉鍒?id 鐨勪簨浠惰烦杩囷級
+  // 3. 閹靛綊鍣?insert閿涘潏haracterName 閹靛彞绗夐崚?id 閻ㄥ嫪绨ㄦ禒鎯扮儲鏉╁浄绱?
   const rowsToInsert = json.events
     .map((event: TimelineStructureEvent, index: number) => {
       const characterId = characterIdByName.get(event.characterName);
@@ -1551,7 +1676,7 @@ async function persistTimelineEvents(
     }
   }
 
-  // 4. 鍐欏叆 generation_tasks 璁板綍
+  // 4. 閸愭瑥鍙?generation_tasks 鐠佹澘缍?
   await updateGenerationTaskResult(taskId, { eventCount: rowsToInsert.length, totalEmitted: json.events.length });
 
   try {
@@ -1575,7 +1700,7 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
         if (!isProviderKeyConfigured(name)) {
           controller.enqueue(
             encodeSse(encoder, 'error', {
-              message: `AI provider ${name} ? API Key ?????????????`,
+              message: `AI provider ${name} 的 API Key 未配置，无法生成剧本`,
             }),
           );
           return;
@@ -1588,14 +1713,15 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
         ]);
         const character = getCharacterForScript(body, characterProfiles);
         const specConfig = await getGenerationSpecConfig();
+        const spec = buildGenerationSpec(params, specConfig);
         const partIndex = Math.max(1, body.scriptPartIndex ?? 1);
-        const partLabel = body.scriptPartLabel || '??????';
+        const partLabel = body.scriptPartLabel || '完整玩家剧本';
         const { systemPrompt, userPrompt } = buildCharacterScriptPrompt({
           params,
           storyBible,
           character,
           actStructure,
-          spec: buildGenerationSpec(params, specConfig),
+          spec,
           part: {
             index: partIndex,
             label: partLabel,
@@ -1618,6 +1744,7 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
           prompt: userPrompt,
           systemPrompt,
           temperature: 0.7,
+          maxTokens: resolveCharacterScriptMaxTokens(spec.minWordsPerCharacterScriptPiece),
           onChunk: (content) => {
             accumulated += content;
           },
@@ -1639,7 +1766,7 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
             characterName: character.name,
             actScripts: actStructure.acts.map((act) => ({
               actTitle: act.title,
-              content: `????????? JSON ??????????????????${parseMessage}`,
+              content: `模型返回的玩家剧本 JSON 解析失败，已使用分幕概要兜底。原始错误：${parseMessage}`,
               scenes: act.scenes.map((scene) => ({
                 title: scene.title,
                 content: scene.content,
@@ -1647,12 +1774,41 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
             })),
             personalArc: character.personalTask,
             visibleClueTitles: [],
-            perspectiveNote: `?????? JSON ???????????????${parseMessage}`,
+            perspectiveNote: `模型返回的玩家剧本 JSON 解析失败，需人工复核。原始错误：${parseMessage}`,
           };
         }
 
         if (!Array.isArray(json.actScripts) || json.actScripts.length === 0) {
           controller.enqueue(encodeSse(encoder, 'error', { message: 'Character script result is empty' }));
+          return;
+        }
+
+        let wordCount = countCharacterScriptWords(json);
+        if (wordCount < spec.minWordsPerCharacterScriptPiece) {
+          controller.enqueue(
+            encodeSse(encoder, 'progress', {
+              percent: 100,
+              stage: 'expanding',
+              message: `玩家剧本正文约 ${wordCount} 字，低于最低 ${spec.minWordsPerCharacterScriptPiece} 字，正在自动扩写`,
+            }),
+          );
+          json = await expandCharacterScriptToMinimum({
+            provider,
+            json,
+            minWords: spec.minWordsPerCharacterScriptPiece,
+            currentWords: wordCount,
+            character,
+            partLabel,
+          });
+          wordCount = countCharacterScriptWords(json);
+        }
+
+        if (wordCount < spec.minWordsPerCharacterScriptPiece) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message: `玩家剧本正文约 ${wordCount} 字，低于最低 ${spec.minWordsPerCharacterScriptPiece} 字。请在 Admin 提高模型 max tokens/超时时间，或换用长文本模型后重试。`,
+            }),
+          );
           return;
         }
 
@@ -1746,7 +1902,7 @@ async function handleTruthReview(body: GenerateRequestBody): Promise<Response> {
 }
 
 /**
- * 鑾峰彇 timeline-structure 闃舵鎵€闇€鐨?timeline_full 鏂囨湰銆? * 浼樺厛鐢?body.timelineFull锛涗负绌哄垯鏌?truth_reviews 琛ㄧ殑 timeline_full 瀛楁銆? */
+ * 閼惧嘲褰?timeline-structure 闂冭埖顔岄幍鈧棁鈧惃?timeline_full 閺傚洦婀伴妴? * 娴兼ê鍘涢悽?body.timelineFull閿涙稐璐熺粚鍝勫灟閺?truth_reviews 鐞涖劎娈?timeline_full 鐎涙顔岄妴? */
 async function getTimelineFullForPhase(body: GenerateRequestBody): Promise<string> {
   if (body.timelineFull && body.timelineFull.trim().length > 0) {
     return body.timelineFull;
@@ -1791,8 +1947,8 @@ async function handleTimelineStructure(body: GenerateRequestBody): Promise<Respo
 }
 
 /**
- * timeline-structure 阶段的 mock 实现。
- * 从 body.timelineFull 拆分段落生成占位事件。
+ * timeline-structure 闃舵鐨?mock 瀹炵幇銆?
+ * 浠?body.timelineFull 鎷嗗垎娈佃惤鐢熸垚鍗犱綅浜嬩欢銆?
  */
 async function handleTimelineStructureMock(body: GenerateRequestBody): Promise<Response> {
   const { scriptId, params } = body;
@@ -1806,7 +1962,7 @@ async function handleTimelineStructureMock(body: GenerateRequestBody): Promise<R
 
         const supabase = await createGenerationDbClient();
 
-        // 1. 获取 timeline_full 文本，body 优先，回退查询 truth_reviews。
+        // 1. 鑾峰彇 timeline_full 鏂囨湰锛宐ody 浼樺厛锛屽洖閫€鏌ヨ truth_reviews銆?
         let timelineFull = body.timelineFull ?? '';
         if (!timelineFull.trim()) {
           const { data } = await supabase
@@ -1817,7 +1973,7 @@ async function handleTimelineStructureMock(body: GenerateRequestBody): Promise<R
           timelineFull = (data as { timeline_full: string | null } | null)?.timeline_full ?? '';
         }
 
-        // 2. 获取角色列表，占位使用第一个角色。
+        // 2. 鑾峰彇瑙掕壊鍒楄〃锛屽崰浣嶄娇鐢ㄧ涓€涓鑹层€?
         const { data: charRows } = await supabase
           .from('characters')
           .select('name')
@@ -1825,11 +1981,11 @@ async function handleTimelineStructureMock(body: GenerateRequestBody): Promise<R
           .order('sort_order')
           .limit(1);
         const placeholderName =
-          charRows?.[0]?.name ?? body.characterProfiles?.characters[0]?.name ?? '角色';
+          charRows?.[0]?.name ?? body.characterProfiles?.characters[0]?.name ?? '瑙掕壊';
 
-        // 3. 按箭头或换行拆分段落，时间从 18:00 起步递增 30 分钟。
+        // 3. 鎸夌澶存垨鎹㈣鎷嗗垎娈佃惤锛屾椂闂翠粠 18:00 璧锋閫掑 30 鍒嗛挓銆?
         const segments = timelineFull
-          .split(/[→\n]/)
+          .split(/[鈫抃n]/)
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
 
@@ -1851,7 +2007,7 @@ async function handleTimelineStructureMock(body: GenerateRequestBody): Promise<R
 
         const json: TimelineStructureJson = { events };
 
-        // 4. 持久化，表缺失时仅记录警告。
+        // 4. 鎸佷箙鍖栵紝琛ㄧ己澶辨椂浠呰褰曡鍛娿€?
         try {
           await persistTimelineEvents(scriptId, params, json, body.generationTaskId);
         } catch (persistError) {
@@ -1915,7 +2071,7 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
         if (!isProviderKeyConfigured(name)) {
           controller.enqueue(
             encodeSse(encoder, 'error', {
-              message: `AI provider ${name} ? API Key ?????????????`,
+              message: `AI provider ${name} 的 API Key 未配置，无法生成剧本`,
             }),
           );
           return;
@@ -2009,10 +2165,10 @@ async function resolveAuthenticatedUser(request: NextRequest): Promise<{ id: str
 }
 
 /**
- * 查询用户封禁状态。
- * admin 端可通过 users.is_banned 字段封禁用户，封禁后应阻止新的生成请求。
- * 由于此 API 在用户 JWT 上下文中运行（不能直接读 users 表的 RLS），
- * 使用 service role client 绕过 RLS 读取 is_banned 字段。
+ * 鏌ヨ鐢ㄦ埛灏佺鐘舵€併€?
+ * admin 绔彲閫氳繃 users.is_banned 瀛楁灏佺鐢ㄦ埛锛屽皝绂佸悗搴旈樆姝㈡柊鐨勭敓鎴愯姹傘€?
+ * 鐢变簬姝?API 鍦ㄧ敤鎴?JWT 涓婁笅鏂囦腑杩愯锛堜笉鑳界洿鎺ヨ users 琛ㄧ殑 RLS锛夛紝
+ * 浣跨敤 service role client 缁曡繃 RLS 璇诲彇 is_banned 瀛楁銆?
  */
 async function checkUserBanned(userId: string): Promise<boolean> {
   const supabase = await createGenerationDbClient();
@@ -2022,8 +2178,8 @@ async function checkUserBanned(userId: string): Promise<boolean> {
     .eq('id', userId)
     .maybeSingle();
   if (error || !data) {
-    // 查询失败时保守处理：不阻断（避免 DB 故障导致所有用户无法生成）
-    // 但记录告警便于后续排查
+    // 鏌ヨ澶辫触鏃朵繚瀹堝鐞嗭細涓嶉樆鏂紙閬垮厤 DB 鏁呴殰瀵艰嚧鎵€鏈夌敤鎴锋棤娉曠敓鎴愶級
+    // 浣嗚褰曞憡璀︿究浜庡悗缁帓鏌?
     console.warn(`Failed to check is_banned for user ${userId}: ${error?.message ?? 'no row'}`);
     return false;
   }
@@ -2121,7 +2277,7 @@ async function runMeteredGeneration(
   if (!user) {
     return buildError('未登录或登录状态已失效', 401);
   }
-  // admin 端封禁用户后阻止新的生成请求；token 失效前已签发的请求也会被拦截
+  // admin 绔皝绂佺敤鎴峰悗闃绘鏂扮殑鐢熸垚璇锋眰锛泃oken 澶辨晥鍓嶅凡绛惧彂鐨勮姹備篃浼氳鎷︽埅
   if (user.isBanned) {
     return buildError('账号已被封禁，无法生成剧本', 403);
   }
@@ -2234,8 +2390,8 @@ export async function POST(
     return runMeteredGeneration(request, phase, body, () => handleTimelineStructureMock(body));
   }
 
-  // 未知阶段：早期通过 proxySupabaseGenerate 兜底代理到 Supabase Edge Function，
-  // 但分阶段编排上线后所有已知 phase 都已分支处理，Edge Function 已废弃移除，
-  // 未知 phase 直接返回 404，避免静默调用不存在的上游。
+  // 鏈煡闃舵锛氭棭鏈熼€氳繃 proxySupabaseGenerate 鍏滃簳浠ｇ悊鍒?Supabase Edge Function锛?
+  // 浣嗗垎闃舵缂栨帓涓婄嚎鍚庢墍鏈夊凡鐭?phase 閮藉凡鍒嗘敮澶勭悊锛孍dge Function 宸插簾寮冪Щ闄わ紝
+  // 鏈煡 phase 鐩存帴杩斿洖 404锛岄伩鍏嶉潤榛樿皟鐢ㄤ笉瀛樺湪鐨勪笂娓搞€?
   return buildError(`Unknown generation phase: ${phase}`, 404);
 }

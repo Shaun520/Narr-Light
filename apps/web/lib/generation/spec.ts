@@ -72,7 +72,7 @@ export function formatGenerationSpec(spec: GenerationSpec): string {
     `- 场景数量：全本至少 ${spec.minSceneCount} 个场景`,
     `- 线索数量：全本至少 ${spec.minClueCount} 条线索`,
     `- 玩家剧本配置：每名玩家拿到 ${spec.scriptsPerPlayer} 本，全本共 ${spec.totalCharacterScriptCount} 本`,
-    `- 玩家剧本字数：每名玩家合计不少于 ${spec.minCharacterScriptWords} 字，单本不少于 ${spec.minWordsPerCharacterScriptPiece} 字`,
+    `- 玩家剧本文字量：每名玩家合计不少于 ${spec.minCharacterScriptWords} 字，单本不少于 ${spec.minWordsPerCharacterScriptPiece} 字`,
   ].join("\n");
 }
 
@@ -88,9 +88,6 @@ export const DEFAULT_GENERATION_SPEC_CONFIG: GenerationSpecConfig = {
   minScenesPerAct: 3,
   minCluesPerRoundBase: 4,
   playerClueRatio: 0.8,
-  // 相邻档位边界相接（minDuration == 上一档 maxDuration），确保 [2, 8] 实数区间无盲区。
-  // buildGenerationSpecWithConfig 用 find(min<=d<=max) 查找档位，若存在空档会回退到第一档，
-  // 导致 admin 端配置改动不生效。校验函数 validateGenerationSpecConfig 会强制此约束。
   durationBands: [
     { minDuration: 2, maxDuration: 3, actCount: 3, searchRoundCount: 3 },
     { minDuration: 3, maxDuration: 5, actCount: 4, searchRoundCount: 4 },

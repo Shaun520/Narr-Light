@@ -33,6 +33,7 @@ interface SnapshotPayload {
   character_relations?: unknown[];
   timeline_events?: unknown[];
   character_scripts?: unknown[];
+  player_packages?: unknown[];
   organizer_manuals?: unknown[];
   truth_reviews?: unknown[];
   [key: string]: unknown;
@@ -255,6 +256,18 @@ export class VersionService {
     }
 
     // 3. 覆盖 acts（ON DELETE CASCADE 会级联删除关联 scenes）
+    if (Array.isArray(payload.player_packages)) {
+      const deleteResult = await supabase.from('player_packages').delete().eq('script_id', scriptId);
+      if (!deleteResult.error && payload.player_packages.length > 0) {
+        const rows = payload.player_packages.map((row) => ({
+          ...(row as Record<string, unknown>),
+          script_id: scriptId,
+        }));
+        const { error } = await supabase.from('player_packages').insert(rows);
+        if (error) throw new Error(`覆盖玩家资料包失败: ${error.message}`);
+      }
+    }
+
     if (Array.isArray(payload.acts)) {
       await supabase.from('acts').delete().eq('script_id', scriptId);
       if (payload.acts.length > 0) {

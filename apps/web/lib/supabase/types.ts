@@ -151,6 +151,30 @@ export interface Database {
         Insert: Omit<Database["public"]["Tables"]["characters"]["Row"], "created_at"> & { created_at?: string };
         Update: Partial<Database["public"]["Tables"]["characters"]["Row"]>;
       };
+      player_packages: {
+        Row: {
+          id: string;
+          script_id: string;
+          player_seat_id: string;
+          identity_assignment_id: string | null;
+          package_order: number;
+          package_title: string;
+          current_identity: string;
+          read_order: number;
+          package_type: "initial" | "act" | "supplement" | "ending";
+          content_json: Json;
+          word_count: number;
+          generation_status: "pending" | "running" | "completed" | "failed";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["player_packages"]["Row"], "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["player_packages"]["Row"]>;
+      };
       acts: {
         Row: {
           id: string;

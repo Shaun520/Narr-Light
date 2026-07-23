@@ -1,10 +1,10 @@
-/**
- * 鍒嗛樁娈靛墽鏈敓鎴愬鎴风缂栨帓鍣? *
- * 鏇挎崲 generate/page.tsx 鐨?Mock setInterval锛岀湡瀹炶皟搴?7 涓樁娈?Edge Function锛? *   闃舵 0 STORY_BIBLE 鈫?纭闂搁棬 鈫?闃舵 1锛? 骞惰锛夆啋 闃舵 2锛圢 涓垎鎵瑰苟琛岋級鈫?闃舵 3锛? 骞惰锛? *
- * 鍏抽敭鑳藉姏锛? * - 闃舵鐘舵€佹満锛歱ending 鈫?running 鈫?completed / failed锛屾敮鎸佸崟闃舵閲嶈瘯
- * - 骞跺彂鎺у埗锛氶樁娈?2 鍒嗘壒 Promise.all锛堟瘡鎵?4 涓級
- * - 纭闂搁棬锛氶樁娈?0 瀹屾垚鍚庢殏鍋滐紝绛夊緟鐢ㄦ埛纭璁惧畾鏈? * - 涓柇鍙栨秷锛欰bortController 缁堟褰撳墠 SSE 娴? * - 杩涘害鍥炶皟锛氭瘡闃舵 chunk/progress/completed/error 浜嬩欢閫忎紶缁?UI
- * - 缁紶鎭㈠锛歳esumeFromScript(scriptId) 妫€娴?7 琛ㄥ畬鎴愮姸鎬佸苟鎭㈠鍒板搴旈樁娈? */
+﻿/**
+ * 閸掑棝妯佸▓闈涘⒔閺堫剛鏁撻幋鎰吂閹撮顏紓鏍ㄥ笓閸? *
+ * 閺囨寧宕?generate/page.tsx 閻?Mock setInterval閿涘瞼婀＄€圭偠鐨熸惔?7 娑擃亪妯佸▓?Edge Function閿? *   闂冭埖顔?0 STORY_BIBLE 閳?绾喛顓婚梻鎼佹， 閳?闂冭埖顔?1閿? 楠炴儼顢戦敍澶嗗晪 闂冭埖顔?2閿涘湤 娑擃亜鍨庨幍鐟拌嫙鐞涘矉绱氶埆?闂冭埖顔?3閿? 楠炴儼顢戦敍? *
+ * 閸忔娊鏁懗钘夊閿? * - 闂冭埖顔岄悩鑸碘偓浣规簚閿涙ending 閳?running 閳?completed / failed閿涘本鏁幐浣稿礋闂冭埖顔岄柌宥堢槸
+ * - 楠炶泛褰傞幒褍鍩楅敍姘舵▉濞?2 閸掑棙澹?Promise.all閿涘牊鐦￠幍?4 娑擃亷绱?
+ * - 绾喛顓婚梻鎼佹，閿涙岸妯佸▓?0 鐎瑰本鍨氶崥搴㈡畯閸嬫粣绱濈粵澶婄窡閻劍鍩涚涵顔款吇鐠佹儳鐣鹃張? * - 娑擃厽鏌囬崣鏍ㄧХ閿涙bortController 缂佸牊顒涜ぐ鎾冲 SSE 濞? * - 鏉╂稑瀹抽崶鐐剁殶閿涙碍鐦￠梼鑸殿唽 chunk/progress/completed/error 娴滃娆㈤柅蹇庣炊缂?UI
+ * - 缂侇厺绱堕幁銏狀槻閿涙esumeFromScript(scriptId) 濡偓濞?7 鐞涖劌鐣幋鎰Ц閹礁鑻熼幁銏狀槻閸掓澘顕惔鏃堟▉濞? */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { createSSEClient } from '@/lib/ai/stream/sse-handler';
@@ -12,9 +12,9 @@ import type { ScriptGenerationParams } from '@/lib/ai/prompts/script-generation'
 import type { StoryBibleJson } from '@/lib/ai/prompts/story-bible';
 import { createDefaultNickname, isDefaultNicknameConflict } from '@/lib/users/default-nickname';
 
-// ===== 绫诲瀷瀹氫箟 =====
+// ===== 缁鐎风€规矮绠?=====
 
-/** 闃舵鏍囪瘑 */
+/** 闂冭埖顔岄弽鍥槕 */
 export type PhaseId =
   | 'story_bible'
   | 'character_profiles'
@@ -25,10 +25,10 @@ export type PhaseId =
   | 'truth_review'
   | 'timeline_structure';
 
-/** 鍗曢樁娈电姸鎬?*/
+/** 閸楁洟妯佸▓鐢靛Ц閹?*/
 export type PhaseStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
-/** 闃舵 2 瑙掕壊鍓ф湰瀛愰」 */
+/** 闂冭埖顔?2 鐟欐帟澹婇崜褎婀扮€涙劙銆?*/
 export interface PhaseSubItem {
   id: string;
   label: string;
@@ -51,67 +51,67 @@ interface CharacterScriptTask {
   actOrder?: number;
 }
 
-/** 鍗曢樁娈佃繍琛屾椂淇℃伅 */
+/** 閸楁洟妯佸▓浣冪箥鐞涘本妞傛穱鈩冧紖 */
 export interface PhaseState {
   id: PhaseId;
   status: PhaseStatus;
-  /** 娴佸紡绱Н鐨勬枃鏈唴瀹癸紙鐢ㄤ簬 UI 棰勮锛?*/
+  /** 濞翠礁绱＄槐顖溞濋惃鍕瀮閺堫剙鍞寸€圭櫢绱欓悽銊ょ艾 UI 妫板嫯顫嶉敍?*/
   streamedText: string;
-  /** 杩涘害鐧惧垎姣?0-100 */
+  /** 鏉╂稑瀹抽惂鎯у瀻濮?0-100 */
   percent: number;
-  /** 閿欒淇℃伅锛坰tatus=failed 鏃讹級 */
+  /** 闁挎瑨顕ゆ穱鈩冧紖閿涘澃tatus=failed 閺冭绱?*/
   error?: string;
-  /** 闃舵浜у嚭锛坈ompleted 鏃剁殑 result_data锛屽 characterCount/wordCount 绛夛級 */
+  /** 闂冭埖顔屾禍褍鍤敍鍧坥mpleted 閺冨墎娈?result_data閿涘苯顩?characterCount/wordCount 缁涘绱?*/
   result?: Record<string, unknown>;
-  /** 闃舵 2 涓撴湁锛氬悇瑙掕壊瀛愮姸鎬?*/
+  /** 闂冭埖顔?2 娑撴挻婀侀敍姘倗鐟欐帟澹婄€涙劗濮搁幀?*/
   subItems?: PhaseSubItem[];
-  /** 鑰楁椂锛堢锛?*/
+  /** 閼版妞傞敍鍫㈩潡閿?*/
   durationSeconds?: number;
   mode?: 'mock' | 'real';
   provider?: string;
   model?: string;
 }
 
-/** 缂栨帓鍣ㄦ暣浣撶姸鎬?*/
+/** 缂傛牗甯撻崳銊︽殻娴ｆ挾濮搁幀?*/
 export interface PhasedGenerationState {
-  /** 鍏宠仈鐨?scriptId锛堥樁娈?0 鍓嶅垱寤虹┖ script 琛岃幏寰楋級 */
+  /** 閸忓疇浠堥惃?scriptId閿涘牓妯佸▓?0 閸撳秴鍨卞铏光敄 script 鐞涘矁骞忓妤嬬礆 */
   scriptId: string | null;
-  /** 鍚勯樁娈电姸鎬?*/
+  /** 閸氬嫰妯佸▓鐢靛Ц閹?*/
   phases: Record<PhaseId, PhaseState>;
-  /** 缂栨帓鍣ㄩ《灞傜姸鎬侊細idle / running / paused_at_gate / completed / failed */
+  /** 缂傛牗甯撻崳銊┿€婄仦鍌滃Ц閹緤绱癷dle / running / paused_at_gate / completed / failed */
   orchestrationStatus: 'idle' | 'running' | 'paused_at_gate' | 'completed' | 'failed';
-  /** 褰撳墠杩愯闃舵 */
+  /** 瑜版挸澧犳潻鎰攽闂冭埖顔?*/
   currentPhase: PhaseId | null;
-  /** 闃舵 0 浜у嚭鐨勮瀹氭湰锛堢敤浜庣‘璁ら椄闂?UI锛?*/
+  /** 闂冭埖顔?0 娴溠冨毉閻ㄥ嫯顔曠€规碍婀伴敍鍫㈡暏娴滃海鈥樼拋銈夋闂?UI閿?*/
   storyBible: StoryBibleJson | null;
-  /** 鍏ㄥ眬閿欒 */
+  /** 閸忋劌鐪柨娆掝嚖 */
   globalError?: string;
 }
 
-/** SSE 浜嬩欢缁熶竴缁撴瀯 */
+/** SSE 娴滃娆㈢紒鐔剁缂佹挻鐎?*/
 
-/** Hook 杩斿洖鎺ュ彛 */
+/** Hook 鏉╂柨娲栭幒銉ュ經 */
 export interface UsePhasedGenerationResult {
   state: PhasedGenerationState;
-  /** 鍚姩鍏ㄦ祦绋嬶細鍒涘缓绌?script 琛?鈫?闃舵 0 */
+  /** 閸氼垰濮╅崗銊︾ウ缁嬪绱伴崚娑樼紦缁?script 鐞?閳?闂冭埖顔?0 */
   start: (params: ScriptGenerationParams) => Promise<void>;
-  /** 璁惧畾鏈‘璁ら椄闂細鐢ㄦ埛纭鍚庣户缁樁娈?1-3 */
+  /** 鐠佹儳鐣鹃張顒傗€樼拋銈夋闂傤煉绱伴悽銊﹀煕绾喛顓婚崥搴ｆ埛缂侇參妯佸▓?1-3 */
   confirmStoryBible: () => Promise<void>;
-  /** 璁惧畾鏈椄闂細閲嶆柊鐢熸垚闃舵 0 */
+  /** 鐠佹儳鐣鹃張顒勬闂傤煉绱伴柌宥嗘煀閻㈢喐鍨氶梼鑸殿唽 0 */
   regenerateStoryBible: () => Promise<void>;
-  /** 閲嶈瘯鍗曚釜澶辫触闃舵 */
+  /** 闁插秷鐦崡鏇氶嚋婢惰精瑙﹂梼鑸殿唽 */
   retryPhase: (phaseId: PhaseId) => Promise<void>;
-  /** 涓柇褰撳墠鐢熸垚 */
+  /** 娑擃厽鏌囪ぐ鎾冲閻㈢喐鍨?*/
   abort: () => void;
-  /** 閲嶇疆鍏ㄩ儴鐘舵€?*/
+  /** 闁插秶鐤嗛崗銊╁劥閻樿埖鈧?*/
   reset: () => void;
-  /** 浠庡凡鏈?scriptId 鎭㈠锛氭娴?7 琛ㄥ畬鎴愮姸鎬侊紝鍥炲～宸插畬鎴愰樁娈典笌璁惧畾鏈?*/
+  /** 娴犲骸鍑￠張?scriptId 閹垹顦查敍姘梾濞?7 鐞涖劌鐣幋鎰Ц閹緤绱濋崶鐐诧綖瀹告彃鐣幋鎰版▉濞堝吀绗岀拋鎯х暰閺?*/
   resumeFromScript: (scriptId: string, params?: ScriptGenerationParams) => Promise<void>;
 }
 
-// ===== 闃舵瀹氫箟甯搁噺 =====
+// ===== 闂冭埖顔岀€规矮绠熺敮鎼佸櫤 =====
 
-/** 闃舵椤哄簭锛堥櫎 character_script 澶栧潎涓哄崟瀹炰緥锛?*/
+/** 闂冭埖顔屾い鍝勭碍閿涘牓娅?character_script 婢舵牕娼庢稉鍝勫礋鐎圭偘绶ラ敍?*/
 const PHASE_ORDER: PhaseId[] = [
   'story_bible',
   'character_profiles',
@@ -123,19 +123,19 @@ const PHASE_ORDER: PhaseId[] = [
   'timeline_structure',
 ];
 
-/** 闃舵涓枃鏍囩 */
+/** 闂冭埖顔屾稉顓熸瀮閺嶅洨顒?*/
 const PHASE_LABELS: Record<PhaseId, string> = {
   story_bible: '设定本',
   character_profiles: '人物设定',
   act_structure: '分幕结构',
-  character_script: '角色剧本',
+  character_script: '玩家剧本',
   clues: '线索卡',
   organizer_manual: '组织者手册',
   truth_review: '真相复盘',
   timeline_structure: '时间线结构化',
 };
 
-/** 闃舵 2 瑙掕壊鍓ф湰鐨勫苟鍙戜笂闄?*/
+/** 闂冭埖顔?2 鐟欐帟澹婇崜褎婀伴惃鍕嫙閸欐垳绗傞梽?*/
 const CHARACTER_SCRIPT_CONCURRENCY = 4;
 
 function getCharacterScriptSpec(result: PhaseState['result']): CharacterScriptGenerationSpec {
@@ -154,7 +154,11 @@ function buildCharacterScriptTasks(
     Array.from({ length: scriptsPerPlayer }, (_, index) => {
       const partIndex = index + 1;
       const isPerAct = mode === 'per_act';
-      const scriptPartLabel = isPerAct ? `第${partIndex}幕玩家剧本` : scriptsPerPlayer === 1 ? '完整玩家剧本' : `第${partIndex}本玩家剧本`;
+      const scriptPartLabel = isPerAct
+        ? `第${partIndex}幕玩家剧本`
+        : scriptsPerPlayer === 1
+          ? '完整玩家剧本'
+          : `第${partIndex}本玩家剧本`;
       return {
         id: `${character.id}:part:${partIndex}`,
         characterId: character.id,
@@ -167,7 +171,7 @@ function buildCharacterScriptTasks(
   );
 }
 
-// ===== 鍒濆鐘舵€佸伐鍘?=====
+// ===== 閸掓繂顫愰悩鑸碘偓浣镐紣閸?=====
 
 function getExpectedCharacterScriptCount(
   characterCount: number,
@@ -200,9 +204,9 @@ function createInitialState(): PhasedGenerationState {
   };
 }
 
-// ===== 涓嶅彲鍙樻洿鏂板伐鍏峰嚱鏁?=====
+// ===== 娑撳秴褰查崣妯绘纯閺傛澘浼愰崗宄板毐閺?=====
 
-/** 鏇存柊鍗曚釜闃舵鐘舵€?*/
+/** 閺囧瓨鏌婇崡鏇氶嚋闂冭埖顔岄悩鑸碘偓?*/
 function updatePhase(
   state: PhasedGenerationState,
   phaseId: PhaseId,
@@ -220,7 +224,7 @@ function updatePhase(
   };
 }
 
-/** 鏇存柊闃舵 2 鐨勫崟涓鑹插瓙椤圭姸鎬?*/
+/** 閺囧瓨鏌婇梼鑸殿唽 2 閻ㄥ嫬宕熸稉顏囶潡閼规彃鐡欐い鍦Ц閹?*/
 function updateSubItem(
   state: PhasedGenerationState,
   phaseId: PhaseId,
@@ -243,7 +247,7 @@ function updateSubItem(
   };
 }
 
-/** 鏍规嵁 data 瀛楁鎺ㄦ柇 SSE 浜嬩欢绫诲瀷锛堝綋 event 瀛楁缂哄け鏃讹級 */
+/** 閺嶈宓?data 鐎涙顔岄幒銊︽焽 SSE 娴滃娆㈢猾璇茬€烽敍鍫濈秼 event 鐎涙顔岀紓鍝勩亼閺冭绱?*/
 function inferSSEEventType(parsed: Record<string, unknown>): string | undefined {
   if ('chunk' in parsed || 'text' in parsed || 'content' in parsed) return 'chunk';
   if ('percent' in parsed) return 'progress';
@@ -258,12 +262,12 @@ function estimateStreamingPercent(currentPercent: number, streamedLength: number
   return Math.max(currentPercent, 5, byLength);
 }
 
-// ===== Hook 瀹炵幇 =====
+// ===== Hook 鐎圭偟骞?=====
 
 export function usePhasedGeneration(): UsePhasedGenerationResult {
   const [state, setState] = useState<PhasedGenerationState>(createInitialState);
 
-  // refs：保存最新值，避免闭包陷阱
+  // refs锛氫繚瀛樻渶鏂板€硷紝閬垮厤闂寘闄烽槺
   const abortControllersRef = useRef<Set<AbortController>>(new Set());
   const paramsRef = useRef<ScriptGenerationParams | null>(null);
   const scriptIdRef = useRef<string | null>(null);
@@ -285,7 +289,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     abortControllersRef.current.clear();
   }, []);
 
-  // ===== handleSSEEvent锛氭牴鎹?SSE 浜嬩欢鐨?event 瀛楁鍒嗗彂鐘舵€佹洿鏂?=====
+  // ===== handleSSEEvent閿涙碍鐗撮幑?SSE 娴滃娆㈤惃?event 鐎涙顔岄崚鍡楀絺閻樿埖鈧焦娲块弬?=====
   const handleSSEEvent = useCallback(
     (
       phaseId: PhaseId,
@@ -344,7 +348,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
             (parsed.result as Record<string, unknown> | undefined) ?? parsed;
 
           if (phaseId === 'story_bible') {
-            // 闃舵 0 瀹屾垚锛氬瓨鍌ㄨ瀹氭湰锛屾殏鍋滃湪纭闂搁棬
+            // 闂冭埖顔?0 鐎瑰本鍨氶敍姘摠閸屻劏顔曠€规碍婀伴敍灞炬畯閸嬫粌婀涵顔款吇闂傛悂妫?
             const storyBible =
               (result.storyBible as StoryBibleJson | undefined) ??
               (result as unknown as StoryBibleJson);
@@ -374,7 +378,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
 
         case 'error': {
           const errorMsg =
-            (parsed.error as string) || (parsed.message as string) || '闃舵澶辫触';
+            (parsed.error as string) || (parsed.message as string) || '闂冭埖顔屾径杈Е';
           setState((prev) =>
             updatePhase(prev, phaseId, {
               status: 'failed',
@@ -386,20 +390,20 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         }
 
         default:
-          // 鏈煡浜嬩欢锛屽拷鐣?          break;
+          // 閺堫亞鐓℃禍瀣╂閿涘苯鎷烽悾?          break;
       }
     },
     [],
   );
 
-  // ===== runPhase锛氭牳蹇?SSE 璋冪敤锛堝崟瀹炰緥闃舵锛?=====
+  // ===== runPhase閿涙碍鐗宠箛?SSE 鐠嬪啰鏁ら敍鍫濆礋鐎圭偘绶ラ梼鑸殿唽閿?=====
   const runPhase = useCallback(
     async (
       phaseId: PhaseId,
       params: ScriptGenerationParams,
       options?: { characterId?: string },
     ): Promise<void> => {
-      // 鏇存柊闃舵鐘舵€佷负 running
+      // 閺囧瓨鏌婇梼鑸殿唽閻樿埖鈧椒璐?running
       setState((prev) =>
         updatePhase(prev, phaseId, {
           status: 'running',
@@ -434,7 +438,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         ? { scriptId, characterId: options.characterId, params, storyBible, ...phaseContext }
         : { scriptId, params, storyBible, ...phaseContext };
 
-      // 鍒涘缓 AbortController 骞跺瓨鍌ㄥ埌 ref
+      // 閸掓稑缂?AbortController 楠炶泛鐡ㄩ崒銊ュ煂 ref
       const controller = new AbortController();
       const unregisterAbortController = registerAbortController(controller);
 
@@ -467,11 +471,11 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
                 failureError = new Error(
                   (parsed.error as string) ||
                     (parsed.message as string) ||
-                    '闃舵澶辫触',
+                    '闂冭埖顔屾径杈Е',
                 );
               }
             } catch {
-              // 闈?JSON锛屾寜 chunk 鏂囨湰澶勭悊
+              // 闂?JSON閿涘本瀵?chunk 閺傚洦婀版径鍕倞
               setState((prev) =>
                 updatePhase(prev, phaseId, {
                   streamedText: prev.phases[phaseId].streamedText + data,
@@ -499,21 +503,21 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           onClose: () => {
             unregisterAbortController();
             if (controller.signal.aborted) {
-              // 鐢ㄦ埛涓诲姩涓柇
+              // 閻劍鍩涙稉璇插З娑擃厽鏌?
               setState((prev) =>
                 updatePhase(prev, phaseId, {
                   status: 'failed',
-                  error: '鐢ㄦ埛涓柇',
+                  error: '用户中断',
                   durationSeconds: Math.round((Date.now() - startTime) / 1000),
                 }),
               );
-              reject(new Error('鐢ㄦ埛涓柇'));
+              reject(new Error('用户中断'));
             } else if (phaseFailed && failureError) {
               reject(failureError);
             } else if (phaseSucceeded) {
               resolve();
             } else {
-              // 娴佸叧闂絾鏈敹鍒?completed 浜嬩欢
+              // 濞翠礁鍙ч梻顓濈稻閺堫亝鏁归崚?completed 娴滃娆?
               setState((prev) =>
                 updatePhase(prev, phaseId, {
                   status: 'failed',
@@ -530,13 +534,13 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     [handleSSEEvent, registerAbortController, state.storyBible],
   );
 
-  // ===== runCharacterScriptSubTask锛氬崟涓鑹插墽鏈瓙浠诲姟 =====
+  // ===== runCharacterScriptSubTask閿涙艾宕熸稉顏囶潡閼规彃澧介張顒€鐡欐禒璇插 =====
   const runCharacterScriptSubTask = useCallback(
     async (
       task: CharacterScriptTask,
       params: ScriptGenerationParams,
     ): Promise<void> => {
-      // 鏍囪瀛愰」涓?running
+      // 閺嶅洩顔囩€涙劙銆嶆稉?running
       setState((prev) =>
         updateSubItem(prev, 'character_script', task.id, {
           status: 'running',
@@ -600,7 +604,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
                 const errorMsg =
                   (parsed.error as string) ||
                   (parsed.message as string) ||
-                  '瑙掕壊鍓ф湰鐢熸垚澶辫触';
+                  '玩家剧本生成失败';
                 setState((prev) =>
                   updateSubItem(prev, 'character_script', task.id, {
                     status: 'failed',
@@ -608,7 +612,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
                   }),
                 );
               } else if (eventType === 'chunk') {
-                // 将 chunk 追加到父阶段的 streamedText，供 UI 预览
+                // 灏?chunk 杩藉姞鍒扮埗闃舵鐨?streamedText锛屼緵 UI 棰勮
                 const chunk =
                   (parsed.chunk as string) ||
                   (parsed.text as string) ||
@@ -626,7 +630,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
                 }
               }
             } catch {
-              // 闈?JSON锛屽拷鐣ュ瓙浠诲姟绾у埆鐨勭函鏂囨湰
+              // 闂?JSON閿涘苯鎷烽悾銉ョ摍娴犺濮熺痪褍鍩嗛惃鍕嚱閺傚洦婀?
             }
           },
           onError: (err) => {
@@ -644,11 +648,10 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
               setState((prev) =>
                 updateSubItem(prev, 'character_script', task.id, {
                   status: 'failed',
-                  error: '鐢ㄦ埛涓柇',
+                  error: '用户中断',
                 }),
               );
             } else if (!subTaskCompleted && !subTaskFailed) {
-              // 娴佸叧闂絾鏈敹鍒?completed/error 浜嬩欢
               setState((prev) =>
                 updateSubItem(prev, 'character_script', task.id, {
                   status: 'failed',
@@ -656,7 +659,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
                 }),
               );
             }
-            // 子任务始终 resolve，不阻断同批次其他角色
+            // 瀛愪换鍔″缁?resolve锛屼笉闃绘柇鍚屾壒娆″叾浠栬鑹?
             resolve();
           },
         });
@@ -665,13 +668,13 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     [registerAbortController],
   );
 
-  // ===== runPhaseBatch锛氶樁娈?2 瑙掕壊鍓ф湰鎵规璋冨害 =====
+  // ===== runPhaseBatch閿涙岸妯佸▓?2 鐟欐帟澹婇崜褎婀伴幍瑙勵偧鐠嬪啫瀹?=====
   const runPhaseBatch = useCallback(
     async (
       tasks: CharacterScriptTask[],
       params: ScriptGenerationParams,
     ): Promise<void> => {
-      // 鍒濆鍖?/ 澶嶇敤 subItems
+      // 閸掓繂顫愰崠?/ 婢跺秶鏁?subItems
       setState((prev) => {
         const phase = prev.phases.character_script;
         if (phase.subItems && phase.subItems.length === tasks.length) {
@@ -687,7 +690,6 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         });
       });
 
-      // 分批处理，每批 CHARACTER_SCRIPT_CONCURRENCY 个
       for (let i = 0; i < tasks.length; i += CHARACTER_SCRIPT_CONCURRENCY) {
         const batch = tasks.slice(i, i + CHARACTER_SCRIPT_CONCURRENCY);
         await Promise.all(
@@ -695,7 +697,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         );
       }
 
-      // 鍏ㄩ儴瀹屾垚鍚庢爣璁伴樁娈靛畬鎴?/ 澶辫触
+      // 閸忋劑鍎寸€瑰本鍨氶崥搴㈢垼鐠佷即妯佸▓闈涚暚閹?/ 婢惰精瑙?
       setState((prev) => {
         const allCompleted = prev.phases.character_script.subItems?.every(
           (s) => s.status === 'completed',
@@ -709,29 +711,29 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     [runCharacterScriptSubTask],
   );
 
-  // ===== start锛氬惎鍔ㄥ叏娴佺▼ =====
+  // ===== start閿涙艾鎯庨崝銊ュ弿濞翠胶鈻?=====
   const start = useCallback(
     async (params: ScriptGenerationParams): Promise<void> => {
       paramsRef.current = params;
 
       try {
-        // 创建空 script 行
+        // 鍒涘缓绌?script 琛?
         const supabase = createClient();
         const {
           data: { session },
         } = await supabase.auth.getSession();
-        if (!session) throw new Error('鏈櫥褰曪紝璇峰厛鐧诲綍鍚庡啀鐢熸垚鍓ф湰');
+        if (!session) throw new Error('未登录，请先登录后再生成剧本');
 
-        // 验证当前会话用户真实存在
+        // 楠岃瘉褰撳墠浼氳瘽鐢ㄦ埛鐪熷疄瀛樺湪
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
         if (userError || !user) {
-          throw new Error('鐧诲綍浼氳瘽鏃犳晥锛岃閲嶆柊鐧诲綍鍚庡啀鐢熸垚鍓ф湰');
+          throw new Error('登录会话无效，请重新登录后再生成剧本');
         }
 
-        // 纭繚 public.users 涓瓨鍦ㄥ綋鍓嶇敤鎴疯褰曪紝鍥犱负 scripts.author_id
+        // 绾喕绻?public.users 娑擃厼鐡ㄩ崷銊ョ秼閸撳秶鏁ら幋鐤唶瑜版洩绱濋崶鐘辫礋 scripts.author_id
         console.log('[generate] auth user:', { id: user.id, email: user.email });
         if (user.email) {
           const { data: existingUser } = await supabase
@@ -772,8 +774,8 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           }
           console.log('[generate] upsert public.users result:', { upsertError });
           if (upsertError) {
-            console.error('鍚屾 public.users 澶辫触:', upsertError);
-            throw new Error(`鍚屾鐢ㄦ埛璁板綍澶辫触: ${upsertError.message}`);
+            console.error('同步 public.users 失败:', upsertError);
+            throw new Error(`同步用户记录失败: ${upsertError.message}`);
           }
         } else {
           throw new Error('当前登录用户没有邮箱信息，无法同步用户记录');
@@ -815,7 +817,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           throw new Error(`创建剧本失败: ${msg} (code: ${code})`);
         }
         if (!scriptRow) {
-          throw new Error('鍒涘缓鍓ф湰澶辫触: 鏈煡閿欒');
+          throw new Error('创建剧本失败: 未返回剧本 ID');
         }
 
         scriptIdRef.current = scriptRow.id;
@@ -826,9 +828,9 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           currentPhase: 'story_bible',
         }));
 
-        // 闃舵 0
+        // 闂冭埖顔?0
         await runPhase('story_bible', params);
-        // phase 0 完成后 orchestrationStatus='paused_at_gate'
+        // phase 0 瀹屾垚鍚?orchestrationStatus='paused_at_gate'
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -840,7 +842,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     [runPhase],
   );
 
-  // ===== confirmStoryBible锛氱‘璁ら椄闂?鈫?闃舵 1-3 =====
+  // ===== confirmStoryBible閿涙氨鈥樼拋銈夋闂?閳?闂冭埖顔?1-3 =====
   const confirmStoryBible = useCallback(
     async (): Promise<void> => {
       if (state.orchestrationStatus !== 'paused_at_gate' || !state.storyBible) return;
@@ -858,13 +860,13 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       }));
 
       try {
-        // 闃舵 1锛氫汉鐗╄瀹?+ 鍒嗗箷缁撴瀯 骞惰
+        // 闂冭埖顔?1閿涙矮姹夐悧鈺勵啎鐎?+ 閸掑棗绠风紒鎾寸€?楠炴儼顢?
         await Promise.all([
           runPhase('character_profiles', params),
           runPhase('act_structure', params),
         ]);
 
-        // 璇诲彇 characters 琛ㄨ幏鍙栬鑹?ID 鍒楄〃
+        // 鐠囪褰?characters 鐞涖劏骞忛崣鏍潡閼?ID 閸掓銆?
         const supabase = createClient();
         const { data: characters, error: charError } = await supabase
           .from('characters')
@@ -897,7 +899,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
         );
 
-        // 阶段 2：按角色剧本份数分批并行
+        // 闃舵 2锛氭寜瑙掕壊鍓ф湰浠芥暟鍒嗘壒骞惰
         setState((prev) =>
           updatePhase(prev, 'character_script', {
             subItems: characterScriptTasks.map((task) => ({
@@ -911,7 +913,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         setState((prev) => ({ ...prev, currentPhase: 'character_script' }));
         await runPhaseBatch(characterScriptTasks, params);
 
-        // 闃舵 3锛氱嚎绱㈠崱 + 缁勭粐鑰呮墜鍐?+ 鐪熺浉澶嶇洏 骞惰
+        // 闂冭埖顔?3閿涙氨鍤庣槐銏犲幢 + 缂佸嫮绮愰懓鍛閸?+ 閻喓娴夋径宥囨磸 楠炴儼顢?
         setState((prev) => ({ ...prev, currentPhase: 'clues' }));
         await runPhase('clues', params);
         await Promise.all([
@@ -919,11 +921,11 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           runPhase('truth_review', params),
         ]);
 
-        // 阶段 4：时间线结构化（依赖 truth_review 完成）
+        // 闃舵 4锛氭椂闂寸嚎缁撴瀯鍖栵紙渚濊禆 truth_review 瀹屾垚锛?
         setState((prev) => ({ ...prev, currentPhase: 'timeline_structure' }));
         await runPhase('timeline_structure', params);
 
-        // 鍏ㄩ儴瀹屾垚
+        // 閸忋劑鍎寸€瑰本鍨?
         setState((prev) => ({
           ...prev,
           orchestrationStatus: 'completed',
@@ -946,7 +948,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     ],
   );
 
-  // ===== regenerateStoryBible锛氶噸鏂扮敓鎴愰樁娈?0 =====
+  // ===== regenerateStoryBible閿涙岸鍣搁弬鎵晸閹存劙妯佸▓?0 =====
   const regenerateStoryBible = useCallback(
     async (): Promise<void> => {
       if (state.orchestrationStatus !== 'paused_at_gate') return;
@@ -954,7 +956,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       const params = paramsRef.current;
       if (!params) return;
 
-      // 重置阶段 0 状态
+      // 閲嶇疆闃舵 0 鐘舵€?
       setState((prev) => ({
         ...updatePhase(prev, 'story_bible', {
           status: 'pending',
@@ -980,13 +982,13 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     [runPhase, state.orchestrationStatus],
   );
 
-  // ===== retryPhase锛氶噸璇曞崟涓け璐ラ樁娈?=====
+  // ===== retryPhase閿涙岸鍣哥拠鏇炲礋娑擃亜銇戠拹銉╂▉濞?=====
   const retryPhase = useCallback(
     async (phaseId: PhaseId): Promise<void> => {
       const params = paramsRef.current;
       if (!params) return;
 
-      // 閲嶇疆鎸囧畾闃舵鐘舵€佷负 pending
+      // 闁插秶鐤嗛幐鍥х暰闂冭埖顔岄悩鑸碘偓浣疯礋 pending
       setState((prev) =>
         updatePhase(prev, phaseId, {
           status: 'pending',
@@ -998,7 +1000,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
 
       try {
         if (phaseId === 'character_script') {
-          // 瑙掕壊鍓ф湰闃舵闇€閲嶆柊璇诲彇 characters 琛ㄨ幏鍙?ID 鍒楄〃
+          // 鐟欐帟澹婇崜褎婀伴梼鑸殿唽闂団偓闁插秵鏌婄拠璇插絿 characters 鐞涖劏骞忛崣?ID 閸掓銆?
           const scriptId = scriptIdRef.current;
           if (!scriptId) throw new Error('scriptId 未设置');
 
@@ -1019,7 +1021,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
             getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
           );
 
-          // 閲嶇疆 subItems
+          // 闁插秶鐤?subItems
           setState((prev) =>
             updatePhase(prev, 'character_script', {
               subItems: characterScriptTasks.map((task) => ({
@@ -1056,7 +1058,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     [runPhase, runPhaseBatch],
   );
 
-  // ===== abort锛氫腑鏂綋鍓嶇敓鎴?=====
+  // ===== abort閿涙矮鑵戦弬顓炵秼閸撳秶鏁撻幋?=====
   const abort = useCallback((): void => {
     abortActiveRequests();
     setState((prev) => {
@@ -1064,14 +1066,14 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       return {
         ...updatePhase(prev, prev.currentPhase, {
           status: 'failed',
-          error: '鐢ㄦ埛涓柇',
+          error: '用户中断',
         }),
         orchestrationStatus: 'failed',
       };
     });
   }, [abortActiveRequests]);
 
-  // ===== reset锛氶噸缃叏閮ㄧ姸鎬?=====
+  // ===== reset閿涙岸鍣哥純顔煎弿闁劎濮搁幀?=====
   const reset = useCallback((): void => {
     abortActiveRequests();
     paramsRef.current = null;
@@ -1079,14 +1081,14 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     setState(createInitialState());
   }, [abortActiveRequests]);
 
-  // ===== resumeFromScript锛氫粠宸叉湁 scriptId 鎭㈠ =====
-  // 妫€娴?7 寮犺〃鐨勫畬鎴愮姸鎬侊紝鍥炲～宸插畬鎴愰樁娈典笌璁惧畾鏈紝
-  // 根据 storyBible.confirmed 决定停在 paused_at_gate 还是继续后续阶段
+  // ===== resumeFromScript閿涙矮绮犲鍙夋箒 scriptId 閹垹顦?=====
+  // 濡偓濞?7 瀵姾銆冮惃鍕暚閹存劗濮搁幀渚婄礉閸ョ偛锝炲鎻掔暚閹存劙妯佸▓鍏哥瑢鐠佹儳鐣鹃張顒婄礉
+  // 鏍规嵁 storyBible.confirmed 鍐冲畾鍋滃湪 paused_at_gate 杩樻槸缁х画鍚庣画闃舵
   const resumeFromScript = useCallback(
     async (scriptId: string, params?: ScriptGenerationParams): Promise<void> => {
       const supabase = createClient();
 
-      // 并行查询 7 张表，判断各阶段完成状态
+      // 骞惰鏌ヨ 7 寮犺〃锛屽垽鏂悇闃舵瀹屾垚鐘舵€?
       const [
         storyBibleRes,
         charactersRes,
@@ -1180,12 +1182,12 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       const truthReviewExists = !!truthReviewRes.data;
       const timelineEventsExists = (timelineEventsRes.count ?? 0) > 0;
 
-      // 闃舵 0 鏈畬鎴愶細涓嶅彲鎭㈠锛屼繚鎸?idle
+      // 闂冭埖顔?0 閺堫亜鐣幋鎰剁窗娑撳秴褰查幁銏狀槻閿涘奔绻氶幐?idle
       if (!storyBibleExists) {
         return;
       }
 
-      // 回填已完成阶段状态
+      // 鍥炲～宸插畬鎴愰樁娈电姸鎬?
       const phases = createInitialPhases();
       if (storyBibleExists) {
         phases.story_bible = {
@@ -1249,7 +1251,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         };
       }
 
-      // 回填设定本，用于闸门 UI
+      // 鍥炲～璁惧畾鏈紝鐢ㄤ簬闂搁棬 UI
       const restoredStoryBible: StoryBibleJson | null = storyBibleRow
         ? {
             murdererName: storyBibleRow.murderer_character_name,
@@ -1263,16 +1265,16 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           }
         : null;
 
-      // 鍚屾 refs锛屼娇鍚庣画 retryPhase / confirmStoryBible 鍙敤
+      // 閸氬本顒?refs閿涘奔濞囬崥搴ｇ敾 retryPhase / confirmStoryBible 閸欘垳鏁?
       scriptIdRef.current = scriptId;
       if (params) {
         paramsRef.current = params;
       }
 
-      // 鍐冲畾鎭㈠鍒板摢涓姸鎬侊細
-      // - 鍏ㄩ儴瀹屾垚 鈫?completed
-      // - 阶段 0 完成但未确认 -> paused_at_gate
-      // - 阶段 0 已确认但后续未全部完成 -> paused_at_gate
+      // 閸愬啿鐣鹃幁銏狀槻閸掓澘鎽㈡稉顏嗗Ц閹緤绱?
+      // - 閸忋劑鍎寸€瑰本鍨?閳?completed
+      // - 闃舵 0 瀹屾垚浣嗘湭纭 -> paused_at_gate
+      // - 闃舵 0 宸茬‘璁や絾鍚庣画鏈叏閮ㄥ畬鎴?-> paused_at_gate
       const allCompleted =
         storyBibleExists &&
         charactersExist &&
@@ -1313,5 +1315,5 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
   };
 }
 
-// 导出常量供外部使用
+// 瀵煎嚭甯搁噺渚涘閮ㄤ娇鐢?
 export { PHASE_LABELS, PHASE_ORDER };

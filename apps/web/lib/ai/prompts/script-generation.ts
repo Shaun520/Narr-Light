@@ -13,6 +13,30 @@ export type AgeRating = 'ALL' | 'TWELVE_PLUS' | 'SIXTEEN_PLUS' | 'EIGHTEEN_PLUS'
 /** 写作风格 */
 export type WritingStyle = '古风沉稳' | '白描清雅' | '悬疑冷峻' | '诙谐明快';
 
+export type CulturalFrame =
+  | '中国本土'
+  | '架空东方'
+  | '架空西方'
+  | '民国近代'
+  | '现代都市'
+  | '不限';
+
+export type StoryTone =
+  | '本格推理'
+  | '社会派'
+  | '情感沉浸'
+  | '惊悚压迫'
+  | '黑色幽默'
+  | '机制博弈';
+
+export type CaseType =
+  | '密室'
+  | '时间线诡计'
+  | '身份错认'
+  | '叙述性诡计'
+  | '连环事件'
+  | '无明确偏好';
+
 /** 生成参数开关 */
 export interface ScriptSwitches {
   /** 无边缘位（戏份均衡） */
@@ -32,6 +56,11 @@ export interface ScriptGenerationParams {
   difficulty: ScriptDifficulty;
   background: string;
   theme: string;
+  culturalFrame?: CulturalFrame;
+  storyTone?: StoryTone;
+  caseType?: CaseType;
+  keyLocations?: string;
+  avoidElements?: string;
   ageRating: AgeRating;
   writingStyle: WritingStyle;
   switches: ScriptSwitches;

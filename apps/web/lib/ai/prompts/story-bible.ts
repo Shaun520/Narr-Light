@@ -1,14 +1,3 @@
-/**
- * 设定本（Story Bible）Prompt 模板
- *
- * 分阶段剧本生成方案的阶段 0 产出，对标 script-generation.ts 的结构，
- * 但仅产出"图纸级"设定本而非完整剧本。
- * 定义 StoryBibleParams 与生成结果 JSON 结构，
- * 提供 system / user / 完整 prompt 构造函数。
- * 输出要求 AI 返回结构化 JSON：
- * { murdererName, murderMethod, coreTrick, motiveChain,
- *   characterSkeleton, timelineOutline, truthSummary, foreshadowingPlan }
- */
 import type {
   ScriptGenerationParams,
   AgeRating,
@@ -18,17 +7,14 @@ import type { ScriptGenre, ScriptDifficulty } from '@/types';
 
 export type { ScriptGenerationParams, AgeRating, WritingStyle };
 
-/** 设定本入参（与全本生成入参一致） */
 export type StoryBibleParams = ScriptGenerationParams;
 
-/** 人物关系骨架节点 */
 export interface StoryCharacterNode {
   name: string;
   identity: string;
   secret: string;
 }
 
-/** 人物关系骨架边 */
 export interface StoryRelationEdge {
   from: string;
   to: string;
@@ -37,7 +23,6 @@ export interface StoryRelationEdge {
   isHidden: boolean;
 }
 
-/** 伏笔设计计划 */
 export interface ForeshadowingPlan {
   id: string;
   description: string;
@@ -45,7 +30,6 @@ export interface ForeshadowingPlan {
   payoffAct: number;
 }
 
-/** AI 返回的设定本结构化 JSON */
 export interface StoryBibleJson {
   murdererName: string;
   murderMethod: string;
@@ -56,9 +40,6 @@ export interface StoryBibleJson {
   truthSummary: string;
   foreshadowingPlan: ForeshadowingPlan[];
 }
-
-// ===== 题材/难度/分级中文映射（注入 prompt 用） =====
-// 注：为避免循环依赖，常量值在此独立定义，但与 script-generation.ts 保持一致。
 
 const GENRE_LABEL: Record<ScriptGenre, string> = {
   hardcore: '硬核推理',
@@ -76,62 +57,54 @@ const DIFFICULTY_LABEL: Record<ScriptDifficulty, string> = {
 };
 
 const AGE_RATING_LABEL: Record<AgeRating, string> = {
-  ALL: '全员',
+  ALL: '全年龄',
   TWELVE_PLUS: '12+',
   SIXTEEN_PLUS: '16+',
   EIGHTEEN_PLUS: '18+',
 };
 
-/**
- * 构造系统提示词：角色设定 + 产出顺序约束 + 输出格式要求（结构化 JSON）
- */
 export function buildStoryBibleSystemPrompt(): string {
-  return `你是一名资深剧本杀结构设计师，擅长构思严密的多层诡计与人物动机网。
+  return `你是资深剧本杀结构设计师，负责生成全本的设定本 Story Bible。
 
-请根据用户提供的创作参数，生成剧本杀的设定本（Story Bible）。设定本是全本的图纸，后续阶段将基于此生成完整剧本。
+设定本是后续人物、分幕、玩家剧本、线索和复盘的唯一源头。你必须先尊重用户给出的文化框架、时代地域、关键场景、故事气质、案件类型和避免元素，再设计诡计。
 
-请按以下顺序构思：先确定凶手与凶案手法（保证物理可行性），再反推人物关系网与动机链，最后设计伏笔。
+重要风格约束：
+1. 不要在用户未指定时自动套用日式推理、日式学校、神社、温泉旅馆、财阀、洋馆、昭和/大正、日文姓名等高频模板。
+2. 如果用户写了中国本土、民国、古镇、山庄、书院、宗族、商会等信息，人物姓名、社会关系、地名、物件和制度都要匹配该文化语境。
+3. 如果用户填写“避免元素”，这些元素不得出现在核心设定、人物身份、场景和线索里。
+4. 允许使用本格推理技法，但技法必须服务于用户指定的背景，不得把背景改写成日本模板。
 
-禁止展开完整人物对白、场景描写、完整角色剧本内容；仅产出图纸级设定本。
+必须遵守：
+1. 只返回合法 JSON，不要 markdown 代码块，不要解释性文字。
+2. characterSkeleton.nodes 数量必须严格等于玩家人数；用户写 7 人就 exactly 7 个 nodes，不多不少。
+3. murdererName 必须出现在 characterSkeleton.nodes 中。
+4. 凶案手法必须物理可行，并能被线索回收。
+5. 每个玩家都要有动机、秘密和可推进主线的信息差。
+6. foreshadowingPlan 的 payoffAct 必须大于等于 plantAct。
+7. 不展开完整玩家剧本，只产出蓝图级设定。
 
-你必须严格遵守以下要求：
-
-1. 凶案手法必须物理可行，考虑反侦察意识
-2. 人物关系骨架的 nodes 数量必须严格等于玩家人数；用户写 6 人就必须返回 exactly 6 个 nodes，不得多也不得少
-3. 凶手姓名必须出现在人物关系骨架的节点列表中
-4. 每条伏笔的 payoffAct 必须大于等于 plantAct
-5. 严格遵循用户指定的题材、难度、适龄分级与写作风格
-
-输出格式：仅返回一个 JSON 对象，不要包含 markdown 代码块或任何解释性文本。
-JSON 结构如下：
-
+JSON 结构：
 {
-  "murdererName": "沈墨尘",
-  "murderMethod": "利用乌头碱溶于温酒，伪造成急症暴毙",
-  "coreTrick": "时间叙诡——所有角色剧本中'霜降夜'实为不同日期",
-  "motiveChain": "凶手系私生子，被剥夺继承权后隐忍十年，借秘宝现世之机复仇",
+  "murdererName": "人物姓名",
+  "murderMethod": "作案手法，含可行性和伪装方式",
+  "coreTrick": "核心诡计，例如时间线、空间、身份、证词、物证或叙述层面的误导",
+  "motiveChain": "凶手动机与其他人物利益冲突",
   "characterSkeleton": {
     "nodes": [
-      { "name": "沈墨白", "identity": "沈家长子·死者", "secret": "曾私吞父亲遗物" },
-      { "name": "沈墨尘", "identity": "沈家二子", "secret": "私生子身份" }
+      { "name": "人物姓名", "identity": "公开身份", "secret": "隐藏秘密" }
     ],
     "edges": [
-      { "from": "沈墨尘", "to": "沈墨白", "type": "enemy", "label": "继承权之争", "isHidden": true }
+      { "from": "人物A", "to": "人物B", "type": "enemy", "label": "关系说明", "isHidden": true }
     ]
   },
-  "timelineOutline": "Day1 晚:族人齐聚 → Day2 午:密室会谈 → Day2 夜:凶案 → Day3 晨:搜证",
-  "truthSummary": "沈墨尘利用族谱残页制造时间认知偏差，在众人以为凶案发生时已实际完成作案...",
+  "timelineOutline": "按日序或时段列出关键事件链",
+  "truthSummary": "真相复盘摘要",
   "foreshadowingPlan": [
-    { "id": "F1", "description": "族谱残页'过继'二字", "plantAct": 1, "payoffAct": 3 }
+    { "id": "F1", "description": "伏笔说明", "plantAct": 1, "payoffAct": 3 }
   ]
+}`;
 }
 
-请确保 JSON 合法、字段完整、可被直接解析。`;
-}
-
-/**
- * 构造用户提示词：将创作参数注入自然语言描述
- */
 export function buildStoryBibleUserPrompt(params: ScriptGenerationParams): string {
   const lines: string[] = [
     `剧本标题：${params.title}`,
@@ -139,34 +112,36 @@ export function buildStoryBibleUserPrompt(params: ScriptGenerationParams): strin
     `玩家人数：${params.players} 人`,
     `预计时长：${params.duration} 小时`,
     `难度：${DIFFICULTY_LABEL[params.difficulty]}`,
-    `背景设定：${params.background || '（请自由发挥，需契合题材）'}`,
-    `核心立意：${params.theme || '（请自由发挥）'}`,
+    `文化框架：${params.culturalFrame || '中国本土'}`,
+    `故事气质：${params.storyTone || '本格推理'}`,
+    `案件类型：${params.caseType || '无明确偏好'}`,
+    `背景设定：${params.background || '请自由发挥，但必须契合文化框架和题材'}`,
+    `关键场景：${params.keyLocations || '请根据背景设定合理设计，不要套用默认日式场景'}`,
+    `核心立意：${params.theme || '请自由发挥'}`,
+    `避免元素：${params.avoidElements || '未填写。默认不要使用日式学校、神社、温泉、财阀、昭和/大正、日文姓名等模板元素。'}`,
     `适龄分级：${AGE_RATING_LABEL[params.ageRating]}`,
     `写作风格：${params.writingStyle}`,
   ];
 
   if (params.switches.noEdgeRole) {
-    lines.push('特殊要求：无边缘位（所有角色戏份均衡）');
+    lines.push('特殊要求：无边缘位，所有玩家都要有戏份、秘密、动机和推进主线的线索价值。');
   }
   if (params.switches.compliancePreCheck) {
-    lines.push('合规预检（屏蔽敏感词）');
+    lines.push('合规预检：避免露骨血腥、歧视性表达和不必要的敏感描写。');
   }
   if (params.switches.mechanismRules) {
-    lines.push('生成机制规则（机制本）');
+    lines.push('特殊要求：机制本，需要预留机制环节、验证节点和玩家行动目标。');
   }
   if (params.extraReq) {
     lines.push(`附加要求：${params.extraReq}`);
   }
 
   lines.push('');
-  lines.push(`请按系统提示词规定的 JSON 结构生成设定本，仅产出图纸，不展开完整剧本内容。characterSkeleton.nodes 必须刚好 ${params.players} 个。`);
+  lines.push(`请按系统提示的 JSON 结构生成设定本。characterSkeleton.nodes 必须刚好 ${params.players} 个。`);
 
   return lines.join('\n');
 }
 
-/**
- * 构造完整 prompt = system + user（以分隔标记组合，便于日志与调试）
- */
 export function buildStoryBiblePrompt(params: ScriptGenerationParams): {
   systemPrompt: string;
   userPrompt: string;

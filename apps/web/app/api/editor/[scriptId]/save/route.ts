@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { VersionService } from '@/lib/services/version-service';
 import type { Json } from '@/lib/supabase/types';
 import type { OperationType } from '@/types';
+import type { PlayerPackageContent } from '@narrlight/shared';
 
 type EditorNodeType = 'character' | 'simple' | 'clue-overview';
 
@@ -113,6 +114,11 @@ function parseCharacterNodeId(nodeId: string): { characterId: string; partIndex:
     };
   }
   return null;
+}
+
+function parsePlayerPackageNodeId(nodeId: string): string | null {
+  if (!nodeId.startsWith('pkg-')) return null;
+  return nodeId.replace(/^pkg-/, '');
 }
 
 async function safeRows<T>(
@@ -300,6 +306,46 @@ async function saveClueOverview(
   );
 }
 
+async function savePlayerPackageNode(
+  supabase: SupabaseClient,
+  scriptId: string,
+  payload: SaveEditorNodeRequest,
+): Promise<void> {
+  const packageId = parsePlayerPackageNodeId(payload.nodeId);
+  if (!packageId) {
+    throw new Error('玩家资料包节点 ID 无效');
+  }
+
+  const { data, error } = await supabase
+    .from('player_packages')
+    .select('content_json')
+    .eq('id', packageId)
+    .eq('script_id', scriptId)
+    .maybeSingle();
+  if (error) throw new Error(`读取玩家资料包失败: ${error.message}`);
+  if (!data) throw new Error('玩家资料包不存在');
+
+  const existing = (data.content_json && typeof data.content_json === 'object'
+    ? data.content_json
+    : {}) as PlayerPackageContent;
+  const content: PlayerPackageContent = {
+    ...existing,
+    manualText: payload.plainText,
+  };
+
+  const { error: updateError } = await supabase
+    .from('player_packages')
+    .update({
+      package_title: payload.title || '玩家资料包',
+      content_json: content as unknown as Json,
+      word_count: wordCount(payload.plainText),
+      generation_status: 'completed',
+    })
+    .eq('id', packageId)
+    .eq('script_id', scriptId);
+  if (updateError) throw new Error(`保存玩家资料包失败: ${updateError.message}`);
+}
+
 async function saveEditorNode(
   supabase: SupabaseClient,
   scriptId: string,
@@ -311,6 +357,8 @@ async function saveEditorNode(
     await saveClueOverview(supabase, scriptId, payload);
   } else if (payload.nodeId === 'truth') {
     await saveTruthNode(supabase, scriptId, payload);
+  } else if (payload.nodeId.startsWith('pkg-')) {
+    await savePlayerPackageNode(supabase, scriptId, payload);
   } else if (payload.nodeId.startsWith('org-')) {
     await saveOrganizerNode(supabase, scriptId, payload);
   } else {
@@ -430,6 +478,7 @@ async function buildSnapshotData(
     characterRelations,
     timelineEvents,
     characterScripts,
+    playerPackages,
     organizerManuals,
     truthReviews,
   ] = await Promise.all([
@@ -440,6 +489,7 @@ async function buildSnapshotData(
     safeRows(supabase.from('character_relations').select('*').eq('script_id', scriptId)),
     safeRows(supabase.from('timeline_events').select('*').eq('script_id', scriptId)),
     safeRows(supabase.from('character_scripts').select('*').eq('script_id', scriptId)),
+    safeRows(supabase.from('player_packages').select('*').eq('script_id', scriptId)).catch(() => []),
     safeRows(supabase.from('organizer_manuals').select('*').eq('script_id', scriptId)),
     safeRows(supabase.from('truth_reviews').select('*').eq('script_id', scriptId)),
   ]);
@@ -473,6 +523,7 @@ async function buildSnapshotData(
     character_relations: characterRelations ?? [],
     timeline_events: timelineEvents ?? [],
     character_scripts: characterScripts ?? [],
+    player_packages: playerPackages ?? [],
     organizer_manuals: organizerManuals ?? [],
     truth_reviews: truthReviews ?? [],
   };

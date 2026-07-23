@@ -9,6 +9,7 @@ import type {
   ScriptNodeData,
   TreeGroup,
 } from '@/components/editor/script-data';
+import type { PlayerPackageContent } from '@narrlight/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface EditorDataBundle {
@@ -62,8 +63,80 @@ function optionalHtmlBlock(title: string, value: unknown, actNum = '全本'): st
   return paragraphsFromText(value).length ? htmlBlock(title, value, actNum) : '';
 }
 
+function isMissingRelationError(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return Boolean(
+    error.code === 'PGRST205' ||
+      error.message?.includes('Could not find the table') ||
+      error.message?.includes('schema cache'),
+  );
+}
+
+async function queryOptionalRows<T>(
+  query: PromiseLike<{ data: T[] | null; error: { code?: string; message: string } | null }>,
+): Promise<T[]> {
+  const { data, error } = await query;
+  if (error) {
+    if (isMissingRelationError(error)) return [];
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+
 function isFullPlayerScriptLabel(label: string): boolean {
   return label === '完整玩家剧本' || label === '完整角色本';
+}
+
+function listHtml(title: string, values: unknown[] | undefined, actNum: string): string {
+  const items = (values ?? []).map((item) => String(item ?? '').trim()).filter(Boolean);
+  if (!items.length) return '';
+  return `<h2><span class="act-num">${escapeHtml(actNum)}</span>${escapeHtml(title)}</h2><ul>${items
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join('')}</ul>`;
+}
+
+function renderPlayerPackageHtml(content: PlayerPackageContent): string {
+  if (content.manualText?.trim()) {
+    return htmlBlock('人工编辑内容', content.manualText, '资料包');
+  }
+
+  const blocks: string[] = [];
+  if (content.cover?.title || content.cover?.subtitle) {
+    blocks.push(htmlBlock(content.cover.title || '封面', content.cover.subtitle ?? '', '封面'));
+  }
+  blocks.push(optionalHtmlBlock('序幕', content.prologue, '序幕'));
+  blocks.push(optionalHtmlBlock('公开身份', content.publicIdentity, '身份'));
+  blocks.push(optionalHtmlBlock('私人背景', content.privateBackground, '背景'));
+  blocks.push(listHtml('已知关系', content.knownRelations, '关系'));
+  blocks.push(listHtml('隐藏秘密', content.hiddenSecrets, '秘密'));
+  blocks.push(listHtml('全局目标', content.globalObjectives, '目标'));
+
+  for (const material of content.actMaterials ?? []) {
+    blocks.push(`<h2><span class="act-num">第${material.actOrder}幕</span>${escapeHtml(material.actTitle)}</h2>`);
+    blocks.push(optionalHtmlBlock('幕前引导', material.preActIntro, '引导'));
+    blocks.push(optionalHtmlBlock('本幕剧情正文', material.mainText, '正文'));
+    blocks.push(listHtml('你此时知道的信息', material.knownFacts, '已知'));
+    blocks.push(listHtml('你此时的误解', material.misunderstandings, '误解'));
+    blocks.push(listHtml('你可以公开说的信息', material.sayableInfo, '可说'));
+    blocks.push(listHtml('你必须隐瞒的信息', material.forbiddenInfo, '隐瞒'));
+    blocks.push(listHtml('你本幕要做的事', material.objectives, '任务'));
+    blocks.push(listHtml('你可触发的互动', material.interactionPrompts, '互动'));
+    blocks.push(optionalHtmlBlock('本幕结束等待语', material.pauseInstruction, '等待'));
+  }
+
+  for (const supplement of content.supplementPackages ?? []) {
+    blocks.push(`<h2><span class="act-num">第${supplement.releaseAct}幕发放</span>${escapeHtml(supplement.title || '补充剧本')}</h2>`);
+    blocks.push(optionalHtmlBlock('发放条件', supplement.releaseCondition, '条件'));
+    blocks.push(optionalHtmlBlock('发给谁', supplement.receiverName, '对象'));
+    blocks.push(optionalHtmlBlock('新增身份', supplement.newIdentity, '身份'));
+    blocks.push(optionalHtmlBlock('新增记忆', supplement.newMemory, '记忆'));
+    blocks.push(listHtml('新增目标', supplement.newObjectives, '目标'));
+    blocks.push(listHtml('新增禁言规则', supplement.newSpeechRestrictions, '禁言'));
+    blocks.push(optionalHtmlBlock('补充内容', supplement.content, '补充'));
+  }
+
+  blocks.push(optionalHtmlBlock('结局前行动提示', content.endingPrompt, '结局'));
+  return blocks.filter((block) => block.trim()).join('');
 }
 
 async function queryOrThrow<T>(
@@ -180,6 +253,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
         ),
         loadVersions(supabase, scriptId),
       ]);
+    const playerPackages = await queryOptionalRows<Record<string, unknown>>(
+      supabase
+        .from('player_packages')
+        .select('id, player_seat_id, package_order, package_title, current_identity, read_order, package_type, content_json')
+        .eq('script_id', scriptId)
+        .order('read_order')
+        .order('package_order'),
+    );
 
     if (!script) {
       return NextResponse.json({ error: 'Script not found' }, { status: 404 });
@@ -254,6 +335,36 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
 
     if (charNodeIds.length) {
       groups.push({ group: 'chars', label: '人物剧本', children: charNodeIds, count: charNodeIds.length });
+    }
+
+    const packageNodeIds: string[] = [];
+    for (const [index, row] of playerPackages.entries()) {
+      const nodeId = `pkg-${row.id}`;
+      const content = (row.content_json && typeof row.content_json === 'object'
+        ? row.content_json
+        : {}) as PlayerPackageContent;
+      const title = String(row.package_title ?? `玩家资料包 ${index + 1}`);
+      const html = renderPlayerPackageHtml(content);
+      if (!html.trim()) continue;
+      dataMap[nodeId] = {
+        type: 'simple',
+        id: nodeId,
+        title,
+        actNum: String(row.package_type ?? '资料包'),
+        fullTitle: `玩家资料包 · ${title}`,
+        html,
+      };
+      labels[nodeId] = `${title}${row.current_identity ? ` · ${row.current_identity}` : ''}`;
+      packageNodeIds.push(nodeId);
+    }
+
+    if (packageNodeIds.length) {
+      groups.push({
+        group: 'player-packages',
+        label: '玩家资料包',
+        children: packageNodeIds,
+        count: packageNodeIds.length,
+      });
     }
 
     const organizerData = organizer as Record<string, unknown> | null;

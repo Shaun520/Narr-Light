@@ -43,6 +43,11 @@ const DEFAULT_PARAMS: ScriptGenerationParams = {
   difficulty: 'intermediate',
   background: '清末民初 · 江南古镇',
   theme: '家国亲情 · 旧恨新仇',
+  culturalFrame: '中国本土',
+  storyTone: '本格推理',
+  caseType: '时间线诡计',
+  keyLocations: '祠堂、旧宅、码头、药铺',
+  avoidElements: '不要日式学校、神社、温泉、财阀、昭和/大正、日文姓名',
   ageRating: 'SIXTEEN_PLUS',
   writingStyle: '白描清雅',
   switches: { noEdgeRole: true, compliancePreCheck: true, mechanismRules: false },
@@ -79,6 +84,11 @@ function GeneratePageInner() {
     const writingStyle = searchParams.get('writingStyle') as WritingStyle | null;
     const background = searchParams.get('background');
     const theme = searchParams.get('theme');
+    const culturalFrame = searchParams.get('culturalFrame') as ScriptGenerationParams['culturalFrame'] | null;
+    const storyTone = searchParams.get('storyTone') as ScriptGenerationParams['storyTone'] | null;
+    const caseType = searchParams.get('caseType') as ScriptGenerationParams['caseType'] | null;
+    const keyLocations = searchParams.get('keyLocations');
+    const avoidElements = searchParams.get('avoidElements');
 
     // 无任何 query string 参数时保持默认值，不修改状态
     if (
@@ -90,7 +100,12 @@ function GeneratePageInner() {
       !ageRating &&
       !writingStyle &&
       !background &&
-      !theme
+      !theme &&
+      !culturalFrame &&
+      !storyTone &&
+      !caseType &&
+      !keyLocations &&
+      !avoidElements
     ) {
       return;
     }
@@ -105,6 +120,11 @@ function GeneratePageInner() {
     if (writingStyle) patch.writingStyle = writingStyle;
     if (background) patch.background = background;
     if (theme) patch.theme = theme;
+    if (culturalFrame) patch.culturalFrame = culturalFrame;
+    if (storyTone) patch.storyTone = storyTone;
+    if (caseType) patch.caseType = caseType;
+    if (keyLocations) patch.keyLocations = keyLocations;
+    if (avoidElements) patch.avoidElements = avoidElements;
 
     setParams((prev) => ({ ...prev, ...patch }));
   }, [searchParams, setParams]);
