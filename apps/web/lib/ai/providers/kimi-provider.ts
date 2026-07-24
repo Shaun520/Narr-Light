@@ -60,6 +60,7 @@ export class KimiProvider implements AIProvider {
   private baseUrl: string;
   private readonly timeout: number;
   private readonly retries: number;
+  private readonly temperature: number;
 
   constructor(config?: Partial<ProviderRuntimeConfig>) {
     this.apiKey =
@@ -73,9 +74,15 @@ export class KimiProvider implements AIProvider {
         process.env.MOONSHOT_BASE_URL ??
         "https://api.moonshot.ai/v1",
     );
-    this.model = config?.model || "kimi-k3";
+    this.model =
+      process.env.KIMI_MODEL_ID ??
+      process.env.KSPMAS_MODEL_ID ??
+      process.env.MOONSHOT_MODEL_ID ??
+      config?.model ??
+      "kimi-k3";
     this.timeout = config?.timeout ?? 60;
     this.retries = config?.retries ?? 2;
+    this.temperature = config?.temperature ?? 1;
   }
 
   /** 是否处于 Mock 模式（无 API Key） */
@@ -108,7 +115,7 @@ export class KimiProvider implements AIProvider {
           body: JSON.stringify({
             model: this.model,
             messages,
-            temperature: options.temperature ?? 0.7,
+            temperature: this.temperature ?? options.temperature ?? 0.7,
             max_tokens: options.maxTokens,
             stream: false,
           }),
@@ -119,7 +126,8 @@ export class KimiProvider implements AIProvider {
           throw await this.wrapError(response);
         }
         const data = (await response.json()) as KimiChatResponse;
-        return data.choices?.[0]?.message?.content ?? "";
+        const message = data.choices?.[0]?.message;
+        return message?.content || message?.reasoning_content || "";
       } catch (error) {
         clearTimeout(timeoutId);
         lastError = error instanceof Error ? error : new Error(String(error));
@@ -162,7 +170,7 @@ export class KimiProvider implements AIProvider {
         body: JSON.stringify({
           model: this.model,
           messages,
-          temperature: options.temperature ?? 0.7,
+          temperature: this.temperature ?? options.temperature ?? 0.7,
           max_tokens: options.maxTokens,
           stream: true,
         }),
@@ -294,12 +302,13 @@ export class KimiProvider implements AIProvider {
     }
     try {
       const json = JSON.parse(data) as KimiStreamChunk;
-      const content = json.choices?.[0]?.delta?.content ?? "";
-      const finishReason = json.choices?.[0]?.finish_reason;
+      const choice = json.choices?.[0];
+      const content = choice?.delta?.content || choice?.delta?.reasoning_content || "";
+      const finishReason = choice?.finish_reason;
       return {
         content,
-        done: finishReason === "stop",
-        progress: finishReason === "stop" ? 1 : undefined,
+        done: Boolean(finishReason),
+        progress: finishReason ? 1 : undefined,
       };
     } catch {
       // 跳过格式异常的行
@@ -354,14 +363,14 @@ export class KimiProvider implements AIProvider {
 
 interface KimiChatResponse {
   choices?: Array<{
-    message?: { content?: string };
+    message?: { content?: string; reasoning_content?: string };
     finish_reason?: string;
   }>;
 }
 
 interface KimiStreamChunk {
   choices?: Array<{
-    delta?: { content?: string };
+    delta?: { content?: string; reasoning_content?: string };
     finish_reason?: string | null;
   }>;
 }

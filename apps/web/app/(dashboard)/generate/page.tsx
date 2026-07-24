@@ -56,10 +56,39 @@ const DEFAULT_PARAMS: ScriptGenerationParams = {
 
 function GeneratePageInner() {
   const [params, setParams] = useState<ScriptGenerationParams>(DEFAULT_PARAMS);
+  const [configuredProvider, setConfiguredProvider] = useState<{
+    provider: string;
+    model: string | null;
+  } | null>(null);
   const { state, start, confirmStoryBible, regenerateStoryBible, retryPhase, abort, reset, resumeFromScript } =
     usePhasedGeneration();
 
   const searchParams = useSearchParams();
+  const activePhase = state.currentPhase ? state.phases[state.currentPhase] : null;
+  const modelLabel = activePhase?.model
+    ? activePhase.model
+    : configuredProvider
+      ? configuredProvider.model ?? configuredProvider.provider
+      : '读取配置中';
+
+  useEffect(() => {
+    let ignore = false;
+    fetch('/api/generate/provider-meta')
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { provider?: unknown; model?: unknown } | null) => {
+        if (ignore || !data || typeof data.provider !== 'string') return;
+        setConfiguredProvider({
+          provider: data.provider,
+          model: typeof data.model === 'string' ? data.model : null,
+        });
+      })
+      .catch(() => {
+        if (!ignore) setConfiguredProvider(null);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // ===== 中断续传：进入页面时检测 ?scriptId=xxx 是否有未完成阶段 =====
   // 仅在 mount 时执行一次，避免重复触发。检测到设定本存在则恢复到 paused_at_gate 或 completed。
@@ -217,7 +246,7 @@ function GeneratePageInner() {
               <span />
               <span />
             </div>
-            <span>generate · deepseek-v4-pro · 分阶段编排</span>
+            <span>generate · {modelLabel} · 分阶段编排</span>
             <span style={{ marginLeft: 'auto', color: 'var(--blood-soft)' }}>
               ● {isGenerating ? 'LIVE' : 'IDLE'}
             </span>

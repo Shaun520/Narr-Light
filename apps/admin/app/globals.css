@@ -1400,6 +1400,7 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
 }
 
 .provider-config-grid .config-field {
@@ -1483,6 +1484,67 @@ a {
   border-color: var(--admin-border);
   background: #f5f7fb;
   color: var(--admin-text);
+}
+
+.config-provider-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: 220px;
+  padding: 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--admin-shadow-md);
+}
+
+.config-provider-menu-title {
+  margin-bottom: 10px;
+  color: var(--admin-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.config-provider-menu dl {
+  margin: 0 0 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.config-provider-menu dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.config-provider-menu dt {
+  color: var(--admin-text-secondary);
+}
+
+.config-provider-menu dd {
+  margin: 0;
+  color: var(--admin-text);
+  font-weight: 500;
+  text-align: right;
+}
+
+.config-provider-menu-field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+}
+
+.config-provider-menu-field .input {
+  width: 100%;
+}
+
+.config-provider-menu .compact {
+  width: 100%;
+  justify-content: center;
 }
 
 .switch {

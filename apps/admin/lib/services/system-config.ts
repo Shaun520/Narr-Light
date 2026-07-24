@@ -22,7 +22,7 @@ const DEFAULT_TEXT_CONFIG: TextProviderConfig = {
   providers: {
     deepseek: { enabled: true, model: "deepseek-v4-flash", timeout: 180, retries: 2 },
     glm: { enabled: true, model: "glm-5.1", timeout: 180, retries: 2 },
-    kimi: { enabled: true, model: "kimi-k3", timeout: 180, retries: 2 },
+    kimi: { enabled: true, model: "kimi-k3", timeout: 180, retries: 2, temperature: 1 },
   },
 };
 

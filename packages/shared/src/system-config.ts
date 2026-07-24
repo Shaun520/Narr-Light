@@ -24,6 +24,7 @@ export interface ProviderRuntimeConfig {
   model: string;
   timeout: number;
   retries: number;
+  temperature?: number;
   size?: string;
 }
 

@@ -864,6 +864,8 @@ function ProviderCard({
   runtime: ProviderRuntimeConfig | undefined;
   onChange: (runtime: ProviderRuntimeConfig) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   if (!runtime) {
     return (
       <section className="admin-card config-card">
@@ -899,9 +901,57 @@ function ProviderCard({
           </span>
         </div>
         <div className="config-actions">
-          <button className="config-more-btn" type="button" aria-label="更多操作">
+          <button
+            className={`config-more-btn${menuOpen ? " active" : ""}`}
+            type="button"
+            aria-expanded={menuOpen}
+            aria-label="更多操作"
+            onClick={() => setMenuOpen((open) => !open)}
+          >
             <MoreHorizontal size={14} />
           </button>
+          {menuOpen && (
+            <div className="config-provider-menu" role="menu">
+              <div className="config-provider-menu-title">{name} 运行配置</div>
+              <dl>
+                <div>
+                  <dt>状态</dt>
+                  <dd>{runtime.enabled ? "已启用" : "已停用"}</dd>
+                </div>
+                <div>
+                  <dt>模型</dt>
+                  <dd>{runtime.model || "未配置"}</dd>
+                </div>
+                <div>
+                  <dt>重试次数</dt>
+                  <dd>{runtime.retries}</dd>
+                </div>
+              </dl>
+              <label className="config-provider-menu-field">
+                <span>Temperature</span>
+                <input
+                  className="input"
+                  max="2"
+                  min="0"
+                  step="0.1"
+                  type="number"
+                  value={runtime.temperature ?? 1}
+                  onChange={(event) =>
+                    onChange({
+                      ...runtime,
+                      temperature:
+                        event.target.value === ""
+                          ? undefined
+                          : Number(event.target.value),
+                    })
+                  }
+                />
+              </label>
+              <button className="admin-btn compact" type="button" onClick={() => setMenuOpen(false)}>
+                关闭
+              </button>
+            </div>
+          )}
           <ToggleSwitch
             enabled={runtime.enabled}
             label={`${name} 启用或停用`}
