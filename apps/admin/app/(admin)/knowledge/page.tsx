@@ -9,11 +9,11 @@ import {
 import { PageHeader, Tag } from "@/components/admin-static";
 import { getKnowledgeItem, getKnowledgeItems, getKnowledgeUsageSnapshot } from "@/lib/services/knowledge";
 import {
-  clearKnowledgeUsageRecords,
   deleteKnowledgeItem,
   saveKnowledgeItem,
   toggleKnowledgeItem,
 } from "./actions";
+import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
 
 type SearchParams = {
   q?: string;
@@ -151,16 +151,12 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
       )}
 
       <section className="admin-card">
-        <div className="admin-card-head">
+        <div className="admin-card-head knowledge-usage-head">
           <div>
             <div className="admin-card-title">最近引用和质检</div>
             <div className="admin-card-sub">确认生成阶段实际使用了哪些规则。</div>
           </div>
-          <form action={clearKnowledgeUsageRecords}>
-            <button className="admin-btn danger" disabled={!hasUsageRecords} type="submit">
-              清空记录
-            </button>
-          </form>
+          <AdminClearKnowledgeRecordsButton disabled={!hasUsageRecords} />
         </div>
         <div className="table-wrap">
           <table className="table">

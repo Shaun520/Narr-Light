@@ -45,6 +45,7 @@ import { ApiError } from '@/lib/api/response';
 import { buildGenerationSpec } from '@/lib/generation/spec';
 import {
   appendKnowledgeToPrompt,
+  assessNovelizationRisk,
   recordKnowledgeUsages,
   recordQualityReport,
   retrieveStageKnowledge,
@@ -175,6 +176,54 @@ async function recordKnowledgePhase(input: {
     moduleType: input.moduleType,
     content: input.content,
   });
+}
+
+const KNOWLEDGE_AUTO_REWRITE_STAGES = new Set<GenerationKnowledgeStage>([
+  'clues',
+  'player_script',
+  'dm_manual',
+  'review',
+]);
+
+async function repairKnowledgeContentIfNeeded<T>(
+  provider: AIProvider,
+  input: {
+    stage: GenerationKnowledgeStage;
+    schemaHint: string;
+    content: T;
+  },
+): Promise<{ content: T; rewritten: boolean }> {
+  if (!KNOWLEDGE_AUTO_REWRITE_STAGES.has(input.stage)) {
+    return { content: input.content, rewritten: false };
+  }
+
+  const report = assessNovelizationRisk(input.content);
+  if (!report.rewriteRequired) {
+    return { content: input.content, rewritten: false };
+  }
+
+  const repaired = await provider.generate({
+    systemPrompt: [
+      'You repair Chinese murder-mystery game JSON.',
+      'Return only valid JSON. Do not add markdown, comments, or explanation.',
+      'Keep the exact JSON schema and all existing field names.',
+      'Do not change core facts, culprit, character names, clue names, timeline facts, motives, or evidence chain.',
+      'Only reduce novel-like narration and add playable task, clue, evidence, goal, questioning, or process information where missing.',
+    ].join(' '),
+    prompt: [
+      `Repair this ${input.schemaHint} result for stage ${input.stage}.`,
+      'Quality issues:',
+      JSON.stringify(report.issues, null, 2),
+      'Original JSON:',
+      JSON.stringify(input.content, null, 2),
+    ].join('\n\n'),
+    temperature: 0.2,
+  });
+
+  return {
+    content: await parseOrRepairJson<T>(repaired, input.schemaHint),
+    rewritten: true,
+  };
 }
 
 function phaseToTaskType(phase: string): string {
@@ -799,6 +848,7 @@ async function runJsonPhase<T>(
   userPrompt: string,
   temperature = 0.6,
   onComplete?: (result: T) => Promise<void>,
+  repairStage?: GenerationKnowledgeStage,
 ): Promise<Response> {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -834,7 +884,20 @@ async function runJsonPhase<T>(
         }
 
         controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
-        const result = await parseOrRepairJson<T>(accumulated, phase);
+        const parsed = await parseOrRepairJson<T>(accumulated, phase);
+        let result = parsed;
+        if (repairStage) {
+          controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'quality-check' }));
+          const repaired = await repairKnowledgeContentIfNeeded(provider, {
+            stage: repairStage,
+            schemaHint: phase,
+            content: parsed,
+          });
+          result = repaired.content;
+          if (repaired.rewritten) {
+            controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'quality-rewrite' }));
+          }
+        }
         await onComplete?.(result);
         controller.enqueue(encodeSse(encoder, 'completed', { scriptId, result }));
       } catch (error) {
@@ -1918,6 +1981,26 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
           return;
         }
 
+        controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'quality-check' }));
+        const repaired = await repairKnowledgeContentIfNeeded(provider, {
+          stage: 'player_script',
+          schemaHint: 'CharacterScriptJson',
+          content: json,
+        });
+        json = repaired.content;
+        if (repaired.rewritten) {
+          controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'quality-rewrite' }));
+          wordCount = countCharacterScriptWords(json);
+          if (wordCount < spec.minWordsPerCharacterScriptPiece) {
+            controller.enqueue(
+              encodeSse(encoder, 'error', {
+                message: `玩家剧本质检重写后正文约 ${wordCount} 字，低于最低 ${spec.minWordsPerCharacterScriptPiece} 字。请换用长文本模型后重试。`,
+              }),
+            );
+            return;
+          }
+        }
+
         await persistCharacterScript(body, character, json);
         await recordKnowledgePhase({
           supabase: knowledgeSupabase,
@@ -1989,6 +2072,7 @@ async function handleClues(body: GenerateRequestBody): Promise<Response> {
         content: json,
       }),
     ),
+    'clues',
   );
 }
 
@@ -2029,6 +2113,7 @@ async function handleOrganizerManual(body: GenerateRequestBody): Promise<Respons
         content: json,
       }),
     ),
+    'dm_manual',
   );
 }
 
@@ -2073,6 +2158,7 @@ async function handleTruthReview(body: GenerateRequestBody): Promise<Response> {
         content: json,
       }),
     ),
+    'review',
   );
 }
 

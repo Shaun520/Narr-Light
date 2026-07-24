@@ -242,6 +242,18 @@ a {
   overflow-y: auto;
 }
 
+.knowledge-usage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.knowledge-usage-head form {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .admin-nav-badge {
   min-width: 20px;
   height: 20px;
