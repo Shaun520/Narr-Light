@@ -20,16 +20,17 @@ import type { AIProvider } from "@/lib/ai/providers/base-provider";
 import { DEFAULT_GENERATION_SPEC_CONFIG } from "@/lib/generation/spec";
 
 /** 文本 provider 环境变量 key 映射 */
-const TEXT_PROVIDER_ENV_KEY: Record<TextProviderName, string> = {
-  deepseek: "DEEPSEEK_API_KEY",
-  glm: "GLM_API_KEY",
+const TEXT_PROVIDER_ENV_KEYS: Record<TextProviderName, string[]> = {
+  deepseek: ["DEEPSEEK_API_KEY"],
+  glm: ["GLM_API_KEY"],
+  kimi: ["KIMI_API_KEY", "KSPMAS_API_KEY", "MOONSHOT_API_KEY"],
 };
 
 /** 图像 provider 环境变量 key 映射 */
-const IMAGE_PROVIDER_ENV_KEY: Record<ImageProviderName, string> = {
-  "openai-image": "OPENAI_API_KEY",
-  seedream: "ARK_API_KEY",
-  glm: "GLM_API_KEY",
+const IMAGE_PROVIDER_ENV_KEYS: Record<ImageProviderName, string[]> = {
+  "openai-image": ["OPENAI_API_KEY"],
+  seedream: ["ARK_API_KEY"],
+  glm: ["GLM_API_KEY"],
 };
 
 const DEFAULT_TEXT_CONFIG: TextProviderConfig = {
@@ -38,6 +39,7 @@ const DEFAULT_TEXT_CONFIG: TextProviderConfig = {
   providers: {
     deepseek: { enabled: true, model: "deepseek-v4-flash", timeout: 180, retries: 2 },
     glm: { enabled: true, model: "glm-5.1", timeout: 180, retries: 2 },
+    kimi: { enabled: true, model: "kimi-k3", timeout: 180, retries: 2 },
   },
 };
 
@@ -103,12 +105,15 @@ function safeParse<T>(value: Json | undefined, fallback: T): T {
 
 /** 判断 provider 对应的 API Key 是否已配置（环境变量） */
 export function isProviderKeyConfigured(name: TextProviderName | ImageProviderName): boolean {
-  const envKey =
-    name in TEXT_PROVIDER_ENV_KEY
-      ? TEXT_PROVIDER_ENV_KEY[name as TextProviderName]
-      : IMAGE_PROVIDER_ENV_KEY[name as ImageProviderName];
-  const value = process.env[envKey]?.trim();
-  return Boolean(value) && !value!.includes("你的") && !value!.includes("your-");
+  const envKeys =
+    name in TEXT_PROVIDER_ENV_KEYS
+      ? TEXT_PROVIDER_ENV_KEYS[name as TextProviderName]
+      : IMAGE_PROVIDER_ENV_KEYS[name as ImageProviderName];
+
+  return envKeys.some((envKey) => {
+    const value = process.env[envKey]?.trim();
+    return Boolean(value) && !value!.includes("你的") && !value!.includes("your-");
+  });
 }
 
 /** 获取文本 provider 配置（带单次请求缓存） */
@@ -160,6 +165,7 @@ function normalizeTextConfig(config: TextProviderConfig): TextProviderConfig {
   const providers: Record<TextProviderName, ProviderRuntimeConfig> = {
     deepseek: { ...DEFAULT_TEXT_CONFIG.providers.deepseek, ...pickDefined(config.providers?.deepseek) },
     glm: { ...DEFAULT_TEXT_CONFIG.providers.glm, ...pickDefined(config.providers?.glm) },
+    kimi: { ...DEFAULT_TEXT_CONFIG.providers.kimi, ...pickDefined(config.providers?.kimi) },
   };
   return {
     primary: config.primary ?? DEFAULT_TEXT_CONFIG.primary,

@@ -7,6 +7,7 @@
 import type { ProviderRuntimeConfig } from "@narrlight/shared";
 import { DeepSeekProvider } from "./deepseek-provider";
 import { GLMProvider } from "./glm-provider";
+import { KimiProvider } from "./kimi-provider";
 import { OpenAIImageProvider } from "./openai-image-provider";
 import { SeedreamProvider } from "./seedream-provider";
 
@@ -83,7 +84,7 @@ export interface AIProvider {
  * 可传入 runtime config 覆盖默认模型 / 重试次数 / 超时
  */
 export function getProvider(
-  name: "deepseek" | "glm" | "openai-image" | "seedream",
+  name: "deepseek" | "glm" | "kimi" | "openai-image" | "seedream",
   config?: Partial<ProviderRuntimeConfig>,
 ): AIProvider {
   if (name === "deepseek") {
@@ -91,6 +92,9 @@ export function getProvider(
   }
   if (name === "glm") {
     return new GLMProvider(config);
+  }
+  if (name === "kimi") {
+    return new KimiProvider(config);
   }
   if (name === "openai-image") {
     return new OpenAIImageProvider(config);

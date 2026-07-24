@@ -22,6 +22,7 @@ const DEFAULT_TEXT_CONFIG: TextProviderConfig = {
   providers: {
     deepseek: { enabled: true, model: "deepseek-v4-flash", timeout: 180, retries: 2 },
     glm: { enabled: true, model: "glm-5.1", timeout: 180, retries: 2 },
+    kimi: { enabled: true, model: "kimi-k3", timeout: 180, retries: 2 },
   },
 };
 
@@ -105,6 +106,7 @@ function normalizeTextConfig(config: TextProviderConfig): TextProviderConfig {
   const providers: Record<TextProviderName, ProviderRuntimeConfig> = {
     deepseek: { ...DEFAULT_TEXT_CONFIG.providers.deepseek, ...config.providers?.deepseek },
     glm: { ...DEFAULT_TEXT_CONFIG.providers.glm, ...config.providers?.glm },
+    kimi: { ...DEFAULT_TEXT_CONFIG.providers.kimi, ...config.providers?.kimi },
   };
   return {
     primary: config.primary ?? DEFAULT_TEXT_CONFIG.primary,

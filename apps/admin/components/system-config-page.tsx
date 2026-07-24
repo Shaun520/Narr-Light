@@ -44,6 +44,13 @@ const TEXT_PROVIDERS: TextProviderMeta[] = [
     name: "智谱 GLM",
     models: ["glm-5.2", "glm-5.1", "glm-4-plus"],
   },
+  {
+    id: "kimi",
+    logo: "KM",
+    logoStyle: { background: "#111827" },
+    name: "Kimi",
+    models: ["kimi-k3"],
+  },
 ];
 
 type ImageProviderMeta = {

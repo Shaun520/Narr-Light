@@ -13,7 +13,7 @@ export const SYSTEM_CONFIG_KEYS = [
 export type SystemConfigKey = (typeof SYSTEM_CONFIG_KEYS)[number];
 
 /** 文本 provider 名称 */
-export type TextProviderName = "deepseek" | "glm";
+export type TextProviderName = "deepseek" | "glm" | "kimi";
 
 /** 图像 provider 名称 */
 export type ImageProviderName = "openai-image" | "seedream" | "glm";
