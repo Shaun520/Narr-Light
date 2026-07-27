@@ -90,8 +90,8 @@ export function ChapterTree({
   return (
     <div className="tree" role="tree" aria-label="章节树">
       {groups.map((group) => {
-        const Icon = GROUP_ICON[group.group] ?? List;
-        const isExpanded = expanded[group.group] ?? true;
+        const Icon = group.group.startsWith('chars-') ? Users : GROUP_ICON[group.group] ?? List;
+        const isExpanded = expanded[group.group] ?? !group.group.startsWith('chars-');
         const count = group.count ?? (group.children.length || GROUP_COUNT[group.group] || 0);
         const changedCount = group.children.filter(
           (nodeId) => changedNodeSet.has(nodeId) || Boolean(changeMap?.[nodeId]),

@@ -136,7 +136,7 @@ const PHASE_LABELS: Record<PhaseId, string> = {
 };
 
 /** 闂冭埖顔?2 鐟欐帟澹婇崜褎婀伴惃鍕嫙閸欐垳绗傞梽?*/
-const CHARACTER_SCRIPT_CONCURRENCY = 4;
+const CHARACTER_SCRIPT_CONCURRENCY = 2;
 
 function getCharacterScriptSpec(result: PhaseState['result']): CharacterScriptGenerationSpec {
   const spec = result?.generationSpec as CharacterScriptGenerationSpec | undefined;

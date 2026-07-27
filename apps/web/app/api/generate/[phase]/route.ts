@@ -349,6 +349,45 @@ function encodeSse(encoder: TextEncoder, event: string, data: unknown): Uint8Arr
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
+function getSseEventName(block: string): string | null {
+  const eventLine = block
+    .split(/\r?\n/)
+    .find((line) => line.startsWith('event:'));
+  return eventLine?.slice(6).trim() || null;
+}
+
+function getSseDataText(block: string): string {
+  return block
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).replace(/^ /, ''))
+    .join('\n');
+}
+
+function getSseErrorMessage(block: string): string | null {
+  if (getSseEventName(block) !== 'error') return null;
+  const dataText = getSseDataText(block);
+  if (!dataText) return 'sse_error';
+
+  try {
+    const parsed = JSON.parse(dataText) as { message?: unknown; error?: unknown };
+    if (typeof parsed.message === 'string' && parsed.message) return parsed.message;
+    if (typeof parsed.error === 'string' && parsed.error) return parsed.error;
+    if (
+      parsed.error &&
+      typeof parsed.error === 'object' &&
+      'message' in parsed.error &&
+      typeof parsed.error.message === 'string'
+    ) {
+      return parsed.error.message;
+    }
+  } catch {
+    return dataText;
+  }
+
+  return dataText;
+}
+
 function validateBody(body: unknown): body is GenerateRequestBody {
   if (!body || typeof body !== 'object') return false;
   const b = body as Record<string, unknown>;
@@ -1990,14 +2029,36 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
         json = repaired.content;
         if (repaired.rewritten) {
           controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'quality-rewrite' }));
+          if (!Array.isArray(json.actScripts) || json.actScripts.length === 0) {
+            controller.enqueue(encodeSse(encoder, 'error', { message: 'Character script result is empty after quality rewrite' }));
+            return;
+          }
           wordCount = countCharacterScriptWords(json);
           if (wordCount < spec.minWordsPerCharacterScriptPiece) {
             controller.enqueue(
-              encodeSse(encoder, 'error', {
-                message: `玩家剧本质检重写后正文约 ${wordCount} 字，低于最低 ${spec.minWordsPerCharacterScriptPiece} 字。请换用长文本模型后重试。`,
+              encodeSse(encoder, 'progress', {
+                percent: 100,
+                stage: 'quality-expand',
+                message: `玩家剧本质检重写后正文约 ${wordCount} 字，低于最低 ${spec.minWordsPerCharacterScriptPiece} 字，正在补足正文`,
               }),
             );
-            return;
+            json = await expandCharacterScriptToMinimum({
+              provider,
+              json,
+              minWords: spec.minWordsPerCharacterScriptPiece,
+              currentWords: wordCount,
+              character,
+              partLabel,
+            });
+            wordCount = countCharacterScriptWords(json);
+            if (wordCount < spec.minWordsPerCharacterScriptPiece) {
+              controller.enqueue(
+                encodeSse(encoder, 'error', {
+                  message: `玩家剧本质检重写后补足仍约 ${wordCount} 字，低于最低 ${spec.minWordsPerCharacterScriptPiece} 字。请在 Admin 提高模型 max tokens/超时时间，或改为按幕拆分后重试。`,
+                }),
+              );
+              return;
+            }
           }
         }
 
@@ -2490,6 +2551,8 @@ async function wrapMeteredSseResponse(
   let completed = false;
   let failed = !response.ok;
   let refunded = false;
+  let sseBuffer = '';
+  let lastSseErrorMessage: string | null = null;
   const refund = async (failureReason: string) => {
     if (refunded || settlement.amount <= 0) return;
     refunded = true;
@@ -2527,13 +2590,28 @@ async function wrapMeteredSseResponse(
           if (done) break;
 
           const text = decoder.decode(value, { stream: true });
-          if (text.includes('event: completed')) completed = true;
-          if (text.includes('event: error')) failed = true;
+          sseBuffer += text;
+          const blocks = sseBuffer.split(/\n\n/);
+          sseBuffer = blocks.pop() ?? '';
+          for (const block of blocks) {
+            if (getSseEventName(block) === 'completed') completed = true;
+            const errorMessage = getSseErrorMessage(block);
+            if (errorMessage) {
+              failed = true;
+              lastSseErrorMessage = errorMessage;
+            }
+          }
           controller.enqueue(value);
         }
 
+        const finalErrorMessage = getSseErrorMessage(sseBuffer);
+        if (finalErrorMessage) {
+          failed = true;
+          lastSseErrorMessage = finalErrorMessage;
+        }
+
         if (failed || !completed) {
-          await refund(failed ? 'sse_error' : 'stream_closed_without_completed');
+          await refund(failed ? lastSseErrorMessage ?? 'sse_error' : 'stream_closed_without_completed');
         } else {
           await completeGenerationTask(settlement.taskId);
         }

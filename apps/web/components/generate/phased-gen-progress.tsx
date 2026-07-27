@@ -14,6 +14,7 @@ import type {
   PhasedGenerationState,
   PhaseState,
   PhaseId,
+  PhaseSubItem,
 } from '@/lib/hooks/use-phased-generation';
 
 export interface PhasedGenProgressProps {
@@ -71,6 +72,97 @@ function getStatusColor(status: PhaseState['status']): string {
     default:
       return 'var(--ink-soft, #888)';
   }
+}
+
+function getStatusText(status: PhaseState['status']): string {
+  switch (status) {
+    case 'completed':
+      return '完成';
+    case 'running':
+      return '生成中';
+    case 'failed':
+      return '失败';
+    case 'skipped':
+      return '跳过';
+    default:
+      return '等待';
+  }
+}
+
+function getSubItemPartLabel(label: string): string {
+  const part = label.split('·').slice(1).join('·').trim();
+  return part || label;
+}
+
+function getSubItemCharacterName(label: string): string {
+  return label.split('·')[0]?.trim() || '玩家本';
+}
+
+function groupCharacterScriptItems(items: PhaseSubItem[]) {
+  const groups: Array<{ characterName: string; items: PhaseSubItem[] }> = [];
+  const groupMap = new Map<string, PhaseSubItem[]>();
+
+  for (const item of items) {
+    const characterName = getSubItemCharacterName(item.label);
+    const group = groupMap.get(characterName) ?? [];
+    group.push(item);
+    groupMap.set(characterName, group);
+  }
+
+  for (const [characterName, groupItems] of groupMap.entries()) {
+    groups.push({ characterName, items: groupItems });
+  }
+
+  return groups;
+}
+
+function PhaseSubItemMatrix({ items }: { items: PhaseSubItem[] }) {
+  const runningItems = items.filter((item) => item.status === 'running');
+  const failedItems = items.filter((item) => item.status === 'failed');
+  const groupedItems = groupCharacterScriptItems(items);
+
+  return (
+    <div className="phased-script-matrix">
+      {(runningItems.length > 0 || failedItems.length > 0) && (
+        <div className="phased-script-active">
+          {runningItems.length > 0 && (
+            <span>正在生成：{runningItems.map((item) => item.label).join('、')}</span>
+          )}
+          {failedItems.length > 0 && (
+            <span>失败：{failedItems.map((item) => item.label).join('、')}</span>
+          )}
+        </div>
+      )}
+
+      <div className="phased-script-grid">
+        {groupedItems.map((group) => (
+          <div key={group.characterName} className="phased-script-row">
+            <div className="phased-script-name">{group.characterName}</div>
+            <div className="phased-script-parts">
+              {group.items.map((item) => (
+                <div
+                  key={item.id}
+                  className={`phased-script-pill ${item.status}`}
+                  title={item.error ? `${item.label}: ${item.error}` : `${item.label}: ${getStatusText(item.status)}`}
+                >
+                  <span className="phased-script-dot" />
+                  <span className="phased-script-part">{getSubItemPartLabel(item.label).replace('玩家剧本', '')}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {failedItems.length > 0 && (
+        <div className="phased-script-errors">
+          {failedItems.map((item) => (
+            <div key={item.id}>{item.label}: {item.error ?? '生成失败'}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function PhaseRow({
@@ -159,19 +251,23 @@ function PhaseRow({
       )}
 
       {expanded && hasSubItems && (
-        <div className="phased-subitems">
-          {phase.subItems!.map((sub) => (
-            <div key={sub.id} className="phased-subitem">
-              <span className="phased-subitem-status" style={{ color: getStatusColor(sub.status) }}>
-                {getStatusIcon(sub.status)}
-              </span>
-              <span>{sub.label}</span>
-              {sub.status === 'failed' && sub.error && (
-                <span className="phased-subitem-error">{sub.error}</span>
-              )}
-            </div>
-          ))}
-        </div>
+        phase.id === 'character_script' ? (
+          <PhaseSubItemMatrix items={phase.subItems!} />
+        ) : (
+          <div className="phased-subitems">
+            {phase.subItems!.map((sub) => (
+              <div key={sub.id} className="phased-subitem">
+                <span className="phased-subitem-status" style={{ color: getStatusColor(sub.status) }}>
+                  {getStatusIcon(sub.status)}
+                </span>
+                <span>{sub.label}</span>
+                {sub.status === 'failed' && sub.error && (
+                  <span className="phased-subitem-error">{sub.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )
       )}
 
       {expanded && hasStreamText && (

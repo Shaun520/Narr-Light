@@ -87,6 +87,13 @@ function isFullPlayerScriptLabel(label: string): boolean {
   return label === '完整玩家剧本' || label === '完整角色本';
 }
 
+function compactPlayerScriptPartLabel(label: string, fallbackIndex: number): string {
+  const match = label.match(/第\s*(\d+)\s*幕/);
+  if (match) return `第${match[1]}幕`;
+  if (isFullPlayerScriptLabel(label)) return '完整玩家本';
+  return label || `第${fallbackIndex}本`;
+}
+
 function listHtml(title: string, values: unknown[] | undefined, actNum: string): string {
   const items = (values ?? []).map((item) => String(item ?? '').trim()).filter(Boolean);
   if (!items.length) return '';
@@ -281,8 +288,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
 
     const colors = ['#8a1c1c', '#b08d57', '#4a7c59', '#3a5a7a', '#7a5c3a', '#6a4a8a', '#8a4a6a'];
     const charNodeIds: string[] = [];
+    const characterNodeGroups: Array<{ characterId: string; name: string; nodes: string[] }> = [];
     for (const [index, character] of ((characters ?? []) as Array<Record<string, unknown>>).entries()) {
       const characterScriptRows = scriptsByCharacter.get(String(character.id)) ?? [];
+      const currentCharacterNodeIds: string[] = [];
       for (const characterScript of characterScriptRows) {
         const actScripts = Array.isArray(characterScript.act_scripts)
           ? (characterScript.act_scripts as Array<Record<string, unknown>>)
@@ -328,13 +337,35 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
           pages,
         };
         labels[nodeId] =
-          `${name}${character.is_murderer ? '（凶手）' : ''}${isFullPlayerScriptLabel(partLabel) ? '' : ` · ${partLabel}`}`;
+          characterScriptRows.length === 1
+            ? `${name}${character.is_murderer ? '（凶手）' : ''}`
+            : compactPlayerScriptPartLabel(partLabel, partIndex);
         charNodeIds.push(nodeId);
+        currentCharacterNodeIds.push(nodeId);
+      }
+      if (currentCharacterNodeIds.length) {
+        characterNodeGroups.push({
+          characterId: String(character.id),
+          name: String(character.name ?? `角色 ${index + 1}`),
+          nodes: currentCharacterNodeIds,
+        });
       }
     }
 
     if (charNodeIds.length) {
-      groups.push({ group: 'chars', label: '人物剧本', children: charNodeIds, count: charNodeIds.length });
+      const isSplitByCharacter = characterNodeGroups.some((group) => group.nodes.length > 1);
+      if (isSplitByCharacter) {
+        for (const group of characterNodeGroups) {
+          groups.push({
+            group: `chars-${group.characterId}`,
+            label: `玩家本 · ${group.name}`,
+            children: group.nodes,
+            count: group.nodes.length,
+          });
+        }
+      } else {
+        groups.push({ group: 'chars', label: '人物剧本', children: charNodeIds, count: charNodeIds.length });
+      }
     }
 
     const packageNodeIds: string[] = [];
@@ -358,14 +389,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
       packageNodeIds.push(nodeId);
     }
 
-    if (packageNodeIds.length) {
-      groups.push({
-        group: 'player-packages',
-        label: '玩家资料包',
-        children: packageNodeIds,
-        count: packageNodeIds.length,
-      });
-    }
+    void packageNodeIds;
 
     const organizerData = organizer as Record<string, unknown> | null;
     if (organizerData) {
