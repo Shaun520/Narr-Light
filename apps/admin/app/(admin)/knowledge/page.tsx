@@ -8,11 +8,14 @@ import {
   type KnowledgeStage,
 } from "@narrlight/shared";
 import { PageHeader, Tag } from "@/components/admin-static";
-import { getKnowledgeItem, getKnowledgeItems, getKnowledgeUsageSnapshot } from "@/lib/services/knowledge";
+import { getKnowledgeIntakeSnapshot, getKnowledgeItem, getKnowledgeItems, getKnowledgeUsageSnapshot } from "@/lib/services/knowledge";
 import {
+  approveKnowledgeCandidate,
   deleteKnowledgeItem,
+  rejectKnowledgeCandidate,
   saveKnowledgeItem,
   toggleKnowledgeItem,
+  uploadKnowledgeDocument,
 } from "./actions";
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
 
@@ -25,6 +28,10 @@ type SearchParams = {
   mode?: string;
   saved?: string;
   recordsCleared?: string;
+  candidateApproved?: string;
+  candidateRejected?: string;
+  documentExtracted?: string;
+  candidateCount?: string;
 };
 
 const GENRES = ["hardcore", "emotion", "horror", "funny", "mechanism"] as const;
@@ -32,13 +39,15 @@ const DIFFICULTIES = ["beginner", "intermediate", "advanced", "expert"] as const
 
 export default async function KnowledgePage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
-  const [{ items, error }, selectedItem, usageSnapshot] = await Promise.all([
+  const [{ items, error }, selectedItem, usageSnapshot, intakeSnapshot] = await Promise.all([
     getKnowledgeItems(params),
     params.itemId ? getKnowledgeItem(params.itemId) : Promise.resolve(null),
     getKnowledgeUsageSnapshot(),
+    getKnowledgeIntakeSnapshot(),
   ]);
   const modalOpen = params.mode === "new" || Boolean(selectedItem);
   const hasUsageRecords = usageSnapshot.usages.length > 0 || usageSnapshot.reports.length > 0;
+  const pendingCandidates = intakeSnapshot.candidates.filter((candidate) => candidate.reviewStatus === "pending");
 
   return (
     <div className="page-stack">
@@ -49,8 +58,14 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
 
       {params.saved === "1" && <div className="admin-inline-alert">知识条目已保存。</div>}
       {params.recordsCleared === "1" && <div className="admin-inline-alert">引用和质检记录已清空。</div>}
+      {params.candidateApproved === "1" && <div className="admin-inline-alert">候选知识已批准入库。</div>}
+      {params.candidateRejected === "1" && <div className="admin-inline-alert">候选知识已驳回。</div>}
+      {params.documentExtracted === "1" && (
+        <div className="admin-inline-alert">资料已解析，生成 {params.candidateCount ?? 0} 条候选知识。</div>
+      )}
       {error && <div className="admin-inline-alert" role="alert">{error}</div>}
       {usageSnapshot.error && <div className="admin-inline-alert" role="alert">{usageSnapshot.error}</div>}
+      {intakeSnapshot.error && <div className="admin-inline-alert" role="alert">{intakeSnapshot.error}</div>}
 
       <section className="admin-card">
         <AdminFilterForm action="/knowledge">
@@ -150,6 +165,106 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
           </div>
         </div>
       )}
+
+      <section className="admin-card">
+        <div className="admin-card-head knowledge-usage-head knowledge-intake-head">
+          <div>
+            <div className="admin-card-title">二阶段资料抽取</div>
+            <div className="admin-card-sub">资料解析和候选知识默认不进入生成链路，需人工批准后才写入正式知识库。</div>
+          </div>
+          <div className="knowledge-intake-summary">
+            <span>资料 {intakeSnapshot.documents.length}</span>
+            <span>任务 {intakeSnapshot.jobs.length}</span>
+            <span>待审 {pendingCandidates.length}</span>
+          </div>
+        </div>
+        <div className="knowledge-upload-panel">
+          <form className="knowledge-upload-form" action={uploadKnowledgeDocument} encType="multipart/form-data">
+            <input className="input" name="title" placeholder="资料标题（可选，默认使用文件名）" />
+            <input className="input" name="file" type="file" accept=".txt,.md,text/plain,text/markdown" required />
+            <button className="admin-btn primary" type="submit">上传并抽取</button>
+          </form>
+          <div className="admin-card-sub">当前支持 txt/md；PDF/DOCX 先转纯文本，避免未清洗原文污染知识库。</div>
+        </div>
+        {(intakeSnapshot.documents.length > 0 || intakeSnapshot.jobs.length > 0) && (
+          <div className="knowledge-intake-meta">
+            {intakeSnapshot.documents.slice(0, 3).map((document) => (
+              <span key={document.id}>
+                资料：{document.title} / {parseStatusLabel(document.parseStatus)}
+              </span>
+            ))}
+            {intakeSnapshot.jobs.slice(0, 3).map((job) => (
+              <span key={job.id}>
+                任务：{job.documentTitle} / {jobStatusLabel(job.status)}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="table-wrap knowledge-candidate-wrap">
+          <table className="table knowledge-candidate-table">
+            <thead>
+              <tr>
+                <th>候选知识</th>
+                <th>来源</th>
+                <th>类型 / 阶段</th>
+                <th>抽象层级</th>
+                <th>风险</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {intakeSnapshot.candidates.map((candidate) => (
+                <tr key={candidate.id}>
+                  <td>
+                    <b>{candidate.title}</b>
+                    <div className="placeholder-meta">{candidate.content.slice(0, 72)}</div>
+                  </td>
+                  <td>
+                    {candidate.documentTitle}
+                    <div className="placeholder-meta">{formatDateTime(candidate.createdAt)}</div>
+                  </td>
+                  <td>
+                    {categoryLabel(candidate.category)}
+                    <div className="placeholder-meta">{stageLabel(candidate.stage)} / {moduleTypeLabel(candidate.moduleType)}</div>
+                  </td>
+                  <td>{abstractionLevelLabel(candidate.abstractionLevel)}</td>
+                  <td>{riskTag(candidate.riskLevel)}</td>
+                  <td>{candidateStatusTag(candidate.reviewStatus)}</td>
+                  <td>
+                    {candidate.reviewStatus === "pending" ? (
+                      <div className="row-actions">
+                        <form action={approveKnowledgeCandidate}>
+                          <input type="hidden" name="id" value={candidate.id} />
+                          <button className="link-btn" type="submit">批准入库</button>
+                        </form>
+                        <form action={approveKnowledgeCandidate}>
+                          <input type="hidden" name="id" value={candidate.id} />
+                          <input type="hidden" name="enabled" value="on" />
+                          <button className="link-btn" type="submit">批准并启用</button>
+                        </form>
+                        <form action={rejectKnowledgeCandidate}>
+                          <input type="hidden" name="id" value={candidate.id} />
+                          <button className="link-btn danger" type="submit">驳回</button>
+                        </form>
+                      </div>
+                    ) : candidate.approvedKnowledgeItemId ? (
+                      <Link className="link-btn" href={buildItemHref(params, candidate.approvedKnowledgeItemId)}>查看知识</Link>
+                    ) : (
+                      <span className="placeholder-meta">{candidate.reviewerNote || "已处理"}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {intakeSnapshot.candidates.length === 0 && (
+                <tr>
+                  <td className="table-empty" colSpan={7}>暂无候选知识；下一步接入上传和解析器后会在这里审核。</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="admin-card">
         <div className="admin-card-head knowledge-usage-head">
@@ -358,6 +473,43 @@ function riskTag(riskLevel: string) {
   };
   const tone = riskLevel === "high" ? "error" : riskLevel === "medium" ? "warning" : "success";
   return <Tag tone={tone}>{labels[riskLevel] ?? riskLevel}</Tag>;
+}
+
+function candidateStatusTag(status: string) {
+  if (status === "approved") return <Tag tone="success">已入库</Tag>;
+  if (status === "rejected") return <Tag tone="error">已驳回</Tag>;
+  return <Tag tone="warning">待审核</Tag>;
+}
+
+function abstractionLevelLabel(level: string) {
+  const labels: Record<string, string> = {
+    summary: "摘要",
+    pattern: "模式",
+    rule: "规则",
+    anti_pattern: "反例",
+    quality_metric: "质检标准",
+  };
+  return labels[level] ?? level;
+}
+
+function parseStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "待解析",
+    parsed: "已解析",
+    failed: "解析失败",
+    needs_cleanup: "需清洗",
+  };
+  return labels[status] ?? status;
+}
+
+function jobStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    pending: "等待中",
+    running: "抽取中",
+    completed: "已完成",
+    failed: "失败",
+  };
+  return labels[status] ?? status;
 }
 
 function issueSummary(issues: unknown) {

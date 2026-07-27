@@ -254,6 +254,124 @@ a {
   flex-shrink: 0;
 }
 
+.knowledge-intake-head {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.knowledge-intake-head > div:first-child {
+  min-width: min(100%, 360px);
+  flex: 1 1 360px;
+}
+
+.knowledge-intake-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+}
+
+.knowledge-intake-summary span {
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #fafafa;
+}
+
+.knowledge-upload-panel {
+  padding: 14px 16px;
+  border-top: 1px solid var(--admin-border);
+  display: grid;
+  gap: 8px;
+}
+
+.knowledge-upload-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) max-content;
+  gap: 10px;
+  align-items: center;
+}
+
+.knowledge-upload-form .input {
+  min-width: 0;
+}
+
+.knowledge-intake-meta {
+  padding: 0 16px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+}
+
+.knowledge-intake-meta span {
+  border-radius: 6px;
+  background: #fafafa;
+  padding: 5px 8px;
+}
+
+.knowledge-candidate-wrap {
+  max-width: 100%;
+}
+
+.knowledge-candidate-table {
+  table-layout: fixed;
+}
+
+.knowledge-candidate-table th,
+.knowledge-candidate-table td {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.knowledge-candidate-table th:nth-child(1),
+.knowledge-candidate-table td:nth-child(1) {
+  width: 22%;
+}
+
+.knowledge-candidate-table th:nth-child(2),
+.knowledge-candidate-table td:nth-child(2) {
+  width: 16%;
+}
+
+.knowledge-candidate-table th:nth-child(3),
+.knowledge-candidate-table td:nth-child(3) {
+  width: 17%;
+}
+
+.knowledge-candidate-table th:nth-child(4),
+.knowledge-candidate-table td:nth-child(4),
+.knowledge-candidate-table th:nth-child(5),
+.knowledge-candidate-table td:nth-child(5),
+.knowledge-candidate-table th:nth-child(6),
+.knowledge-candidate-table td:nth-child(6) {
+  width: 9%;
+}
+
+.knowledge-candidate-table th:nth-child(7),
+.knowledge-candidate-table td:nth-child(7) {
+  width: 19%;
+}
+
+.knowledge-candidate-table .row-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .knowledge-upload-form {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledge-intake-summary {
+    justify-content: flex-start;
+  }
+}
+
 .admin-nav-badge {
   min-width: 20px;
   height: 20px;

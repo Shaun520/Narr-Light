@@ -9,6 +9,7 @@ import {
 } from "@narrlight/shared";
 import { requireAdmin } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { extractKnowledgeCandidates, parseKnowledgeUpload } from "@/lib/services/knowledge-intake-extractor";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GENRES = ["hardcore", "emotion", "horror", "funny", "mechanism"] as const;
@@ -110,6 +111,155 @@ export async function clearKnowledgeUsageRecords() {
 
   revalidatePath("/knowledge");
   redirect("/knowledge?recordsCleared=1");
+}
+
+export async function uploadKnowledgeDocument(formData: FormData) {
+  await requireAdmin();
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error("未配置 Supabase service role，无法上传资料。");
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) throw new Error("请选择要上传的 txt/md 资料。");
+
+  const parsed = await parseKnowledgeUpload(file, stringValue(formData.get("title")));
+  const now = new Date().toISOString();
+
+  const { data: documentRow, error: documentError } = await supabase
+    .from("knowledge_documents")
+    .insert({
+      title: parsed.title,
+      source_type: parsed.sourceType,
+      storage_path: null,
+      parsed_text: parsed.parsedText,
+      parse_status: "parsed",
+      parse_error: "",
+      metadata: parsed.metadata,
+      created_at: now,
+      updated_at: now,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (documentError || !documentRow) {
+    throw new Error(`保存资料记录失败：${documentError?.message ?? "missing document id"}`);
+  }
+
+  const { data: jobRow, error: jobError } = await supabase
+    .from("knowledge_extraction_jobs")
+    .insert({
+      document_id: documentRow.id,
+      status: "running",
+      parser_version: "text-v1",
+      extractor_model: "",
+      result_json: {},
+      error_message: "",
+      started_at: now,
+      created_at: now,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (jobError || !jobRow) {
+    throw new Error(`创建抽取任务失败：${jobError?.message ?? "missing job id"}`);
+  }
+
+  try {
+    const extraction = await extractKnowledgeCandidates({
+      documentId: documentRow.id,
+      documentTitle: parsed.title,
+      parsedText: parsed.parsedText,
+    });
+
+    const candidatePayload = extraction.candidates.map((candidate) => ({
+      ...candidate,
+      document_id: documentRow.id,
+      extraction_job_id: jobRow.id,
+      review_status: "pending",
+      reviewer_note: "",
+      reviewed_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }));
+
+    const { error: candidateError } = await supabase.from("knowledge_candidates").insert(candidatePayload);
+    if (candidateError) throw new Error(`写入候选知识失败：${candidateError.message}`);
+
+    const { error: completeError } = await supabase
+      .from("knowledge_extraction_jobs")
+      .update({
+        status: "completed",
+        extractor_model: `${extraction.providerName}:${extraction.model}`,
+        result_json: {
+          providerName: extraction.providerName,
+          model: extraction.model,
+          candidateCount: candidatePayload.length,
+          rawResult: extraction.rawResult,
+        },
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", jobRow.id);
+    if (completeError) throw new Error(`更新抽取任务失败：${completeError.message}`);
+
+    revalidatePath("/knowledge");
+    redirect(`/knowledge?documentExtracted=1&candidateCount=${candidatePayload.length}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await supabase
+      .from("knowledge_extraction_jobs")
+      .update({
+        status: "failed",
+        error_message: message,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", jobRow.id);
+    throw error;
+  }
+}
+
+export async function approveKnowledgeCandidate(formData: FormData) {
+  await requireAdmin();
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error("未配置 Supabase service role，无法批准候选知识。");
+
+  const id = stringValue(formData.get("id"));
+  const enabled = formData.get("enabled") === "on";
+  if (!UUID_PATTERN.test(id)) redirect("/knowledge");
+
+  const { error } = await supabase.rpc("approve_knowledge_candidate", {
+    p_candidate_id: id,
+    p_enabled: enabled,
+  });
+
+  if (error) throw new Error(`批准候选知识失败：${error.message}`);
+
+  revalidatePath("/knowledge");
+  redirect("/knowledge?candidateApproved=1");
+}
+
+export async function rejectKnowledgeCandidate(formData: FormData) {
+  await requireAdmin();
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error("未配置 Supabase service role，无法驳回候选知识。");
+
+  const id = stringValue(formData.get("id"));
+  const reviewerNote = stringValue(formData.get("reviewerNote"));
+  if (!UUID_PATTERN.test(id)) redirect("/knowledge");
+
+  const { error } = await supabase
+    .from("knowledge_candidates")
+    .update({
+      review_status: "rejected",
+      reviewer_note: reviewerNote,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("review_status", "pending");
+
+  if (error) throw new Error(`驳回候选知识失败：${error.message}`);
+
+  revalidatePath("/knowledge");
+  redirect("/knowledge?candidateRejected=1");
 }
 
 function stringValue(value: FormDataEntryValue | null) {

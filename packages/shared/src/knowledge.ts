@@ -41,6 +41,37 @@ export const QUALITY_RISK_LEVELS = ["low", "medium", "high"] as const;
 
 export type QualityRiskLevel = (typeof QUALITY_RISK_LEVELS)[number];
 
+export const KNOWLEDGE_DOCUMENT_SOURCE_TYPES = ["manual", "txt", "md", "docx", "pdf"] as const;
+
+export type KnowledgeDocumentSourceType = (typeof KNOWLEDGE_DOCUMENT_SOURCE_TYPES)[number];
+
+export const KNOWLEDGE_DOCUMENT_PARSE_STATUSES = [
+  "pending",
+  "parsed",
+  "failed",
+  "needs_cleanup",
+] as const;
+
+export type KnowledgeDocumentParseStatus = (typeof KNOWLEDGE_DOCUMENT_PARSE_STATUSES)[number];
+
+export const KNOWLEDGE_EXTRACTION_STATUSES = ["pending", "running", "completed", "failed"] as const;
+
+export type KnowledgeExtractionStatus = (typeof KNOWLEDGE_EXTRACTION_STATUSES)[number];
+
+export const KNOWLEDGE_ABSTRACTION_LEVELS = [
+  "summary",
+  "pattern",
+  "rule",
+  "anti_pattern",
+  "quality_metric",
+] as const;
+
+export type KnowledgeAbstractionLevel = (typeof KNOWLEDGE_ABSTRACTION_LEVELS)[number];
+
+export const KNOWLEDGE_CANDIDATE_REVIEW_STATUSES = ["pending", "approved", "rejected"] as const;
+
+export type KnowledgeCandidateReviewStatus = (typeof KNOWLEDGE_CANDIDATE_REVIEW_STATUSES)[number];
+
 export type GenerationQualityIssue = {
   type: string;
   severity: "low" | "medium" | "high";
