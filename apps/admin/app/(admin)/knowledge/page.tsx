@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FileSearch } from "lucide-react";
 import { AdminFilterForm } from "@/components/admin-filter-form";
 import {
   KNOWLEDGE_CATEGORIES,
@@ -8,6 +9,7 @@ import {
   type KnowledgeStage,
 } from "@narrlight/shared";
 import { PageHeader, Tag } from "@/components/admin-static";
+import { KnowledgeTabs, type KnowledgeTab } from "@/components/knowledge-tabs";
 import { getKnowledgeIntakeSnapshot, getKnowledgeItem, getKnowledgeItems, getKnowledgeUsageSnapshot } from "@/lib/services/knowledge";
 import {
   approveKnowledgeCandidate,
@@ -15,11 +17,12 @@ import {
   rejectKnowledgeCandidate,
   saveKnowledgeItem,
   toggleKnowledgeItem,
-  uploadKnowledgeDocument,
 } from "./actions";
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
+import { KnowledgeUploadForm } from "@/components/knowledge-upload-form";
 
 type SearchParams = {
+  tab?: string;
   q?: string;
   category?: string;
   stage?: string;
@@ -48,6 +51,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
   const modalOpen = params.mode === "new" || Boolean(selectedItem);
   const hasUsageRecords = usageSnapshot.usages.length > 0 || usageSnapshot.reports.length > 0;
   const pendingCandidates = intakeSnapshot.candidates.filter((candidate) => candidate.reviewStatus === "pending");
+  const activeTab: KnowledgeTab = params.tab === "intake" || params.tab === "usage" ? params.tab : "items";
 
   return (
     <div className="page-stack">
@@ -67,7 +71,11 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
       {usageSnapshot.error && <div className="admin-inline-alert" role="alert">{usageSnapshot.error}</div>}
       {intakeSnapshot.error && <div className="admin-inline-alert" role="alert">{intakeSnapshot.error}</div>}
 
-      <section className="admin-card">
+      <KnowledgeTabs
+        key={activeTab}
+        initialTab={activeTab}
+        items={
+          <section className="admin-card">
         <AdminFilterForm action="/knowledge">
           <div className="toolbar-left">
             <input className="input input-wide" name="q" placeholder="搜索标题或内容" defaultValue={params.q ?? ""} />
@@ -145,28 +153,10 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
             </tbody>
           </table>
         </div>
-      </section>
-
-      {modalOpen && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-form-title">
-            <div className="modal-head">
-              <div>
-                <div className="modal-title" id="knowledge-form-title">
-                  {selectedItem ? "编辑知识条目" : "新增知识条目"}
-                </div>
-                <div className="admin-card-sub">一期优先录入高质量规则，不录入完整剧本文本。</div>
-              </div>
-              <Link className="link-btn" href={buildCloseHref(params)}>关闭</Link>
-            </div>
-            <div className="modal-body">
-              <KnowledgeForm item={selectedItem} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      <section className="admin-card">
+          </section>
+        }
+        intake={
+          <section className="admin-card">
         <div className="admin-card-head knowledge-usage-head knowledge-intake-head">
           <div>
             <div className="admin-card-title">二阶段资料抽取</div>
@@ -179,11 +169,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
           </div>
         </div>
         <div className="knowledge-upload-panel">
-          <form className="knowledge-upload-form" action={uploadKnowledgeDocument} encType="multipart/form-data">
-            <input className="input" name="title" placeholder="资料标题（可选，默认使用文件名）" />
-            <input className="input" name="file" type="file" accept=".txt,.md,text/plain,text/markdown" required />
-            <button className="admin-btn primary" type="submit">上传并抽取</button>
-          </form>
+          <KnowledgeUploadForm />
           <div className="admin-card-sub">当前支持 txt/md；PDF/DOCX 先转纯文本，避免未清洗原文污染知识库。</div>
         </div>
         {(intakeSnapshot.documents.length > 0 || intakeSnapshot.jobs.length > 0) && (
@@ -258,15 +244,22 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
               ))}
               {intakeSnapshot.candidates.length === 0 && (
                 <tr>
-                  <td className="table-empty" colSpan={7}>暂无候选知识；下一步接入上传和解析器后会在这里审核。</td>
+                  <td className="table-empty" colSpan={7}>
+                    <div className="knowledge-empty">
+                      <FileSearch size={28} strokeWidth={1.5} />
+                      <div className="knowledge-empty-title">暂无候选知识</div>
+                      <div className="knowledge-empty-sub">上传资料并抽取后，候选知识会在这里等待审核</div>
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section className="admin-card">
+          </section>
+        }
+        usage={
+          <section className="admin-card">
         <div className="admin-card-head knowledge-usage-head">
           <div>
             <div className="admin-card-title">最近引用和质检</div>
@@ -334,7 +327,28 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
             </tbody>
           </table>
         </div>
-      </section>
+          </section>
+        }
+      />
+
+      {modalOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <div className="modal knowledge-modal" role="dialog" aria-modal="true" aria-labelledby="knowledge-form-title">
+            <div className="modal-head">
+              <div>
+                <div className="modal-title" id="knowledge-form-title">
+                  {selectedItem ? "编辑知识条目" : "新增知识条目"}
+                </div>
+                <div className="admin-card-sub">一期优先录入高质量规则，不录入完整剧本文本。</div>
+              </div>
+              <Link className="link-btn" href={buildCloseHref(params)}>关闭</Link>
+            </div>
+            <div className="modal-body">
+              <KnowledgeForm item={selectedItem} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

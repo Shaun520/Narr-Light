@@ -110,7 +110,7 @@ export async function clearKnowledgeUsageRecords() {
   if (reportError) throw new Error(`清空质检记录失败：${reportError.message}`);
 
   revalidatePath("/knowledge");
-  redirect("/knowledge?recordsCleared=1");
+  redirect("/knowledge?tab=usage&recordsCleared=1");
 }
 
 export async function uploadKnowledgeDocument(formData: FormData) {
@@ -201,7 +201,7 @@ export async function uploadKnowledgeDocument(formData: FormData) {
     if (completeError) throw new Error(`更新抽取任务失败：${completeError.message}`);
 
     revalidatePath("/knowledge");
-    redirect(`/knowledge?documentExtracted=1&candidateCount=${candidatePayload.length}`);
+    redirect(`/knowledge?tab=intake&documentExtracted=1&candidateCount=${candidatePayload.length}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await supabase
@@ -233,7 +233,7 @@ export async function approveKnowledgeCandidate(formData: FormData) {
   if (error) throw new Error(`批准候选知识失败：${error.message}`);
 
   revalidatePath("/knowledge");
-  redirect("/knowledge?candidateApproved=1");
+  redirect("/knowledge?tab=intake&candidateApproved=1");
 }
 
 export async function rejectKnowledgeCandidate(formData: FormData) {
@@ -259,7 +259,7 @@ export async function rejectKnowledgeCandidate(formData: FormData) {
   if (error) throw new Error(`驳回候选知识失败：${error.message}`);
 
   revalidatePath("/knowledge");
-  redirect("/knowledge?candidateRejected=1");
+  redirect("/knowledge?tab=intake&candidateRejected=1");
 }
 
 function stringValue(value: FormDataEntryValue | null) {

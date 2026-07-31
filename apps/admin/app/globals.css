@@ -290,14 +290,54 @@ a {
 }
 
 .knowledge-upload-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) max-content;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
 }
 
-.knowledge-upload-form .input {
+.knowledge-upload-title {
+  width: 260px;
+  flex: 0 1 auto;
+}
+
+.knowledge-upload-file-input {
+  display: none;
+}
+
+.knowledge-upload-file-name {
+  flex: 1 1 180px;
   min-width: 0;
+  overflow: hidden;
+  color: var(--admin-text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.knowledge-upload-file-name.empty {
+  color: var(--admin-text-secondary);
+}
+
+.knowledge-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.knowledge-empty svg {
+  color: var(--admin-text-secondary);
+}
+
+.knowledge-empty-title {
+  color: var(--admin-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.knowledge-empty-sub {
+  font-size: 13px;
 }
 
 .knowledge-intake-meta {
@@ -363,8 +403,8 @@ a {
 }
 
 @media (max-width: 900px) {
-  .knowledge-upload-form {
-    grid-template-columns: 1fr;
+  .knowledge-upload-title {
+    width: 100%;
   }
 
   .knowledge-intake-summary {
@@ -599,6 +639,8 @@ a {
 }
 
 .admin-tab {
+  display: inline-flex;
+  align-items: center;
   height: 30px;
   padding: 0 14px;
   border: 0;
