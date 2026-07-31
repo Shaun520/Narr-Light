@@ -8,6 +8,7 @@
     "dev:admin": "pnpm --dir apps/admin dev",
     "build:admin": "pnpm --dir apps/admin build",
     "lint:admin": "pnpm --dir apps/admin lint",
+    "test:admin": "pnpm --dir apps/admin test",
     "dev:app": "pnpm run dev:web",
     "build:app": "pnpm run build:web",
     "lint:app": "pnpm run lint:web"
