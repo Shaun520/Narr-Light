@@ -355,6 +355,23 @@ a {
   padding: 5px 8px;
 }
 
+.knowledge-intake-meta .knowledge-job {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.knowledge-intake-meta .knowledge-job-error {
+  max-width: 280px;
+  padding: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--admin-error);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .knowledge-candidate-wrap {
   max-width: 100%;
 }

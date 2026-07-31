@@ -163,17 +163,41 @@ export async function uploadKnowledgeDocument(formData: FormData) {
     throw new Error(`创建抽取任务失败：${jobError?.message ?? "missing job id"}`);
   }
 
+  const candidateCount = await runKnowledgeExtraction(supabase, {
+    jobId: jobRow.id,
+    documentId: documentRow.id,
+    documentTitle: parsed.title,
+    parsedText: parsed.parsedText,
+  });
+
+  revalidatePath("/knowledge");
+  redirect(`/knowledge?tab=intake&documentExtracted=1&candidateCount=${candidateCount}`);
+}
+
+type AdminSupabaseClient = NonNullable<ReturnType<typeof createAdminSupabaseClient>>;
+
+// 抽取执行体：上传和失败重试共用。注意不能把 redirect 放进这里的 try/catch——
+// redirect 通过抛出 NEXT_REDIRECT 工作，会被当成抽取失败把任务标记为 failed。
+async function runKnowledgeExtraction(
+  supabase: AdminSupabaseClient,
+  input: {
+    jobId: string;
+    documentId: string;
+    documentTitle: string;
+    parsedText: string;
+  },
+): Promise<number> {
   try {
     const extraction = await extractKnowledgeCandidates({
-      documentId: documentRow.id,
-      documentTitle: parsed.title,
-      parsedText: parsed.parsedText,
+      documentId: input.documentId,
+      documentTitle: input.documentTitle,
+      parsedText: input.parsedText,
     });
 
     const candidatePayload = extraction.candidates.map((candidate) => ({
       ...candidate,
-      document_id: documentRow.id,
-      extraction_job_id: jobRow.id,
+      document_id: input.documentId,
+      extraction_job_id: input.jobId,
       review_status: "pending",
       reviewer_note: "",
       reviewed_at: null,
@@ -197,11 +221,10 @@ export async function uploadKnowledgeDocument(formData: FormData) {
         },
         completed_at: new Date().toISOString(),
       })
-      .eq("id", jobRow.id);
+      .eq("id", input.jobId);
     if (completeError) throw new Error(`更新抽取任务失败：${completeError.message}`);
 
-    revalidatePath("/knowledge");
-    redirect(`/knowledge?tab=intake&documentExtracted=1&candidateCount=${candidatePayload.length}`);
+    return candidatePayload.length;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await supabase
@@ -211,9 +234,62 @@ export async function uploadKnowledgeDocument(formData: FormData) {
         error_message: message,
         completed_at: new Date().toISOString(),
       })
-      .eq("id", jobRow.id);
+      .eq("id", input.jobId);
     throw error;
   }
+}
+
+export async function retryKnowledgeExtraction(id: string) {
+  await requireAdmin();
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error("未配置 Supabase service role，无法重试抽取任务。");
+
+  if (!UUID_PATTERN.test(id)) redirect("/knowledge?tab=intake");
+
+  const { data: job, error: jobError } = await supabase
+    .from("knowledge_extraction_jobs")
+    .select("id,status,document_id,knowledge_documents(id,title,parsed_text)")
+    .eq("id", id)
+    .maybeSingle<{
+      id: string;
+      status: string;
+      document_id: string;
+      knowledge_documents: { id: string; title: string; parsed_text: string } | { id: string; title: string; parsed_text: string }[] | null;
+    }>();
+
+  if (jobError) throw new Error(`读取抽取任务失败：${jobError.message}`);
+  if (!job || job.status !== "failed") redirect("/knowledge?tab=intake");
+
+  const documentRow = Array.isArray(job.knowledge_documents) ? job.knowledge_documents[0] : job.knowledge_documents;
+  if (!documentRow?.parsed_text) throw new Error("关联资料不存在或缺少解析文本，无法重试。");
+
+  const { error: rerunError } = await supabase
+    .from("knowledge_extraction_jobs")
+    .update({
+      status: "running",
+      error_message: "",
+      started_at: new Date().toISOString(),
+      completed_at: null,
+    })
+    .eq("id", job.id);
+  if (rerunError) throw new Error(`重置抽取任务状态失败：${rerunError.message}`);
+
+  // 清理上次失败可能残留的待审候选，避免重试后重复入库
+  await supabase
+    .from("knowledge_candidates")
+    .delete()
+    .eq("extraction_job_id", job.id)
+    .eq("review_status", "pending");
+
+  const candidateCount = await runKnowledgeExtraction(supabase, {
+    jobId: job.id,
+    documentId: job.document_id,
+    documentTitle: documentRow.title,
+    parsedText: documentRow.parsed_text,
+  });
+
+  revalidatePath("/knowledge");
+  redirect(`/knowledge?tab=intake&documentExtracted=1&candidateCount=${candidateCount}`);
 }
 
 export async function approveKnowledgeCandidate(formData: FormData) {

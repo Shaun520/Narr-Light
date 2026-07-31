@@ -10,7 +10,7 @@ export function KnowledgeUploadForm() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <form action={uploadKnowledgeDocument} className="knowledge-upload-form" encType="multipart/form-data">
+    <form action={uploadKnowledgeDocument} className="knowledge-upload-form">
       <input className="input knowledge-upload-title" name="title" placeholder="资料标题（可选，默认使用文件名）" />
       <input
         ref={fileInputRef}

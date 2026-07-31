@@ -19,6 +19,7 @@ import {
   toggleKnowledgeItem,
 } from "./actions";
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
+import { AdminRetryKnowledgeJobButton } from "@/components/admin-retry-knowledge-job-button";
 import { KnowledgeUploadForm } from "@/components/knowledge-upload-form";
 
 type SearchParams = {
@@ -51,6 +52,12 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
   const modalOpen = params.mode === "new" || Boolean(selectedItem);
   const hasUsageRecords = usageSnapshot.usages.length > 0 || usageSnapshot.reports.length > 0;
   const pendingCandidates = intakeSnapshot.candidates.filter((candidate) => candidate.reviewStatus === "pending");
+  const visibleJobs = [
+    ...intakeSnapshot.jobs.filter((job) => job.status === "failed"),
+    ...intakeSnapshot.jobs.filter((job) => job.status !== "failed"),
+  ]
+    .filter((job, index, list) => list.findIndex((item) => item.id === job.id) === index)
+    .slice(0, 5);
   const activeTab: KnowledgeTab = params.tab === "intake" || params.tab === "usage" ? params.tab : "items";
 
   return (
@@ -75,7 +82,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         key={activeTab}
         initialTab={activeTab}
         items={
-          <section className="admin-card">
+          <section key="items" className="admin-card">
         <AdminFilterForm action="/knowledge">
           <div className="toolbar-left">
             <input className="input input-wide" name="q" placeholder="搜索标题或内容" defaultValue={params.q ?? ""} />
@@ -156,7 +163,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
           </section>
         }
         intake={
-          <section className="admin-card">
+          <section key="intake" className="admin-card">
         <div className="admin-card-head knowledge-usage-head knowledge-intake-head">
           <div>
             <div className="admin-card-title">二阶段资料抽取</div>
@@ -179,9 +186,17 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
                 资料：{document.title} / {parseStatusLabel(document.parseStatus)}
               </span>
             ))}
-            {intakeSnapshot.jobs.slice(0, 3).map((job) => (
-              <span key={job.id}>
+            {visibleJobs.map((job) => (
+              <span className="knowledge-job" key={job.id}>
                 任务：{job.documentTitle} / {jobStatusLabel(job.status)}
+                {job.status === "failed" && (
+                  <>
+                    {job.errorMessage && (
+                      <span className="knowledge-job-error" title={job.errorMessage}>{job.errorMessage}</span>
+                    )}
+                    <AdminRetryKnowledgeJobButton jobId={job.id} />
+                  </>
+                )}
               </span>
             ))}
           </div>
@@ -259,7 +274,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
           </section>
         }
         usage={
-          <section className="admin-card">
+          <section key="usage" className="admin-card">
         <div className="admin-card-head knowledge-usage-head">
           <div>
             <div className="admin-card-title">最近引用和质检</div>
