@@ -388,8 +388,8 @@ a {
   table-layout: fixed;
 }
 
-.knowledge-candidate-table th,
-.knowledge-candidate-table td {
+.table.knowledge-candidate-table th,
+.table.knowledge-candidate-table td {
   white-space: normal;
   word-break: break-word;
 }
@@ -421,6 +421,13 @@ a {
 .knowledge-candidate-table th:nth-child(7),
 .knowledge-candidate-table td:nth-child(7) {
   width: 19%;
+}
+
+.knowledge-candidate-table .placeholder-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .knowledge-candidate-table .row-actions {
@@ -2385,6 +2392,22 @@ a {
   to {
     transform: translateX(0);
     opacity: 1;
+  }
+}
+
+.admin-toast-leaving {
+  opacity: 0;
+  transform: translateX(24px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+
+  .admin-toast-leaving {
+    transition: none;
   }
 }
 

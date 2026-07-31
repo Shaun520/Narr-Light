@@ -20,6 +20,7 @@ import {
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
 import { AdminDeleteKnowledgeDocumentButton } from "@/components/admin-delete-knowledge-document-button";
 import { AdminRetryKnowledgeJobButton } from "@/components/admin-retry-knowledge-job-button";
+import { AdminToast } from "@/components/admin-toast";
 import { CandidateReviewActions } from "@/components/knowledge-candidate-review-actions";
 import { KnowledgeUploadForm } from "@/components/knowledge-upload-form";
 
@@ -71,18 +72,18 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         description="管理规则、模式、反例和质检标准，供生成阶段按需引用。"
       />
 
-      {params.saved === "1" && <div className="admin-inline-alert">知识条目已保存。</div>}
-      {params.recordsCleared === "1" && <div className="admin-inline-alert">引用和质检记录已清空。</div>}
-      {params.candidateApproved === "1" && <div className="admin-inline-alert">候选知识已批准入库。</div>}
-      {params.candidateRejected === "1" && <div className="admin-inline-alert">候选知识已驳回。</div>}
-      {params.candidateSaved === "1" && <div className="admin-inline-alert">候选知识已保存。</div>}
+      {params.saved === "1" && <AdminToast clearParams={["saved"]} message="知识条目已保存" />}
+      {params.recordsCleared === "1" && <AdminToast clearParams={["recordsCleared"]} message="引用和质检记录已清空" />}
+      {params.candidateApproved === "1" && <AdminToast clearParams={["candidateApproved"]} message="候选知识已批准入库" />}
+      {params.candidateRejected === "1" && <AdminToast clearParams={["candidateRejected"]} message="候选知识已驳回" />}
+      {params.candidateSaved === "1" && <AdminToast clearParams={["candidateSaved"]} message="候选知识已保存" />}
       {params.documentExtracted === "1" && (
-        <div className="admin-inline-alert">
-          资料已解析，生成 {params.candidateCount ?? 0} 条候选知识。
-          {Number(params.deduped) > 0 && `已跳过 ${params.deduped} 条与现有知识重复的候选。`}
-        </div>
+        <AdminToast
+          clearParams={["documentExtracted", "candidateCount", "deduped"]}
+          message={`资料已解析，生成 ${params.candidateCount ?? 0} 条候选知识${Number(params.deduped) > 0 ? `，已跳过 ${params.deduped} 条重复候选` : ""}`}
+        />
       )}
-      {params.documentDeleted === "1" && <div className="admin-inline-alert">资料及其待审候选已删除。</div>}
+      {params.documentDeleted === "1" && <AdminToast clearParams={["documentDeleted"]} message="资料及其待审候选已删除" />}
       {error && <div className="admin-inline-alert" role="alert">{error}</div>}
       {usageSnapshot.error && <div className="admin-inline-alert" role="alert">{usageSnapshot.error}</div>}
       {intakeSnapshot.error && <div className="admin-inline-alert" role="alert">{intakeSnapshot.error}</div>}
