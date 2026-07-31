@@ -372,6 +372,14 @@ a {
   white-space: nowrap;
 }
 
+.knowledge-intake-meta .knowledge-doc-warn {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--admin-warning);
+  white-space: nowrap;
+}
+
 .knowledge-candidate-wrap {
   max-width: 100%;
 }

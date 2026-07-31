@@ -65,10 +65,63 @@ export function sanitizeCandidates(
   model: string,
 ): KnowledgeCandidateInsert[] {
   const rows = Array.isArray(rawResult.candidates) ? rawResult.candidates : [];
-  return rows
+  const sanitized = rows
     .map((row) => sanitizeCandidate(row as ModelCandidate, rawResult, documentId, providerName, model))
-    .filter((row): row is KnowledgeCandidateInsert => Boolean(row))
-    .slice(0, MAX_CANDIDATES);
+    .filter((row): row is KnowledgeCandidateInsert => Boolean(row));
+  return dedupeCandidates(sanitized).kept.slice(0, MAX_CANDIDATES);
+}
+
+export type DedupeReference = {
+  title: string;
+  content: string;
+};
+
+const DEDUP_SIMILARITY_THRESHOLD = 0.8;
+
+// 批内 + 跨批去重：标题归一化相同，或正文 bigram Jaccard 相似度 ≥ 阈值即判重。
+export function dedupeCandidates<T extends DedupeReference>(
+  candidates: T[],
+  references: DedupeReference[] = [],
+): { kept: T[]; dropped: number } {
+  const kept: T[] = [];
+  const pool: DedupeReference[] = [...references];
+  for (const candidate of candidates) {
+    if (pool.some((existing) => areCandidatesSimilar(candidate, existing))) continue;
+    pool.push(candidate);
+    kept.push(candidate);
+  }
+  return { kept, dropped: candidates.length - kept.length };
+}
+
+export function areCandidatesSimilar(a: DedupeReference, b: DedupeReference) {
+  const titleA = normalizeForDedup(a.title);
+  const titleB = normalizeForDedup(b.title);
+  if (titleA && titleA === titleB) return true;
+
+  const contentA = normalizeForDedup(a.content);
+  const contentB = normalizeForDedup(b.content);
+  if (!contentA || !contentB) return false;
+
+  const gramsA = bigramsOf(contentA);
+  const gramsB = bigramsOf(contentB);
+  let intersection = 0;
+  for (const gram of gramsA) {
+    if (gramsB.has(gram)) intersection += 1;
+  }
+  if (intersection === 0) return false;
+  return intersection / (gramsA.size + gramsB.size - intersection) >= DEDUP_SIMILARITY_THRESHOLD;
+}
+
+function normalizeForDedup(text: string) {
+  return text.toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, "");
+}
+
+function bigramsOf(text: string) {
+  const grams = new Set<string>();
+  for (let i = 0; i < text.length - 1; i += 1) {
+    grams.add(text.slice(i, i + 2));
+  }
+  return grams;
 }
 
 function sanitizeCandidate(

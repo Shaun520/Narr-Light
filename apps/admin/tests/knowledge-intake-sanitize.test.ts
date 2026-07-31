@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  areCandidatesSimilar,
+  dedupeCandidates,
   parseJSONWithTolerance,
   sanitizeCandidates,
   type ExtractionResponse,
@@ -7,6 +9,25 @@ import {
 
 const DOCUMENT_ID = "11111111-1111-1111-1111-111111111111";
 const VALID_CONTENT = "每个关键结论至少需要两条线索支撑，其中一条可以是直接证据，另一条来自证词矛盾。";
+
+// 两两相似度足够低的一批内容，用于多候选场景下避开去重收缩
+const CONTENT_POOL = [
+  "搜证轮次与线索功能的对应关系需要提前规划，避免玩家中途失去推理方向。",
+  "盘问环节必须给每个角色留出可被验证的矛盾点，并提供足够的对质空间。",
+  "投票前应完成一次信息回收，确保玩家掌握推理出结论所需的最低线索量。",
+  "复盘部分要按动机、条件、时间线、证据链的顺序完整还原案件全貌。",
+  "凶手动机需要有个人经历支撑，不能只靠一句利益冲突交代犯罪原因。",
+  "误导线索必须能被后续证据纠正，不能依赖结尾强行反转来制造意外。",
+  "时间线设计要让每个角色在关键时段都有可查证的行为轨迹记录，不留空白区间。",
+  "不在场证明需要安排独立的第三方信息源进行交叉验证，单人口述不足为凭。",
+  "核心诡计的提示要分散在多名角色的视角里，单点信息不能破解全局。",
+  "反转点之前应埋设至少两处看似无关的细节，回收时形成证据闭环。",
+  "阵营划分要给出明确的利益冲突和目标差异，避免玩家无依据站队。",
+  "暗线关系只暴露行为痕迹与异常举动，不能提前解释关系本身的成因和背景。",
+  "目击证词之间要保留可被玩家发现的小时级偏差，供敏锐玩家建立突破口。",
+  "证词与物证冲突时，应优先让玩家怀疑证词动机而非否定证据本身。",
+  "物证的发现顺序要控制信息释放节奏，关键证据不宜在同一轮全部出现。",
+];
 
 function buildRaw(candidates: unknown, documentSummary?: unknown): ExtractionResponse {
   return { documentSummary: documentSummary ?? "资料结构摘要", candidates };
@@ -142,9 +163,9 @@ describe("sanitizeCandidates", () => {
   it("抽象层级缺省时按类型推断", () => {
     const [metric, anti, plain] = sanitizeCandidates(
       buildRaw([
-        { title: "质检", content: VALID_CONTENT, category: "quality_metric" },
-        { title: "反例", content: VALID_CONTENT, category: "anti_pattern" },
-        { title: "普通", content: VALID_CONTENT, category: "structure_rule" },
+        { title: "质检", content: CONTENT_POOL[0], category: "quality_metric" },
+        { title: "反例", content: CONTENT_POOL[1], category: "anti_pattern" },
+        { title: "普通", content: CONTENT_POOL[2], category: "structure_rule" },
       ]),
       DOCUMENT_ID,
       "deepseek",
@@ -210,9 +231,9 @@ describe("sanitizeCandidates", () => {
   it("权重越界截断到 0-1000，缺省为 100", () => {
     const [low, high, missing] = sanitizeCandidates(
       buildRaw([
-        { title: "低权重", content: VALID_CONTENT, weight: -5 },
-        { title: "高权重", content: VALID_CONTENT, weight: 9999 },
-        { title: "无权重", content: VALID_CONTENT },
+        { title: "低权重", content: CONTENT_POOL[3], weight: -5 },
+        { title: "高权重", content: CONTENT_POOL[4], weight: 9999 },
+        { title: "无权重", content: CONTENT_POOL[5] },
       ]),
       DOCUMENT_ID,
       "deepseek",
@@ -256,12 +277,76 @@ describe("sanitizeCandidates", () => {
   });
 
   it("候选超过 12 条时截断", () => {
-    const rows = Array.from({ length: 15 }, (_, index) => ({
+    const rows = CONTENT_POOL.map((content, index) => ({
       title: `候选${index}`,
-      content: VALID_CONTENT,
+      content,
     }));
 
     expect(sanitizeCandidates(buildRaw(rows), DOCUMENT_ID, "deepseek", "m")).toHaveLength(12);
+  });
+
+  describe("候选去重", () => {
+    it("标题归一化后相同即判重，保留先出现的一条", () => {
+      const result = sanitizeCandidates(
+        buildRaw([
+          { title: "双线索支撑规则", content: VALID_CONTENT },
+          { title: "双线索支撑规则！ ", content: CONTENT_POOL[0] },
+        ]),
+        DOCUMENT_ID,
+        "deepseek",
+        "m",
+      );
+
+      expect(result).toHaveLength(1);
+      expect(result[0].content).toBe(VALID_CONTENT);
+    });
+
+    it("正文仅个别字差异时按相似度判重", () => {
+      const result = sanitizeCandidates(
+        buildRaw([
+          { title: "双线索支撑规则", content: VALID_CONTENT },
+          { title: "关键结论证据规则", content: VALID_CONTENT.replace("两条", "三条") },
+        ]),
+        DOCUMENT_ID,
+        "deepseek",
+        "m",
+      );
+
+      expect(result).toHaveLength(1);
+    });
+
+    it("标题与内容均明显不同的候选全部保留", () => {
+      const result = sanitizeCandidates(
+        buildRaw([
+          { title: "搜证节奏", content: CONTENT_POOL[0] },
+          { title: "凶手动机", content: CONTENT_POOL[4] },
+          { title: "证词冲突", content: CONTENT_POOL[13] },
+        ]),
+        DOCUMENT_ID,
+        "deepseek",
+        "m",
+      );
+
+      expect(result).toHaveLength(3);
+    });
+
+    it("dedupeCandidates 与历史参照比对并统计跳过数量", () => {
+      const { kept, dropped } = dedupeCandidates(
+        [
+          { title: "已有规则", content: VALID_CONTENT },
+          { title: "全新规则", content: CONTENT_POOL[7] },
+        ],
+        [{ title: "库中规则", content: VALID_CONTENT }],
+      );
+
+      expect(kept).toHaveLength(1);
+      expect(kept[0].title).toBe("全新规则");
+      expect(dropped).toBe(1);
+    });
+
+    it("areCandidatesSimilar 空内容不判重", () => {
+      expect(areCandidatesSimilar({ title: "甲", content: "" }, { title: "乙", content: "" })).toBe(false);
+    });
   });
 
   it("candidates 不是数组时返回空结果", () => {

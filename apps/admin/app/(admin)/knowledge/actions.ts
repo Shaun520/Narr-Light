@@ -12,6 +12,7 @@ import {
 import { requireAdmin } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { extractKnowledgeCandidates, parseKnowledgeUpload } from "@/lib/services/knowledge-intake-extractor";
+import { dedupeCandidates, type DedupeReference } from "@/lib/services/knowledge-intake-sanitize";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const GENRES = ["hardcore", "emotion", "horror", "funny", "mechanism"] as const;
@@ -165,7 +166,7 @@ export async function uploadKnowledgeDocument(formData: FormData) {
     throw new Error(`创建抽取任务失败：${jobError?.message ?? "missing job id"}`);
   }
 
-  const candidateCount = await runKnowledgeExtraction(supabase, {
+  const result = await runKnowledgeExtraction(supabase, {
     jobId: jobRow.id,
     documentId: documentRow.id,
     documentTitle: parsed.title,
@@ -173,7 +174,9 @@ export async function uploadKnowledgeDocument(formData: FormData) {
   });
 
   revalidatePath("/knowledge");
-  redirect(`/knowledge?tab=intake&documentExtracted=1&candidateCount=${candidateCount}`);
+  redirect(
+    `/knowledge?tab=intake&documentExtracted=1&candidateCount=${result.candidateCount}${result.deduped > 0 ? `&deduped=${result.deduped}` : ""}`,
+  );
 }
 
 type AdminSupabaseClient = NonNullable<ReturnType<typeof createAdminSupabaseClient>>;
@@ -188,7 +191,7 @@ async function runKnowledgeExtraction(
     documentTitle: string;
     parsedText: string;
   },
-): Promise<number> {
+): Promise<{ candidateCount: number; deduped: number }> {
   try {
     const extraction = await extractKnowledgeCandidates({
       documentId: input.documentId,
@@ -196,7 +199,11 @@ async function runKnowledgeExtraction(
       parsedText: input.parsedText,
     });
 
-    const candidatePayload = extraction.candidates.map((candidate) => ({
+    // 跨批去重：与已有知识条目和其他任务的待审候选比对，重复的直接跳过
+    const references = await loadDedupeReferences(supabase, input.jobId);
+    const { kept, dropped } = dedupeCandidates(extraction.candidates, references);
+
+    const candidatePayload = kept.map((candidate) => ({
       ...candidate,
       document_id: input.documentId,
       extraction_job_id: input.jobId,
@@ -207,8 +214,10 @@ async function runKnowledgeExtraction(
       updated_at: new Date().toISOString(),
     }));
 
-    const { error: candidateError } = await supabase.from("knowledge_candidates").insert(candidatePayload);
-    if (candidateError) throw new Error(`写入候选知识失败：${candidateError.message}`);
+    if (candidatePayload.length > 0) {
+      const { error: candidateError } = await supabase.from("knowledge_candidates").insert(candidatePayload);
+      if (candidateError) throw new Error(`写入候选知识失败：${candidateError.message}`);
+    }
 
     const { error: completeError } = await supabase
       .from("knowledge_extraction_jobs")
@@ -219,6 +228,7 @@ async function runKnowledgeExtraction(
           providerName: extraction.providerName,
           model: extraction.model,
           candidateCount: candidatePayload.length,
+          dedupedCount: dropped,
           rawResult: extraction.rawResult,
         },
         completed_at: new Date().toISOString(),
@@ -226,7 +236,7 @@ async function runKnowledgeExtraction(
       .eq("id", input.jobId);
     if (completeError) throw new Error(`更新抽取任务失败：${completeError.message}`);
 
-    return candidatePayload.length;
+    return { candidateCount: candidatePayload.length, deduped: dropped };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await supabase
@@ -239,6 +249,29 @@ async function runKnowledgeExtraction(
       .eq("id", input.jobId);
     throw error;
   }
+}
+
+async function loadDedupeReferences(supabase: AdminSupabaseClient, currentJobId: string): Promise<DedupeReference[]> {
+  const [itemsResult, candidatesResult] = await Promise.all([
+    supabase
+      .from("knowledge_items")
+      .select("title,content")
+      .order("updated_at", { ascending: false })
+      .limit(200)
+      .returns<DedupeReference[]>(),
+    supabase
+      .from("knowledge_candidates")
+      .select("title,content")
+      .eq("review_status", "pending")
+      .neq("extraction_job_id", currentJobId)
+      .order("updated_at", { ascending: false })
+      .limit(200)
+      .returns<DedupeReference[]>(),
+  ]);
+
+  if (itemsResult.error) throw new Error(`读取已有知识条目失败：${itemsResult.error.message}`);
+  if (candidatesResult.error) throw new Error(`读取待审候选失败：${candidatesResult.error.message}`);
+  return [...(itemsResult.data ?? []), ...(candidatesResult.data ?? [])];
 }
 
 export async function retryKnowledgeExtraction(id: string) {
@@ -283,7 +316,7 @@ export async function retryKnowledgeExtraction(id: string) {
     .eq("extraction_job_id", job.id)
     .eq("review_status", "pending");
 
-  const candidateCount = await runKnowledgeExtraction(supabase, {
+  const result = await runKnowledgeExtraction(supabase, {
     jobId: job.id,
     documentId: job.document_id,
     documentTitle: documentRow.title,
@@ -291,7 +324,31 @@ export async function retryKnowledgeExtraction(id: string) {
   });
 
   revalidatePath("/knowledge");
-  redirect(`/knowledge?tab=intake&documentExtracted=1&candidateCount=${candidateCount}`);
+  redirect(
+    `/knowledge?tab=intake&documentExtracted=1&candidateCount=${result.candidateCount}${result.deduped > 0 ? `&deduped=${result.deduped}` : ""}`,
+  );
+}
+
+export async function deleteKnowledgeDocument(id: string) {
+  await requireAdmin();
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error("未配置 Supabase service role，无法删除资料。");
+  if (!UUID_PATTERN.test(id)) redirect("/knowledge?tab=intake");
+
+  // 先清掉该资料下未审核的候选；已批准/已驳回的候选保留为审核记录
+  const { error: candidateError } = await supabase
+    .from("knowledge_candidates")
+    .delete()
+    .eq("document_id", id)
+    .eq("review_status", "pending");
+  if (candidateError) throw new Error(`删除资料待审候选失败：${candidateError.message}`);
+
+  // 抽取任务随 document 级联删除；已入库的知识条目不受影响
+  const { error } = await supabase.from("knowledge_documents").delete().eq("id", id);
+  if (error) throw new Error(`删除资料失败：${error.message}`);
+
+  revalidatePath("/knowledge");
+  redirect("/knowledge?tab=intake&documentDeleted=1");
 }
 
 export async function approveKnowledgeCandidate(formData: FormData) {

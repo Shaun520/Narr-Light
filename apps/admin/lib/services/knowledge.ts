@@ -72,6 +72,8 @@ export type KnowledgeDocumentRow = {
   parsedText: string;
   parseStatus: KnowledgeDocumentParseStatus;
   parseError: string;
+  charCount: number;
+  promptCharLimit: number;
   metadata: unknown;
   createdAt: string;
   updatedAt: string;
@@ -466,6 +468,9 @@ function mapKnowledgeItem(row: KnowledgeRecord): KnowledgeItemRow {
 }
 
 function mapKnowledgeDocument(row: KnowledgeDocumentRecord): KnowledgeDocumentRow {
+  const metadata = row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+    ? row.metadata as Record<string, unknown>
+    : {};
   return {
     id: row.id,
     title: row.title,
@@ -474,6 +479,8 @@ function mapKnowledgeDocument(row: KnowledgeDocumentRecord): KnowledgeDocumentRo
     parsedText: row.parsed_text,
     parseStatus: row.parse_status,
     parseError: row.parse_error,
+    charCount: typeof metadata.charCount === "number" ? metadata.charCount : 0,
+    promptCharLimit: typeof metadata.promptCharLimit === "number" ? metadata.promptCharLimit : 0,
     metadata: row.metadata,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

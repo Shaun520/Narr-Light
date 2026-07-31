@@ -18,6 +18,7 @@ import {
   toggleKnowledgeItem,
 } from "./actions";
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
+import { AdminDeleteKnowledgeDocumentButton } from "@/components/admin-delete-knowledge-document-button";
 import { AdminRetryKnowledgeJobButton } from "@/components/admin-retry-knowledge-job-button";
 import { CandidateReviewActions } from "@/components/knowledge-candidate-review-actions";
 import { KnowledgeUploadForm } from "@/components/knowledge-upload-form";
@@ -37,6 +38,8 @@ type SearchParams = {
   candidateSaved?: string;
   documentExtracted?: string;
   candidateCount?: string;
+  deduped?: string;
+  documentDeleted?: string;
 };
 
 const GENRES = ["hardcore", "emotion", "horror", "funny", "mechanism"] as const;
@@ -74,8 +77,12 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
       {params.candidateRejected === "1" && <div className="admin-inline-alert">候选知识已驳回。</div>}
       {params.candidateSaved === "1" && <div className="admin-inline-alert">候选知识已保存。</div>}
       {params.documentExtracted === "1" && (
-        <div className="admin-inline-alert">资料已解析，生成 {params.candidateCount ?? 0} 条候选知识。</div>
+        <div className="admin-inline-alert">
+          资料已解析，生成 {params.candidateCount ?? 0} 条候选知识。
+          {Number(params.deduped) > 0 && `已跳过 ${params.deduped} 条与现有知识重复的候选。`}
+        </div>
       )}
+      {params.documentDeleted === "1" && <div className="admin-inline-alert">资料及其待审候选已删除。</div>}
       {error && <div className="admin-inline-alert" role="alert">{error}</div>}
       {usageSnapshot.error && <div className="admin-inline-alert" role="alert">{usageSnapshot.error}</div>}
       {intakeSnapshot.error && <div className="admin-inline-alert" role="alert">{intakeSnapshot.error}</div>}
@@ -184,8 +191,17 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         {(intakeSnapshot.documents.length > 0 || intakeSnapshot.jobs.length > 0) && (
           <div className="knowledge-intake-meta">
             {intakeSnapshot.documents.slice(0, 3).map((document) => (
-              <span key={document.id}>
+              <span className="knowledge-job" key={document.id}>
                 资料：{document.title} / {parseStatusLabel(document.parseStatus)}
+                {document.promptCharLimit > 0 && document.charCount > document.promptCharLimit && (
+                  <span
+                    className="knowledge-doc-warn"
+                    title={`原文共 ${document.charCount.toLocaleString("zh-CN")} 字，超出单次抽取上限，仅前 ${document.promptCharLimit.toLocaleString("zh-CN")} 字参与抽取`}
+                  >
+                    截断 { (document.charCount - document.promptCharLimit).toLocaleString("zh-CN") } 字
+                  </span>
+                )}
+                <AdminDeleteKnowledgeDocumentButton documentId={document.id} title={document.title} />
               </span>
             ))}
             {visibleJobs.map((job) => (
