@@ -14,12 +14,12 @@ import { getKnowledgeIntakeSnapshot, getKnowledgeItem, getKnowledgeItems, getKno
 import {
   approveKnowledgeCandidate,
   deleteKnowledgeItem,
-  rejectKnowledgeCandidate,
   saveKnowledgeItem,
   toggleKnowledgeItem,
 } from "./actions";
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
 import { AdminRetryKnowledgeJobButton } from "@/components/admin-retry-knowledge-job-button";
+import { CandidateReviewActions } from "@/components/knowledge-candidate-review-actions";
 import { KnowledgeUploadForm } from "@/components/knowledge-upload-form";
 
 type SearchParams = {
@@ -34,6 +34,7 @@ type SearchParams = {
   recordsCleared?: string;
   candidateApproved?: string;
   candidateRejected?: string;
+  candidateSaved?: string;
   documentExtracted?: string;
   candidateCount?: string;
 };
@@ -71,6 +72,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
       {params.recordsCleared === "1" && <div className="admin-inline-alert">引用和质检记录已清空。</div>}
       {params.candidateApproved === "1" && <div className="admin-inline-alert">候选知识已批准入库。</div>}
       {params.candidateRejected === "1" && <div className="admin-inline-alert">候选知识已驳回。</div>}
+      {params.candidateSaved === "1" && <div className="admin-inline-alert">候选知识已保存。</div>}
       {params.documentExtracted === "1" && (
         <div className="admin-inline-alert">资料已解析，生成 {params.candidateCount ?? 0} 条候选知识。</div>
       )}
@@ -244,10 +246,23 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
                           <input type="hidden" name="enabled" value="on" />
                           <button className="link-btn" type="submit">批准并启用</button>
                         </form>
-                        <form action={rejectKnowledgeCandidate}>
-                          <input type="hidden" name="id" value={candidate.id} />
-                          <button className="link-btn danger" type="submit">驳回</button>
-                        </form>
+                        <CandidateReviewActions
+                          candidate={{
+                            id: candidate.id,
+                            title: candidate.title,
+                            content: candidate.content,
+                            category: candidate.category,
+                            moduleType: candidate.moduleType,
+                            stage: candidate.stage,
+                            genre: candidate.genre,
+                            playerCountMin: candidate.playerCountMin,
+                            playerCountMax: candidate.playerCountMax,
+                            difficulty: candidate.difficulty,
+                            abstractionLevel: candidate.abstractionLevel,
+                            riskLevel: candidate.riskLevel,
+                            weight: candidate.weight,
+                          }}
+                        />
                       </div>
                     ) : candidate.approvedKnowledgeItemId ? (
                       <Link className="link-btn" href={buildItemHref(params, candidate.approvedKnowledgeItemId)}>查看知识</Link>

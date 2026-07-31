@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  KNOWLEDGE_ABSTRACTION_LEVELS,
   KNOWLEDGE_CATEGORIES,
   KNOWLEDGE_MODULE_TYPES,
   KNOWLEDGE_STAGES,
+  QUALITY_RISK_LEVELS,
 } from "@narrlight/shared";
 import { requireAdmin } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -310,6 +312,44 @@ export async function approveKnowledgeCandidate(formData: FormData) {
 
   revalidatePath("/knowledge");
   redirect("/knowledge?tab=intake&candidateApproved=1");
+}
+
+export async function updateKnowledgeCandidate(formData: FormData) {
+  await requireAdmin();
+  const supabase = createAdminSupabaseClient();
+  if (!supabase) throw new Error("未配置 Supabase service role，无法更新候选知识。");
+
+  const id = stringValue(formData.get("id"));
+  if (!UUID_PATTERN.test(id)) redirect("/knowledge?tab=intake");
+
+  const title = stringValue(formData.get("title"));
+  const content = stringValue(formData.get("content"));
+  if (!title || !content) throw new Error("标题和内容必填。");
+
+  const { error } = await supabase
+    .from("knowledge_candidates")
+    .update({
+      title,
+      content,
+      category: enumValue(formData.get("category"), KNOWLEDGE_CATEGORIES, "structure_rule"),
+      module_type: enumValue(formData.get("moduleType"), KNOWLEDGE_MODULE_TYPES, "case_core"),
+      stage: enumValue(formData.get("stage"), KNOWLEDGE_STAGES, "case_core"),
+      genre: optionalEnumValue(formData.get("genre"), GENRES),
+      difficulty: optionalEnumValue(formData.get("difficulty"), DIFFICULTIES),
+      player_count_min: optionalNumber(formData.get("playerCountMin")),
+      player_count_max: optionalNumber(formData.get("playerCountMax")),
+      abstraction_level: enumValue(formData.get("abstractionLevel"), KNOWLEDGE_ABSTRACTION_LEVELS, "pattern"),
+      risk_level: enumValue(formData.get("riskLevel"), QUALITY_RISK_LEVELS, "medium"),
+      weight: Math.max(0, Math.min(1000, optionalNumber(formData.get("weight")) ?? 100)),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .eq("review_status", "pending");
+
+  if (error) throw new Error(`更新候选知识失败：${error.message}`);
+
+  revalidatePath("/knowledge");
+  redirect("/knowledge?tab=intake&candidateSaved=1");
 }
 
 export async function rejectKnowledgeCandidate(formData: FormData) {
