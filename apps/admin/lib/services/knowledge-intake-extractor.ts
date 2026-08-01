@@ -35,6 +35,10 @@ const TEXT_PROVIDER_ENV_KEYS: Record<TextProviderName, string[]> = {
   kimi: ["KIMI_API_KEY", "KSPMAS_API_KEY", "MOONSHOT_API_KEY"],
 };
 
+// 推理模型的推理 token 与回答共用 max_tokens 预算，长回答任务容易在思考阶段耗尽预算导致回答为空。
+// 抽取任务不需要推理过程，deepseek/glm 支持用 thinking.type=disabled 关闭。
+const THINKING_DISABLED_PROVIDERS: readonly TextProviderName[] = ["deepseek", "glm"];
+
 type ParsedKnowledgeUpload = {
   title: string;
   sourceType: KnowledgeDocumentSourceType;
@@ -176,13 +180,21 @@ async function callChatCompletion(input: {
           temperature: input.runtime.temperature ?? 0.2,
           max_tokens: MAX_OUTPUT_TOKENS[input.providerName],
           stream: false,
+          ...(THINKING_DISABLED_PROVIDERS.includes(input.providerName) ? { thinking: { type: "disabled" } } : {}),
         }),
         signal: controller.signal,
       });
       clearTimeout(timeoutId);
       if (!response.ok) throw await wrapProviderError(input.providerName, response);
       const data = (await response.json()) as ChatResponse;
-      return data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || "";
+      const message = data.choices?.[0]?.message;
+      const content = message?.content?.trim() ?? "";
+      if (content) return content;
+      throw new Error(
+        message?.reasoning_content
+          ? "模型只返回了推理过程、未给出回答内容，请重试。"
+          : "模型未返回任何内容。",
+      );
     } catch (error) {
       clearTimeout(timeoutId);
       lastError = error instanceof Error ? error : new Error(String(error));
