@@ -726,6 +726,105 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     },
     [runCharacterScriptSubTask],
   );
+  // ===== runCharacterScripts：构建并运行玩家剧本子任务（首次与重试共用） =====
+  const runCharacterScripts = useCallback(
+    async (params: ScriptGenerationParams): Promise<void> => {
+      const scriptId = scriptIdRef.current;
+      if (!scriptId) throw new Error('scriptId 未设置');
+
+      const supabase = createClient();
+      const { data: characters, error: charError } = await supabase
+        .from('characters')
+        .select('id, name')
+        .eq('script_id', scriptId)
+        .order('sort_order');
+
+      let characterList = (characters ?? []) as Array<{ id: string; name: string }>;
+      if (charError || characterList.length === 0) {
+        const profileResult = stateRef.current.phases.character_profiles.result as
+          | { characters?: Array<{ name: string }> }
+          | undefined;
+        const generatedCharacters = profileResult?.characters ?? [];
+        const fallbackCharacters = stateRef.current.storyBible?.characterSkeleton.nodes ?? [];
+        const sourceCharacters =
+          generatedCharacters.length > 0 ? generatedCharacters : fallbackCharacters;
+
+        characterList = sourceCharacters.map((character, index) => ({
+          id: `mock-character-${index + 1}`,
+          name: character.name,
+        }));
+      }
+
+      if (characterList.length === 0) {
+        throw new Error('阶段 1a 未产出角色');
+      }
+
+      const characterScriptTasks = buildCharacterScriptTasks(
+        characterList,
+        getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
+      );
+
+      setState((prev) =>
+        updatePhase(prev, 'character_script', {
+          subItems: characterScriptTasks.map((task) => ({
+            id: task.id,
+            label: task.label,
+            status: 'pending' as const,
+          })),
+        }),
+      );
+      setState((prev) => ({ ...prev, currentPhase: 'character_script' }));
+      await runPhaseBatch(characterScriptTasks, params);
+    },
+    [runPhaseBatch],
+  );
+
+  // ===== runRemainingPhases：按依赖顺序补齐未完成阶段（闸门确认与阶段重试共用） =====
+  const runRemainingPhases = useCallback(
+    async (params: ScriptGenerationParams): Promise<void> => {
+      const isCompleted = (phaseId: PhaseId) =>
+        stateRef.current.phases[phaseId].status === 'completed';
+
+      const needProfiles = !isCompleted('character_profiles');
+      const needActs = !isCompleted('act_structure');
+      if (needProfiles || needActs) {
+        await Promise.all([
+          ...(needProfiles ? [runPhase('character_profiles', params)] : []),
+          ...(needActs ? [runPhase('act_structure', params)] : []),
+        ]);
+      }
+
+      if (!isCompleted('character_script')) {
+        await runCharacterScripts(params);
+      }
+
+      if (!isCompleted('clues')) {
+        setState((prev) => ({ ...prev, currentPhase: 'clues' }));
+        await runPhase('clues', params);
+      }
+
+      const needManual = !isCompleted('organizer_manual');
+      const needTruth = !isCompleted('truth_review');
+      if (needManual || needTruth) {
+        await Promise.all([
+          ...(needManual ? [runPhase('organizer_manual', params)] : []),
+          ...(needTruth ? [runPhase('truth_review', params)] : []),
+        ]);
+      }
+
+      if (!isCompleted('timeline_structure')) {
+        setState((prev) => ({ ...prev, currentPhase: 'timeline_structure' }));
+        await runPhase('timeline_structure', params);
+      }
+
+      setState((prev) => ({
+        ...prev,
+        orchestrationStatus: 'completed',
+        currentPhase: null,
+      }));
+    },
+    [runCharacterScripts, runPhase],
+  );
 
   // ===== start閿涙艾鎯庨崝銊ュ弿濞翠胶鈻?=====
   const start = useCallback(
@@ -866,87 +965,16 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       const params = paramsRef.current;
       if (!params) return;
 
-      const scriptId = scriptIdRef.current;
-      if (!scriptId) return;
-
       setState((prev) => ({
         ...prev,
         orchestrationStatus: 'running',
         currentPhase: 'character_profiles',
+        globalError: undefined,
       }));
 
       try {
-        // 闂冭埖顔?1閿涙矮姹夐悧鈺勵啎鐎?+ 閸掑棗绠风紒鎾寸€?楠炴儼顢?
-        await Promise.all([
-          runPhase('character_profiles', params),
-          runPhase('act_structure', params),
-        ]);
-
-        // 鐠囪褰?characters 鐞涖劏骞忛崣鏍潡閼?ID 閸掓銆?
-        const supabase = createClient();
-        const { data: characters, error: charError } = await supabase
-          .from('characters')
-          .select('id, name')
-          .eq('script_id', scriptId)
-          .order('sort_order');
-
-        let characterList = (characters ?? []) as Array<{ id: string; name: string }>;
-        if (charError || characterList.length === 0) {
-          const profileResult = state.phases.character_profiles.result as
-            | { characters?: Array<{ name: string }> }
-            | undefined;
-          const generatedCharacters = profileResult?.characters ?? [];
-          const fallbackCharacters = state.storyBible.characterSkeleton.nodes;
-          const sourceCharacters =
-            generatedCharacters.length > 0 ? generatedCharacters : fallbackCharacters;
-
-          characterList = sourceCharacters.map((character, index) => ({
-              id: `mock-character-${index + 1}`,
-              name: character.name,
-            }));
-        }
-
-        if (characterList.length === 0) {
-          throw new Error('阶段 1a 未产出角色');
-        }
-
-        const characterScriptTasks = buildCharacterScriptTasks(
-          characterList,
-          getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
-        );
-
-        // 闃舵 2锛氭寜瑙掕壊鍓ф湰浠芥暟鍒嗘壒骞惰
-        setState((prev) =>
-          updatePhase(prev, 'character_script', {
-            subItems: characterScriptTasks.map((task) => ({
-              id: task.id,
-              label: task.label,
-              status: 'pending' as const,
-            })),
-          }),
-        );
-
-        setState((prev) => ({ ...prev, currentPhase: 'character_script' }));
-        await runPhaseBatch(characterScriptTasks, params);
-
-        // 闂冭埖顔?3閿涙氨鍤庣槐銏犲幢 + 缂佸嫮绮愰懓鍛閸?+ 閻喓娴夋径宥囨磸 楠炴儼顢?
-        setState((prev) => ({ ...prev, currentPhase: 'clues' }));
-        await runPhase('clues', params);
-        await Promise.all([
-          runPhase('organizer_manual', params),
-          runPhase('truth_review', params),
-        ]);
-
-        // 闃舵 4锛氭椂闂寸嚎缁撴瀯鍖栵紙渚濊禆 truth_review 瀹屾垚锛?
-        setState((prev) => ({ ...prev, currentPhase: 'timeline_structure' }));
-        await runPhase('timeline_structure', params);
-
-        // 閸忋劑鍎寸€瑰本鍨?
-        setState((prev) => ({
-          ...prev,
-          orchestrationStatus: 'completed',
-          currentPhase: null,
-        }));
+        // 从人物设定开始按依赖顺序补齐全部未完成阶段
+        await runRemainingPhases(params);
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -955,13 +983,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         }));
       }
     },
-    [
-      runPhase,
-      runPhaseBatch,
-      state.orchestrationStatus,
-      state.phases.character_profiles.result,
-      state.storyBible,
-    ],
+    [runRemainingPhases, state.orchestrationStatus, state.storyBible],
   );
 
   // ===== regenerateStoryBible閿涙岸鍣搁弬鎵晸閹存劙妯佸▓?0 =====
@@ -1004,65 +1026,32 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       const params = paramsRef.current;
       if (!params) return;
 
-      // 闁插秶鐤嗛幐鍥х暰闂冭埖顔岄悩鑸碘偓浣疯礋 pending
-      setState((prev) =>
-        updatePhase(prev, phaseId, {
+      // 重置阶段状态并清除全局错误，避免旧错误横幅残留
+      setState((prev) => ({
+        ...updatePhase(prev, phaseId, {
           status: 'pending',
           error: undefined,
           streamedText: '',
           percent: 0,
         }),
-      );
+        orchestrationStatus: 'running',
+        currentPhase: phaseId,
+        globalError: undefined,
+      }));
 
       try {
+        if (phaseId === 'story_bible') {
+          // 设定本重跑后停在闸门，等待用户确认
+          await runPhase('story_bible', params);
+          return;
+        }
         if (phaseId === 'character_script') {
-          // 鐟欐帟澹婇崜褎婀伴梼鑸殿唽闂団偓闁插秵鏌婄拠璇插絿 characters 鐞涖劏骞忛崣?ID 閸掓銆?
-          const scriptId = scriptIdRef.current;
-          if (!scriptId) throw new Error('scriptId 未设置');
-
-          const supabase = createClient();
-          const { data: characters, error: charError } = await supabase
-            .from('characters')
-            .select('id, name')
-            .eq('script_id', scriptId)
-            .order('sort_order');
-
-          if (charError || !characters || characters.length === 0) {
-            throw new Error('未找到角色数据');
-          }
-
-          const characterList = characters as Array<{ id: string; name: string }>;
-          const characterScriptTasks = buildCharacterScriptTasks(
-            characterList,
-            getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
-          );
-
-          // 闁插秶鐤?subItems
-          setState((prev) =>
-            updatePhase(prev, 'character_script', {
-              subItems: characterScriptTasks.map((task) => ({
-                id: task.id,
-                label: task.label,
-                status: 'pending' as const,
-              })),
-            }),
-          );
-
-          setState((prev) => ({
-            ...prev,
-            orchestrationStatus: 'running',
-            currentPhase: 'character_script',
-          }));
-
-          await runPhaseBatch(characterScriptTasks, params);
+          await runCharacterScripts(params);
         } else {
-          setState((prev) => ({
-            ...prev,
-            orchestrationStatus: 'running',
-            currentPhase: phaseId,
-          }));
           await runPhase(phaseId, params);
         }
+        // 重跑成功后继续编排剩余未完成阶段，而不是停在原地
+        await runRemainingPhases(params);
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -1071,7 +1060,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         }));
       }
     },
-    [runPhase, runPhaseBatch],
+    [runCharacterScripts, runPhase, runRemainingPhases],
   );
 
   // ===== abort閿涙矮鑵戦弬顓炵秼閸撳秶鏁撻幋?=====
