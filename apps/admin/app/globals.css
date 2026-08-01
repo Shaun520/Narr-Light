@@ -384,6 +384,46 @@ a {
   max-width: 100%;
 }
 
+.table.knowledge-items-table {
+  table-layout: fixed;
+}
+
+.table.knowledge-items-table th,
+.table.knowledge-items-table td {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.knowledge-items-table .placeholder-meta {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.table.knowledge-items-table th:nth-child(1),
+.table.knowledge-items-table td:nth-child(1) {
+  width: 38%;
+}
+
+.table.knowledge-items-table th:nth-child(2),
+.table.knowledge-items-table td:nth-child(2),
+.table.knowledge-items-table th:nth-child(3),
+.table.knowledge-items-table td:nth-child(3),
+.table.knowledge-items-table th:nth-child(4),
+.table.knowledge-items-table td:nth-child(4),
+.table.knowledge-items-table th:nth-child(5),
+.table.knowledge-items-table td:nth-child(5),
+.table.knowledge-items-table th:nth-child(6),
+.table.knowledge-items-table td:nth-child(6) {
+  width: 9%;
+}
+
+.table.knowledge-items-table th:nth-child(7),
+.table.knowledge-items-table td:nth-child(7) {
+  width: 17%;
+}
+
 .knowledge-candidate-table {
   table-layout: fixed;
 }

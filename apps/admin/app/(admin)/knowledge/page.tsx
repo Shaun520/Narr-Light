@@ -122,7 +122,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         </AdminFilterForm>
 
         <div className="table-wrap">
-          <table className="table">
+          <table className="table knowledge-items-table">
             <thead>
               <tr>
                 <th>知识</th>
