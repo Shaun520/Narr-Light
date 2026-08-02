@@ -683,10 +683,14 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
     async (
       tasks: CharacterScriptTask[],
       params: ScriptGenerationParams,
+      options?: { keepSubItems?: boolean },
     ): Promise<void> => {
       // 閸掓繂顫愰崠?/ 婢跺秶鏁?subItems
       setState((prev) => {
         const phase = prev.phases.character_script;
+        if (options?.keepSubItems && phase.subItems && phase.subItems.length > 0) {
+          return updatePhase(prev, 'character_script', { status: 'running' });
+        }
         if (phase.subItems && phase.subItems.length === tasks.length) {
           return updatePhase(prev, 'character_script', { status: 'running' });
         }
@@ -700,20 +704,24 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         });
       });
 
+      let hasFailure = false;
       for (let i = 0; i < tasks.length; i += CHARACTER_SCRIPT_CONCURRENCY) {
         const batch = tasks.slice(i, i + CHARACTER_SCRIPT_CONCURRENCY);
         const results = await Promise.all(
           batch.map((task) => runCharacterScriptSubTask(task, params)),
         );
-        if (results.some((success) => !success)) {
-          setState((prev) =>
-            updatePhase(prev, 'character_script', {
-              status: 'failed',
-              percent: 100,
-            }),
-          );
-          throw new Error('玩家剧本生成未全部完成');
-        }
+        // 单个子任务失败不中断后续批次，尽量多产出，失败部分交给重试补跑
+        if (results.some((success) => !success)) hasFailure = true;
+      }
+
+      if (hasFailure) {
+        setState((prev) =>
+          updatePhase(prev, 'character_script', {
+            status: 'failed',
+            percent: 100,
+          }),
+        );
+        throw new Error('玩家剧本生成未全部完成，重试只会补跑未完成部分');
       }
 
       // 閸忋劑鍎寸€瑰本鍨氶崥搴㈢垼鐠佷即妯佸▓闈涚暚閹?/ 婢惰精瑙?
@@ -728,7 +736,10 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
   );
   // ===== runCharacterScripts：构建并运行玩家剧本子任务（首次与重试共用） =====
   const runCharacterScripts = useCallback(
-    async (params: ScriptGenerationParams): Promise<void> => {
+    async (
+      params: ScriptGenerationParams,
+      options?: { onlyFailed?: boolean },
+    ): Promise<void> => {
       const scriptId = scriptIdRef.current;
       if (!scriptId) throw new Error('scriptId 未设置');
 
@@ -759,14 +770,34 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         throw new Error('阶段 1a 未产出角色');
       }
 
-      const characterScriptTasks = buildCharacterScriptTasks(
+      const allTasks = buildCharacterScriptTasks(
         characterList,
         getCharacterScriptSpec(stateRef.current.phases.act_structure.result),
       );
 
+      // 只补跑未完成的子任务，避免重复生成已完成部分
+      let tasks = allTasks;
+      if (options?.onlyFailed) {
+        const completedIds = new Set(
+          (stateRef.current.phases.character_script.subItems ?? [])
+            .filter((item) => item.status === 'completed')
+            .map((item) => item.id),
+        );
+        tasks = allTasks.filter((task) => !completedIds.has(task.id));
+        if (tasks.length === 0) {
+          setState((prev) =>
+            updatePhase(prev, 'character_script', { status: 'completed', percent: 100 }),
+          );
+          return;
+        }
+        setState((prev) => ({ ...prev, currentPhase: 'character_script' }));
+        await runPhaseBatch(tasks, params, { keepSubItems: true });
+        return;
+      }
+
       setState((prev) =>
         updatePhase(prev, 'character_script', {
-          subItems: characterScriptTasks.map((task) => ({
+          subItems: tasks.map((task) => ({
             id: task.id,
             label: task.label,
             status: 'pending' as const,
@@ -774,7 +805,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
         }),
       );
       setState((prev) => ({ ...prev, currentPhase: 'character_script' }));
-      await runPhaseBatch(characterScriptTasks, params);
+      await runPhaseBatch(tasks, params);
     },
     [runPhaseBatch],
   );
@@ -795,7 +826,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       }
 
       if (!isCompleted('character_script')) {
-        await runCharacterScripts(params);
+        await runCharacterScripts(params, { onlyFailed: true });
       }
 
       if (!isCompleted('clues')) {
@@ -1046,7 +1077,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           return;
         }
         if (phaseId === 'character_script') {
-          await runCharacterScripts(params);
+          await runCharacterScripts(params, { onlyFailed: true });
         } else {
           await runPhase(phaseId, params);
         }
