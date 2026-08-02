@@ -1975,7 +1975,7 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
             actScripts: actStructure.acts.map((act) => ({
               actTitle: act.title,
               content: `模型返回的玩家剧本 JSON 解析失败，已使用分幕概要兜底。原始错误：${parseMessage}`,
-              scenes: act.scenes.map((scene) => ({
+              scenes: (act.scenes ?? []).map((scene) => ({
                 title: scene.title,
                 content: scene.content,
               })),
