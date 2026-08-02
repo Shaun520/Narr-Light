@@ -22,6 +22,33 @@
 }
 
 /* 剧本卡片 */
+.script-card-wrap {
+  position: relative;
+}
+
+.sc-resume {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--blood);
+  border-radius: 4px;
+  background: rgba(253, 248, 240, 0.95);
+  color: var(--blood);
+  font-size: 12px;
+  text-decoration: none;
+  transition: all 0.18s;
+}
+
+.sc-resume:hover {
+  background: var(--blood);
+  color: #fdf8f0;
+}
+
 .script-card {
   display: flex;
   flex-direction: column;

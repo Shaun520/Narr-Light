@@ -12,7 +12,7 @@
  */
 'use client';
 import Link from 'next/link';
-import { FileInput, Plus, FileText, Users, Clock, BarChart3 } from 'lucide-react';
+import { FileInput, Plus, FileText, Users, Clock, BarChart3, Play } from 'lucide-react';
 import { useDashboard } from '@/lib/contexts/dashboard-context';
 import { EmptyState } from '@/components/common';
 import type { ScriptDifficulty, ScriptGenre, ScriptStatus } from '@/types';
@@ -92,50 +92,57 @@ export default function ScriptsPage() {
               Math.round((s.wordCount / 10000) * 100),
             );
             return (
-              <Link
-                key={s.id}
-                href={`/editor/${s.id}`}
-                className="script-card"
-              >
-                <div className="sc-head">
-                  <div className="sc-title">{s.title}</div>
-                  <span className={`sc-status ${status.cls}`}>
-                    {status.label}
-                  </span>
-                </div>
-
-                <div className="sc-meta">
-                  <span className="sc-tag">{GENRE_LABEL[s.genre]}</span>
-                  <span className="sc-meta-item">
-                    <Users size={12} />
-                    {s.playerCount} 人
-                  </span>
-                  <span className="sc-meta-item">
-                    <Clock size={12} />
-                    {s.durationHours}h
-                  </span>
-                  <span className="sc-meta-item">
-                    <BarChart3 size={12} />
-                    {DIFFICULTY_LABEL[s.difficulty]}
-                  </span>
-                </div>
-
-                <div className="sc-progress">
-                  <div className="sc-progress-bar">
-                    <div
-                      className="sc-progress-fill"
-                      style={{ width: `${progress}%` }}
-                    />
+              <div key={s.id} className="script-card-wrap">
+                <Link
+                  href={`/editor/${s.id}`}
+                  className="script-card"
+                >
+                  <div className="sc-head">
+                    <div className="sc-title">{s.title}</div>
+                    <span className={`sc-status ${status.cls}`}>
+                      {status.label}
+                    </span>
                   </div>
-                  <span className="sc-progress-text">
-                    {s.wordCount.toLocaleString()} 字 · {progress}%
-                  </span>
-                </div>
 
-                <div className="sc-foot">
-                  更新于 {new Date(s.updatedAt).toLocaleDateString('zh-CN')}
-                </div>
-              </Link>
+                  <div className="sc-meta">
+                    <span className="sc-tag">{GENRE_LABEL[s.genre]}</span>
+                    <span className="sc-meta-item">
+                      <Users size={12} />
+                      {s.playerCount} 人
+                    </span>
+                    <span className="sc-meta-item">
+                      <Clock size={12} />
+                      {s.durationHours}h
+                    </span>
+                    <span className="sc-meta-item">
+                      <BarChart3 size={12} />
+                      {DIFFICULTY_LABEL[s.difficulty]}
+                    </span>
+                  </div>
+
+                  <div className="sc-progress">
+                    <div className="sc-progress-bar">
+                      <div
+                        className="sc-progress-fill"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <span className="sc-progress-text">
+                      {s.wordCount.toLocaleString()} 字 · {progress}%
+                    </span>
+                  </div>
+
+                  <div className="sc-foot">
+                    更新于 {new Date(s.updatedAt).toLocaleDateString('zh-CN')}
+                  </div>
+                </Link>
+                {s.status === 'generating' && (
+                  <Link className="sc-resume" href={`/generate?scriptId=${s.id}`}>
+                    <Play size={12} />
+                    继续生成
+                  </Link>
+                )}
+              </div>
             );
           })}
         </div>

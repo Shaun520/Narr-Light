@@ -22,6 +22,7 @@ import { ParamForm } from '@/components/generate/param-form';
 import { usePhasedGeneration } from '@/lib/hooks/use-phased-generation';
 import { PhasedGenProgress } from '@/components/generate/phased-gen-progress';
 import { StoryBibleGate } from '@/components/generate/story-bible-gate';
+import { createClient } from '@/lib/supabase/client';
 import type { ScriptGenre, ScriptDifficulty } from '@/types';
 import type {
   AgeRating,
@@ -99,6 +100,44 @@ function GeneratePageInner() {
     resumeFromScript(scriptId, params).catch((err) => {
       console.warn('恢复生成状态失败:', err);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ===== 无 scriptId 时：自动检测最近一个"生成中"剧本，提示可继续 =====
+  const [unfinishedScript, setUnfinishedScript] = useState<{ id: string; title: string } | null>(null);
+  const [resumeDismissed, setResumeDismissed] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get('scriptId')) return;
+    let ignore = false;
+    (async () => {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: script } = await supabase
+        .from('scripts')
+        .select('id, title')
+        .eq('author_id', user.id)
+        .eq('status', 'generating')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (!script) return;
+
+      // 续跑要求设定本已产出，否则没有可恢复的断点
+      const { data: bible } = await supabase
+        .from('story_bibles')
+        .select('script_id')
+        .eq('script_id', script.id)
+        .maybeSingle();
+      if (!ignore && bible) setUnfinishedScript({ id: script.id, title: script.title });
+    })().catch(() => undefined);
+    return () => {
+      ignore = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -253,6 +292,28 @@ function GeneratePageInner() {
           </div>
 
           {/* 根据编排器状态渲染不同内容 */}
+          {state.orchestrationStatus === 'idle' && unfinishedScript && !resumeDismissed && (
+            <div className="resume-banner">
+              <span className="resume-banner-text">
+                检测到未完成的生成《{unfinishedScript.title}》，可从中断处继续。
+              </span>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setResumeDismissed(true);
+                  resumeFromScript(unfinishedScript.id, params).catch(() => undefined);
+                }}
+              >
+                <Play size={14} />
+                继续生成
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setResumeDismissed(true)}>
+                忽略
+              </button>
+            </div>
+          )}
+
           {state.orchestrationStatus === 'idle' && (
             <div className="gen-stream">
               <span className="content-line" style={{ opacity: 0.5 }}>

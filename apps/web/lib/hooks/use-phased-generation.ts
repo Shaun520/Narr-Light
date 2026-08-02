@@ -996,6 +996,13 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       const params = paramsRef.current;
       if (!params) return;
 
+      const scriptId = scriptIdRef.current;
+      if (!scriptId) return;
+
+      // 标记设定本已确认，后续中断续跑不再重复停在闸门
+      const supabase = createClient();
+      await supabase.from('story_bibles').update({ confirmed: true }).eq('script_id', scriptId);
+
       setState((prev) => ({
         ...prev,
         orchestrationStatus: 'running',
@@ -1154,7 +1161,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           .eq('script_id', scriptId),
         supabase
           .from('character_scripts')
-          .select('id', { count: 'exact', head: true })
+          .select('character_id, part_index')
           .eq('script_id', scriptId),
         supabase
           .from('clues')
@@ -1212,7 +1219,11 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
       );
       const charactersExist = charactersList.length > 0;
       const actsExists = (actsRes.count ?? 0) > 0;
-      const characterScriptsExists = (characterScriptsRes.count ?? 0) >= expectedCharacterScriptCount;
+      const persistedScriptParts = (characterScriptsRes.data ?? []) as Array<{
+        character_id: string;
+        part_index: number;
+      }>;
+      const characterScriptsExists = persistedScriptParts.length >= expectedCharacterScriptCount;
       const cluesExists = (cluesRes.count ?? 0) > 0;
       const organizerManualExists = !!organizerManualRes.data;
       const truthReviewExists = !!truthReviewRes.data;
@@ -1246,16 +1257,24 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           percent: 100,
         };
       }
-      if (characterScriptsExists) {
+      if (persistedScriptParts.length > 0 && charactersList.length > 0) {
+        // 按已落库的 (character_id, part_index) 重建子任务状态，续跑时跳过已完成部分
+        const completedPartIds = new Set(
+          persistedScriptParts.map((part) => `${part.character_id}:part:${part.part_index}`),
+        );
+        const restoredSubItems = buildCharacterScriptTasks(
+          charactersList.map((character) => ({ id: character.id, name: character.name })),
+          restoredGenerationSpec ?? {},
+        ).map((task) => ({
+          id: task.id,
+          label: task.label,
+          status: (completedPartIds.has(task.id) ? 'completed' : 'pending') as PhaseStatus,
+        }));
         phases.character_script = {
           ...phases.character_script,
-          status: 'completed',
-          percent: 100,
-          subItems: charactersList.map((c) => ({
-            id: c.id,
-            label: c.name,
-            status: 'completed' as PhaseStatus,
-          })),
+          status: characterScriptsExists ? 'completed' : 'pending',
+          percent: characterScriptsExists ? 100 : 0,
+          subItems: restoredSubItems,
         };
       }
       if (cluesExists) {
