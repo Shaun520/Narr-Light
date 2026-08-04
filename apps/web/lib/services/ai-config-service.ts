@@ -31,6 +31,8 @@ const IMAGE_PROVIDER_ENV_KEYS: Record<ImageProviderName, string[]> = {
   "openai-image": ["OPENAI_API_KEY"],
   seedream: ["ARK_API_KEY"],
   glm: ["GLM_API_KEY"],
+  // 与剧本生成的 Kimi 文本 provider 共用同一组凭据
+  kimi: ["KIMI_API_KEY", "KSPMAS_API_KEY", "MOONSHOT_API_KEY"],
 };
 
 const DEFAULT_TEXT_CONFIG: TextProviderConfig = {
@@ -50,6 +52,7 @@ const DEFAULT_IMAGE_CONFIG: ImageProviderConfig = {
     "openai-image": { enabled: true, model: "gpt-image-1.5", size: "1024x1024", timeout: 60, retries: 3 },
     seedream: { enabled: true, model: "", size: "1024x1024", timeout: 60, retries: 3 },
     glm: { enabled: true, model: "cogview-3-plus", size: "1024x1024", timeout: 60, retries: 3 },
+    kimi: { enabled: true, model: "kimi-m3", size: "1024x1024", timeout: 60, retries: 3 },
   },
 };
 
@@ -183,6 +186,7 @@ function normalizeImageConfig(config: ImageProviderConfig): ImageProviderConfig 
     "openai-image": defaults["openai-image"] ? { ...defaults["openai-image"], ...pickDefined(overrides["openai-image"]) } : undefined,
     seedream: defaults.seedream ? { ...defaults.seedream, ...pickDefined(overrides.seedream) } : undefined,
     glm: defaults.glm ? { ...defaults.glm, ...pickDefined(overrides.glm) } : undefined,
+    kimi: defaults.kimi ? { ...defaults.kimi, ...pickDefined(overrides.kimi) } : undefined,
   };
   return {
     primary: config.primary ?? DEFAULT_IMAGE_CONFIG.primary,
@@ -249,6 +253,7 @@ export const getImageProviderInstance = cache(async (): Promise<{
 }> => {
   const config = await getImageProviderConfig();
   const { name, runtime } = resolveImageProvider(config);
-  const provider = getProvider(name, runtime);
+  // 图像侧的 kimi 走独立的 KimiImageProvider（文本侧 "kimi" 是 KimiProvider）
+  const provider = getProvider(name === "kimi" ? "kimi-image" : name, runtime);
   return { provider, name, runtime };
 });

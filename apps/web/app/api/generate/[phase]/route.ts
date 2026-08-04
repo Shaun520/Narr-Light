@@ -1385,7 +1385,7 @@ async function expandCharacterScriptToMinimum(args: {
     maxTokens: resolveCharacterScriptMaxTokens(minWords),
   });
 
-  return normalizeCharacterScript(parseOrRepairJson<CharacterScriptJson>(expanded, 'CharacterScriptJson'));
+  return normalizeCharacterScript(await parseOrRepairJson<CharacterScriptJson>(expanded, 'CharacterScriptJson'));
 }
 
 async function ensurePlayerIdentityAssignment(args: {

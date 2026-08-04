@@ -47,12 +47,13 @@ interface VersionRow {
   seed: number;
 }
 
-type ImageProviderName = 'glm' | 'openai-image' | 'seedream';
+type ImageProviderName = 'glm' | 'kimi' | 'openai-image' | 'seedream';
 
 function normalizeProvider(model: string): ImageProviderName {
   if (model === 'glm') return 'glm';
   if (model === 'openai') return 'openai-image';
   if (model === 'seedream' || model === 'seeddance') return 'seedream';
+  if (model === 'kimi') return 'kimi';
   throw new ApiError('INVALID_MODEL', `不支持的插画模型: ${model}`, 400);
 }
 
@@ -70,6 +71,10 @@ function mapRatioToSize(ratio: string, provider: ImageProviderName): string {
 function resolveProviderModel(provider: ImageProviderName): string {
   if (provider === 'openai-image') {
     return process.env.OPENAI_IMAGE_MODEL ?? 'gpt-image-1.5';
+  }
+  if (provider === 'kimi') {
+    // 与剧本生成共用 KIMI_MODEL_ID（星流接入点 ID）
+    return process.env.KIMI_MODEL_ID ?? 'kimi-m3';
   }
   if (provider === 'seedream') {
     const model = process.env.SEEDDANCE_IMAGE_MODEL ?? process.env.SEEDREAM_IMAGE_MODEL;
@@ -186,7 +191,7 @@ export class IllustrationGenerateService {
 
     const supabase = this.getAdminClient();
     const asset = await this.getAssetForGeneration(supabase, params.scriptId, params.assetId);
-    const provider = getProvider(providerName, {
+    const provider = getProvider(providerName === 'kimi' ? 'kimi-image' : providerName, {
       model: runtime.model,
       size: runtime.size,
       timeout: runtime.timeout,

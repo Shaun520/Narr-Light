@@ -16,7 +16,7 @@ export type SystemConfigKey = (typeof SYSTEM_CONFIG_KEYS)[number];
 export type TextProviderName = "deepseek" | "glm" | "kimi";
 
 /** 图像 provider 名称 */
-export type ImageProviderName = "openai-image" | "seedream" | "glm";
+export type ImageProviderName = "openai-image" | "seedream" | "glm" | "kimi";
 
 /** 单个 provider 的运行时配置 */
 export interface ProviderRuntimeConfig {

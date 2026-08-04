@@ -11,12 +11,14 @@ const UI_LABELS: Record<ImageProviderName, string> = {
   'openai-image': 'OpenAI Images',
   glm: 'GLM CogView',
   seedream: '豆包 Seedream',
+  kimi: 'Kimi',
 };
 
 const CONFIG_TO_UI_ID: Record<ImageProviderName, string> = {
   'openai-image': 'openai',
   glm: 'glm',
   seedream: 'seedream',
+  kimi: 'kimi',
 };
 
 /**

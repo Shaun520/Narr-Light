@@ -83,6 +83,13 @@ const IMAGE_PROVIDERS: ImageProviderMeta[] = [
     name: "智谱 GLM",
     models: ["cogview-4", "cogview-3-plus", "cogview-3"],
   },
+  {
+    id: "kimi",
+    logo: "KM",
+    logoStyle: { background: "#111827" },
+    name: "Kimi",
+    models: ["kimi-m3"],
+  },
 ];
 
 const QUOTA_ROWS: Array<{

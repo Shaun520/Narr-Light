@@ -33,6 +33,7 @@ const DEFAULT_IMAGE_CONFIG: ImageProviderConfig = {
     "openai-image": { enabled: true, model: "gpt-image-1.5", size: "1024x1024", timeout: 60, retries: 3 },
     seedream: { enabled: true, model: "", size: "1024x1024", timeout: 60, retries: 3 },
     glm: { enabled: true, model: "cogview-3-plus", size: "1024x1024", timeout: 60, retries: 3 },
+    kimi: { enabled: true, model: "kimi-m3", size: "1024x1024", timeout: 60, retries: 3 },
   },
 };
 
@@ -126,6 +127,7 @@ function normalizeImageConfig(config: ImageProviderConfig): ImageProviderConfig 
       : undefined,
     seedream: defaults.seedream ? { ...defaults.seedream, ...overrides.seedream } : undefined,
     glm: defaults.glm ? { ...defaults.glm, ...overrides.glm } : undefined,
+    kimi: defaults.kimi ? { ...defaults.kimi, ...overrides.kimi } : undefined,
   };
   return {
     primary: config.primary ?? DEFAULT_IMAGE_CONFIG.primary,
