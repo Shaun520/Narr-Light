@@ -40,6 +40,36 @@ export interface ActStructureJson {
   acts: ActStructure[];
 }
 
+/**
+ * 归一化模型返回的分幕结构：模型偶发缺失 scenes/searchRounds/locations 等嵌套字段，
+ * 下游（prompt 构建、兜底分支、时间线阶段）统一按数组消费，必须在源头补齐，避免迭代崩溃。
+ */
+export function normalizeActStructure(json: ActStructureJson): ActStructureJson {
+  const acts = Array.isArray(json?.acts) ? json.acts : [];
+  return {
+    ...json,
+    acts: acts.map((act, actIndex) => ({
+      title: act?.title ?? `第 ${actIndex + 1} 幕`,
+      sortOrder: typeof act?.sortOrder === 'number' ? act.sortOrder : actIndex + 1,
+      content: act?.content ?? '',
+      scenes: Array.isArray(act?.scenes)
+        ? act.scenes.map((scene, sceneIndex) => ({
+            title: scene?.title ?? '',
+            location: scene?.location ?? '',
+            content: scene?.content ?? '',
+            sortOrder: typeof scene?.sortOrder === 'number' ? scene.sortOrder : sceneIndex + 1,
+          }))
+        : [],
+      searchRounds: Array.isArray(act?.searchRounds)
+        ? act.searchRounds.map((round, roundIndex) => ({
+            round: typeof round?.round === 'number' ? round.round : roundIndex + 1,
+            locations: Array.isArray(round?.locations) ? round.locations : [],
+          }))
+        : [],
+    })),
+  };
+}
+
 const GENRE_LABEL: Record<ScriptGenre, string> = {
   hardcore: '硬核推理',
   emotion: '情感沉浸',

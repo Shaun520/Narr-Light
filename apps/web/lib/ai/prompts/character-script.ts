@@ -41,6 +41,30 @@ export interface CharacterScriptJson {
   perspectiveNote: string;
 }
 
+/**
+ * 归一化模型返回的玩家剧本 JSON：模型偶发缺失 scenes/visibleClueTitles 等嵌套字段，
+ * 下游（字数统计、扩写、质检、入库）统一按数组消费，解析后必须先补齐，避免迭代崩溃。
+ */
+export function normalizeCharacterScript(json: CharacterScriptJson): CharacterScriptJson {
+  const actScripts = Array.isArray(json?.actScripts) ? json.actScripts : [];
+  return {
+    characterName: json?.characterName ?? '',
+    personalArc: json?.personalArc ?? '',
+    perspectiveNote: json?.perspectiveNote ?? '',
+    visibleClueTitles: Array.isArray(json?.visibleClueTitles) ? json.visibleClueTitles : [],
+    actScripts: actScripts.map((act) => ({
+      actTitle: act?.actTitle ?? '',
+      content: act?.content ?? '',
+      scenes: Array.isArray(act?.scenes)
+        ? act.scenes.map((scene) => ({
+            title: scene?.title ?? '',
+            content: scene?.content ?? '',
+          }))
+        : [],
+    })),
+  };
+}
+
 const GENRE_LABEL: Record<ScriptGenre, string> = {
   hardcore: '硬核推理',
   emotion: '情感沉浸',

@@ -13,10 +13,12 @@ import {
 } from '@/lib/ai/prompts/character-profiles';
 import {
   buildActStructurePrompt,
+  normalizeActStructure,
   type ActStructureJson,
 } from '@/lib/ai/prompts/act-structure';
 import {
   buildCharacterScriptPrompt,
+  normalizeCharacterScript,
   type CharacterScriptJson,
 } from '@/lib/ai/prompts/character-script';
 import type { CharacterProfile } from '@/lib/ai/prompts/character-profiles';
@@ -739,7 +741,8 @@ async function getCharacterProfilesForPhase(body: GenerateRequestBody): Promise<
 
 async function getActStructureForPhase(body: GenerateRequestBody): Promise<ActStructureJson> {
   if (body.actStructure?.acts?.length) {
-    return body.actStructure;
+    // 前端带来的是模型原始产出，可能缺嵌套字段，先归一化再消费
+    return normalizeActStructure(body.actStructure);
   }
 
   const supabase = await createGenerationDbClient();
@@ -1274,7 +1277,7 @@ async function handleActStructure(body: GenerateRequestBody): Promise<Response> 
         }
 
         controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
-        const json = await parseOrRepairJson<ActStructureJson>(accumulated, 'ActStructureJson');
+        const json = normalizeActStructure(await parseOrRepairJson<ActStructureJson>(accumulated, 'ActStructureJson'));
 
         if (!Array.isArray(json.acts) || json.acts.length === 0) {
           controller.enqueue(encodeSse(encoder, 'error', { message: 'Act structure result is empty' }));
@@ -1382,7 +1385,7 @@ async function expandCharacterScriptToMinimum(args: {
     maxTokens: resolveCharacterScriptMaxTokens(minWords),
   });
 
-  return parseOrRepairJson<CharacterScriptJson>(expanded, 'CharacterScriptJson');
+  return normalizeCharacterScript(parseOrRepairJson<CharacterScriptJson>(expanded, 'CharacterScriptJson'));
 }
 
 async function ensurePlayerIdentityAssignment(args: {
@@ -1967,7 +1970,7 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
         controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
         let json: CharacterScriptJson;
         try {
-          json = await parseOrRepairJson<CharacterScriptJson>(accumulated, 'CharacterScriptJson');
+          json = normalizeCharacterScript(await parseOrRepairJson<CharacterScriptJson>(accumulated, 'CharacterScriptJson'));
         } catch (parseError) {
           const parseMessage = parseError instanceof Error ? parseError.message : 'JSON parse failed';
           json = {
@@ -2026,7 +2029,7 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
           schemaHint: 'CharacterScriptJson',
           content: json,
         });
-        json = repaired.content;
+        json = normalizeCharacterScript(repaired.content);
         if (repaired.rewritten) {
           controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'quality-rewrite' }));
           if (!Array.isArray(json.actScripts) || json.actScripts.length === 0) {
