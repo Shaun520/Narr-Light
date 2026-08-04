@@ -127,6 +127,7 @@ interface MarketRow {
   prompt_hint: string;
   visual_tone: string;
   thumb_url: string;
+  source?: string;
   sort_order: number;
   is_active: boolean;
   created_at: string;
@@ -579,6 +580,7 @@ export class IllustrationWorkflowService {
             promptHint: '雨夜中的码头与远处灯火，强调潮湿空气、木箱、反光水面和压迫感',
             visualTone: '水墨古风 / 暗调暖光 / 留白构图 / 雨夜氛围',
             thumbUrl: '',
+            source: '',
             sortOrder: 1,
             isActive: true,
             createdAt: new Date().toISOString(),
@@ -1090,6 +1092,7 @@ export class IllustrationWorkflowService {
       promptHint: row.prompt_hint,
       visualTone: row.visual_tone,
       thumbUrl: row.thumb_url,
+      source: row.source ?? '',
       sortOrder: row.sort_order,
       isActive: row.is_active,
       createdAt: row.created_at,

@@ -2616,3 +2616,282 @@ a {
     gap: 8px;
   }
 }
+
+/* 素材市场编辑弹窗 */
+.market-modal {
+  width: min(720px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.market-modal-body {
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+
+.market-form {
+  display: grid;
+  gap: 14px;
+}
+
+.market-form .form-item {
+  margin-top: 0;
+}
+
+.market-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.market-form .input,
+.market-form .select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.market-form textarea.input {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.market-form-current-image {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-form-current-image img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--admin-border);
+}
+
+@media (max-width: 640px) {
+  .market-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 素材市场工具栏与上传 */
+.market-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.market-toolbar-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.market-toolbar-side {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.market-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  color: var(--admin-text-secondary);
+}
+
+.market-search > svg {
+  position: absolute;
+  left: 10px;
+  pointer-events: none;
+}
+
+.market-search .input {
+  width: 240px;
+  padding-left: 30px;
+  padding-right: 28px;
+}
+
+.market-search-clear {
+  position: absolute;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--admin-text-secondary);
+  cursor: pointer;
+}
+
+.market-search-clear:hover {
+  background: #f0f0f0;
+  color: var(--admin-text);
+}
+
+.market-upload {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--admin-border);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.market-upload-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.market-upload-preview img {
+  width: 96px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--admin-border);
+  background: #fff;
+}
+
+.market-upload-preview.empty {
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 0;
+  color: var(--admin-text-secondary);
+}
+
+.market-upload-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* 素材市场：工具栏卡片化 + 上传区文字紧凑化 */
+.market-toolbar {
+  padding: 12px 14px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: #fafafa;
+  margin-bottom: 16px;
+}
+
+.market-upload .placeholder-meta {
+  font-size: 12px;
+}
+
+.market-upload-preview .placeholder-meta {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.market-upload-actions .admin-btn {
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+
+/* 素材市场工具栏：下拉箭头留白 + 统计文字缩小 */
+.market-toolbar-filters .select {
+  padding-right: 30px;
+}
+
+.market-toolbar-side .placeholder-meta {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* 素材市场：新增按钮图标与文字垂直居中、字号收敛 */
+.market-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.market-add-btn svg {
+  flex-shrink: 0;
+}
+
+/* 素材市场：缩略图点击放大 */
+.market-thumb-btn {
+  width: 64px;
+  height: 48px;
+  padding: 0;
+  border: 1px solid var(--admin-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  cursor: zoom-in;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.market-thumb-btn:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
+  transform: scale(1.04);
+}
+
+.market-thumb-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.market-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  background: rgba(0, 0, 0, 0.72);
+  cursor: zoom-out;
+  animation: toast-slide-in 0.18s ease-out;
+}
+
+.market-lightbox img {
+  max-width: min(920px, 92vw);
+  max-height: 82vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+
+.market-lightbox-caption {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.market-lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  cursor: pointer;
+}
+
+.market-lightbox-close:hover {
+  background: rgba(0, 0, 0, 0.6);
+}

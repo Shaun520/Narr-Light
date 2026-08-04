@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { App as AntdApp } from 'antd';
-import { ArrowLeft, Image as ImageIcon, Loader2, Plus } from 'lucide-react';
+import { ArrowLeft, Image as ImageIcon, Loader2, Plus, X } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -69,8 +69,12 @@ function buildMarketThumbStyle(item: MarketItemView): CSSProperties {
   const seed = encodeURIComponent(item.id || item.title);
   const fallbackUrl = `https://picsum.photos/seed/narr-market-${seed}/720/520?grayscale`;
   const imageUrl = item.thumbUrl || fallbackUrl;
+  // 有真实素材图时只加轻微压暗，保留原图色彩与细节；无图时用重渐变遮盖占位图
+  const gradient = item.thumbUrl
+    ? `linear-gradient(180deg, rgba(26, 20, 16, 0.08), rgba(26, 20, 16, 0.42))`
+    : `linear-gradient(135deg, ${accent.from}, ${accent.to})`;
   return {
-    backgroundImage: `linear-gradient(135deg, ${accent.from}, ${accent.to}), url("${imageUrl}")`,
+    backgroundImage: `${gradient}, url("${imageUrl}")`,
   };
 }
 
@@ -87,6 +91,7 @@ export default function IllustrationMarketPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [creatingItemId, setCreatingItemId] = useState('');
+  const [detailItem, setDetailItem] = useState<MarketItemView | null>(null);
 
   const marketItems = useMemo(() => workspace?.marketItems ?? [], [workspace]);
   const counts = useMemo(() => countMarketItems(marketItems), [marketItems]);
@@ -126,6 +131,7 @@ export default function IllustrationMarketPage({ params }: PageProps) {
     try {
       const task = await createIllustrationTaskFromMarketAction(scriptId, item.id);
       message.success(`已加入任务：${task.title}`);
+      setDetailItem(null);
       const type = isMarketAssetType(item.taskType) ? item.taskType : (task.taskType as AssetType);
       router.push(`/editor/${scriptId}/illustrations?type=${type}`);
     } catch (error) {
@@ -194,33 +200,105 @@ export default function IllustrationMarketPage({ params }: PageProps) {
           {visibleItems.map((item) => {
             const type = isMarketAssetType(item.taskType) ? item.taskType : 'scene';
             const accent = TYPE_ACCENTS[type];
-            const isCreating = creatingItemId === item.id;
             return (
               <button
                 key={item.id}
                 type="button"
                 className="market-gallery-card"
-                onClick={() => void handleCreateFromMarket(item)}
-                disabled={Boolean(creatingItemId)}
+                onClick={() => setDetailItem(item)}
               >
                 <span className="market-gallery-thumb" style={buildMarketThumbStyle(item)}>
                   <span className="market-gallery-code">{accent.label}</span>
                 </span>
                 <span className="market-gallery-body">
-                  <span className="market-gallery-type">{activeLabel}</span>
+                  <span className="market-gallery-type">
+                    {activeLabel}
+                    {item.source ? <em className="market-gallery-source">{item.source}</em> : null}
+                  </span>
                   <strong>{item.title}</strong>
-                  <span>{item.subtitle}</span>
-                  <small>{item.promptHint}</small>
+                  {item.subtitle ? <span>{item.subtitle}</span> : null}
+                  {item.promptHint ? <small>{item.promptHint}</small> : null}
                 </span>
                 <span className="market-gallery-action">
-                  {isCreating ? <Loader2 size={14} className="market-state-spin" /> : <Plus size={14} />}
-                  {isCreating ? '加入中' : '加入任务'}
+                  <Plus size={14} />
+                  查看详情
                 </span>
               </button>
             );
           })}
         </div>
       )}
+
+      {detailItem ? (
+        <div className="market-detail-backdrop" onClick={() => !creatingItemId && setDetailItem(null)}>
+          <div className="market-detail-modal" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="market-detail-close"
+              onClick={() => setDetailItem(null)}
+              disabled={Boolean(creatingItemId)}
+              aria-label="关闭详情"
+            >
+              <X size={16} />
+            </button>
+            <div
+              className="market-detail-thumb"
+              style={buildMarketThumbStyle(detailItem)}
+              role="img"
+              aria-label={detailItem.title}
+            >
+              <span className="market-gallery-code">
+                {TYPE_ACCENTS[isMarketAssetType(detailItem.taskType) ? detailItem.taskType : 'scene'].label}
+              </span>
+            </div>
+            <div className="market-detail-body">
+              <span className="market-gallery-type">
+                {MARKET_TYPE_TABS.find((tab) => tab.type === detailItem.taskType)?.label ?? activeLabel}
+                {detailItem.source ? (
+                  <em className="market-gallery-source">{detailItem.source}</em>
+                ) : null}
+              </span>
+              <h2 className="market-detail-title">{detailItem.title}</h2>
+              {detailItem.subtitle ? <p className="market-detail-subtitle">{detailItem.subtitle}</p> : null}
+              {detailItem.promptHint ? (
+                <div className="market-detail-section">
+                  <span className="market-detail-label">画面描述</span>
+                  <p>{detailItem.promptHint}</p>
+                </div>
+              ) : null}
+              {detailItem.visualTone ? (
+                <div className="market-detail-section">
+                  <span className="market-detail-label">风格基调</span>
+                  <p>{detailItem.visualTone}</p>
+                </div>
+              ) : null}
+            </div>
+            <div className="market-detail-foot">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setDetailItem(null)}
+                disabled={Boolean(creatingItemId)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => void handleCreateFromMarket(detailItem)}
+                disabled={Boolean(creatingItemId)}
+              >
+                {creatingItemId === detailItem.id ? (
+                  <Loader2 size={14} className="market-state-spin" />
+                ) : (
+                  <Plus size={14} />
+                )}
+                {creatingItemId === detailItem.id ? '加入中' : '加入任务'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

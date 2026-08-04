@@ -7,6 +7,7 @@ import {
   BookOpen,
   ClipboardList,
   FileText,
+  Image,
   LayoutDashboard,
   Library,
   LogOut,
@@ -36,6 +37,7 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
       { href: "/knowledge", label: "创作知识库", Icon: Library },
       { href: "/tasks/generation", label: "生成任务", Icon: Activity },
       { href: "/tasks/illustration", label: "插画任务", Icon: FileText },
+      { href: "/market", label: "素材市场", Icon: Image },
     ],
   },
   {

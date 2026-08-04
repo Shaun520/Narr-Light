@@ -135,6 +135,8 @@ export interface IllustrationMarketItem {
   promptHint: string;
   visualTone: string;
   thumbUrl: string;
+  /** 素材来源（如《那一束月光3》），可为空 */
+  source: string;
   sortOrder: number;
   isActive: boolean;
   createdAt: string;

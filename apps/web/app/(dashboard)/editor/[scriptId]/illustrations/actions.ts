@@ -43,6 +43,7 @@ export interface IllustrationWorkspaceView {
     promptHint: string;
     visualTone: string;
     thumbUrl: string;
+    source: string;
     sortOrder: number;
   }>;
   characters: IllustrationCharacterView[];
@@ -86,6 +87,7 @@ export async function getIllustrationWorkspaceAction(
       promptHint: item.promptHint,
       visualTone: item.visualTone,
       thumbUrl: item.thumbUrl,
+      source: item.source,
       sortOrder: item.sortOrder,
     })),
     characters: await getIllustrationCharactersAction(scriptId),
