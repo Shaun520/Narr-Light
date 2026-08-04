@@ -4,8 +4,9 @@ import {
   AdminIllustrationTaskCancelButton,
   AdminIllustrationTaskRetryButton,
 } from "@/components/admin-task-actions";
-import { DetailModal, DetailPreview, PageHeader, Pagination, RefreshButton, StatGrid, Tag, UserCell } from "@/components/admin-static";
+import { DetailModal, DetailPreview, PageHeader, Pagination, RefreshButton, Tag, UserCell } from "@/components/admin-static";
 import { JsonPreview } from "@/components/json-preview";
+import { TasksTabs } from "@/components/tasks-tabs";
 import {
   getAdminIllustrationTasks,
   type AdminIllustrationTaskRow,
@@ -43,14 +44,7 @@ export default async function IllustrationTasksPage({
         actions={<RefreshButton />}
       />
 
-      <StatGrid
-        items={[
-          { label: "运行中", value: String(result.stats.running), trend: "当前筛选范围内等待或运行任务", tone: "info" },
-          { label: "已完成", value: String(result.stats.completed), trend: "当前筛选范围内完成任务", tone: "success" },
-          { label: "待质检", value: String(result.stats.unchecked), trend: "quality_status = unchecked", tone: "warning" },
-          { label: "失败", value: String(result.stats.failed), trend: "需要查看错误信息或重试", tone: "error" },
-        ]}
-      />
+      <TasksTabs />
 
       <section className="admin-card">
           <AdminFilterForm action="/tasks/illustration">

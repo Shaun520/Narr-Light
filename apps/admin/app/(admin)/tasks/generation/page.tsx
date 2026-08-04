@@ -9,7 +9,8 @@ import {
   AdminGenerationTaskDeleteForm,
   AdminGenerationTaskSelectAllCheckbox,
 } from "@/components/admin-generation-task-delete-form";
-import { DetailModal, DetailPreview, PageHeader, Pagination, RefreshButton, StatGrid, Tag, UserCell } from "@/components/admin-static";
+import { DetailModal, DetailPreview, PageHeader, Pagination, RefreshButton, Tag, UserCell } from "@/components/admin-static";
+import { TasksTabs } from "@/components/tasks-tabs";
 import { JsonPreview } from "@/components/json-preview";
 import {
   getAdminGenerationTasks,
@@ -55,14 +56,7 @@ export default async function GenerationTasksPage({
         actions={<RefreshButton />}
       />
 
-      <StatGrid
-        items={[
-          { label: "运行中", value: String(result.stats.running), trend: "当前筛选范围内运行任务", tone: "info" },
-          { label: "已完成", value: String(result.stats.completed), trend: "当前筛选范围内完成任务", tone: "success" },
-          { label: "失败", value: String(result.stats.failed), trend: "需要查看错误信息或重试", tone: "error" },
-          { label: "已扣创作点", value: String(result.stats.chargedCredits), trend: "当前筛选范围内 charged_credits 合计", tone: "warning" },
-        ]}
-      />
+      <TasksTabs />
 
       <section className="admin-card">
           <AdminFilterForm action="/tasks/generation">

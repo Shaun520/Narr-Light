@@ -2895,3 +2895,274 @@ a {
 .market-lightbox-close:hover {
   background: rgba(0, 0, 0, 0.6);
 }
+
+/* 任务监控：生成/插画任务切换 Tab */
+.tasks-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.tasks-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.tasks-tab:hover {
+  color: var(--admin-text);
+}
+
+.tasks-tab.active {
+  background: #fff;
+  color: var(--admin-text);
+  font-weight: 600;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* 资料抽取：面板紧凑化 + 候选筛选栏 */
+.knowledge-intake-head {
+  padding-bottom: 12px;
+}
+
+.knowledge-upload-panel {
+  padding: 10px 16px;
+  gap: 4px;
+}
+
+.knowledge-upload-panel .admin-card-sub {
+  font-size: 12px;
+}
+
+.knowledge-intake-meta {
+  padding: 0 16px 10px;
+  gap: 6px 14px;
+}
+
+.knowledge-intake-meta .knowledge-job {
+  padding: 2px 8px;
+  border: 1px solid var(--admin-border);
+  border-radius: 999px;
+  background: #fafafa;
+  font-size: 12px;
+}
+
+.knowledge-candidate-wrap {
+  border-top: 1px solid var(--admin-border);
+}
+
+/* 资料抽取：筛选栏与上传表单同行 */
+.knowledge-candidate-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--admin-border);
+  padding-right: 20px;
+}
+
+.knowledge-candidate-bar > .toolbar {
+  border-bottom: none;
+  padding-right: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+.knowledge-candidate-bar .knowledge-upload-form {
+  flex-shrink: 0;
+}
+
+.knowledge-candidate-bar .knowledge-upload-title {
+  width: 180px;
+}
+
+/* 资料抽取：胶囊行与筛选/上传栏排版修正 */
+.knowledge-intake-meta {
+  padding: 12px 20px;
+  align-items: center;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.knowledge-intake-meta .link-btn {
+  font-size: 12px;
+  padding: 0;
+}
+
+.knowledge-candidate-bar {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding-right: 0;
+}
+
+.knowledge-candidate-bar > .toolbar {
+  padding: 12px 20px;
+  width: 100%;
+}
+
+.knowledge-candidate-bar .knowledge-upload-form {
+  align-self: flex-end;
+  padding: 0 20px 12px;
+  font-size: 13px;
+}
+
+.knowledge-candidate-bar .admin-btn {
+  height: 32px;
+  font-size: 13px;
+}
+
+.knowledge-candidate-bar .knowledge-upload-title {
+  width: 200px;
+}
+
+.knowledge-candidate-bar .knowledge-upload-file-name {
+  font-size: 12px;
+}
+
+/* 资料抽取：筛选与上传合并为一行，避免左侧大片留白 */
+.knowledge-candidate-bar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 16px;
+  padding: 12px 20px;
+}
+
+.knowledge-candidate-bar > .toolbar {
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  border-bottom: none;
+}
+
+.knowledge-candidate-bar > .toolbar .toolbar-left {
+  flex-wrap: nowrap;
+}
+
+.knowledge-candidate-bar .knowledge-upload-form {
+  align-self: auto;
+  padding: 0;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.knowledge-candidate-bar .knowledge-upload-file-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1400px) {
+  .knowledge-candidate-bar {
+    flex-wrap: wrap;
+  }
+}
+
+/* 资料抽取：筛选/上传两行布局 + 资料胶囊点击查看 */
+.knowledge-candidate-bar {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 0;
+  padding: 0;
+}
+
+.knowledge-candidate-bar > .toolbar {
+  padding: 12px 20px;
+  width: 100%;
+}
+
+.knowledge-candidate-bar > .toolbar .toolbar-left {
+  flex-wrap: wrap;
+}
+
+.knowledge-candidate-bar .knowledge-upload-form {
+  align-self: flex-end;
+  padding: 0 20px 12px;
+  flex-wrap: nowrap;
+}
+
+.knowledge-doc-chip {
+  cursor: default;
+}
+
+.knowledge-doc-chip-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.knowledge-doc-chip-btn:hover {
+  color: var(--admin-primary);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.knowledge-doc-modal {
+  width: min(860px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.knowledge-doc-modal-body {
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+.knowledge-doc-content {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--admin-text);
+}
+
+.knowledge-doc-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 0;
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+}
+
+/* 上传表单按钮文字不换行；引用与质检筛选栏布局 */
+.knowledge-upload-form .admin-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.knowledge-usage-bar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+}
+
+.knowledge-usage-bar > .toolbar {
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+}

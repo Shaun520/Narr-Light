@@ -345,7 +345,13 @@ export async function getKnowledgeUsageSnapshot() {
   };
 }
 
-export async function getKnowledgeIntakeSnapshot() {
+export type KnowledgeIntakeFilters = {
+  q?: string;
+  reviewStatus?: string;
+  category?: string;
+};
+
+export async function getKnowledgeIntakeSnapshot(filters?: KnowledgeIntakeFilters) {
   const supabase = createAdminSupabaseClient();
   if (!supabase) {
     return {
@@ -354,6 +360,24 @@ export async function getKnowledgeIntakeSnapshot() {
       candidates: [],
       error: "未配置 Supabase service role，无法读取二阶段资料抽取记录。",
     };
+  }
+
+  let candidateQuery = supabase
+    .from("knowledge_candidates")
+    .select("id,document_id,extraction_job_id,approved_knowledge_item_id,title,content,category,module_type,stage,genre,player_count_min,player_count_max,difficulty,abstraction_level,source_context,risk_level,review_status,reviewer_note,weight,metadata,reviewed_at,created_at,updated_at,knowledge_documents(title)")
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  const keyword = filters?.q?.trim();
+  if (keyword) {
+    const like = `%${keyword.replace(/[%_*]/g, "\\$&")}%`;
+    candidateQuery = candidateQuery.or(`title.ilike.${like},content.ilike.${like}`);
+  }
+  if (filters?.reviewStatus && filters.reviewStatus !== "all") {
+    candidateQuery = candidateQuery.eq("review_status", filters.reviewStatus);
+  }
+  if (filters?.category && filters.category !== "all") {
+    candidateQuery = candidateQuery.eq("category", filters.category);
   }
 
   const [documentResult, jobResult, candidateResult] = await Promise.all([
@@ -369,12 +393,7 @@ export async function getKnowledgeIntakeSnapshot() {
       .order("created_at", { ascending: false })
       .limit(20)
       .returns<KnowledgeExtractionJobRecord[]>(),
-    supabase
-      .from("knowledge_candidates")
-      .select("id,document_id,extraction_job_id,approved_knowledge_item_id,title,content,category,module_type,stage,genre,player_count_min,player_count_max,difficulty,abstraction_level,source_context,risk_level,review_status,reviewer_note,weight,metadata,reviewed_at,created_at,updated_at,knowledge_documents(title)")
-      .order("updated_at", { ascending: false })
-      .limit(50)
-      .returns<KnowledgeCandidateRecord[]>(),
+    candidateQuery.returns<KnowledgeCandidateRecord[]>(),
   ]);
 
   if (documentResult.error) {

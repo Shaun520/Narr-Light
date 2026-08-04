@@ -459,3 +459,31 @@ function optionalEnumValue<T extends readonly string[]>(value: FormDataEntryValu
   const raw = stringValue(value);
   return raw && options.includes(raw) ? raw as T[number] : null;
 }
+
+/** 按资料 ID 读取解析后的文本内容，供资料胶囊点击查看 */
+export async function getKnowledgeDocumentContent(
+  id: string,
+): Promise<{ content?: string; error?: string }> {
+  try {
+    await requireAdmin();
+    if (!UUID_PATTERN.test(id)) return { error: "资料 ID 不合法" };
+
+    const supabase = createAdminSupabaseClient();
+    if (!supabase) return { error: "未配置 Supabase service role。" };
+
+    const { data, error } = await supabase
+      .from("knowledge_documents")
+      .select("parsed_text")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) return { error: `读取资料内容失败：${error.message}` };
+    if (!data) return { error: "资料不存在" };
+
+    const text = typeof data.parsed_text === "string" ? data.parsed_text : "";
+    return { content: text || "（该资料暂无解析文本）" };
+  } catch (error) {
+    console.error("[getKnowledgeDocumentContent] 读取资料内容失败:", error);
+    return { error: error instanceof Error ? `读取失败：${error.message}` : "读取失败" };
+  }
+}

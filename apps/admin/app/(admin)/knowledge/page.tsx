@@ -10,6 +10,7 @@ import {
 } from "@narrlight/shared";
 import { PageHeader, Tag } from "@/components/admin-static";
 import { KnowledgeTabs, type KnowledgeTab } from "@/components/knowledge-tabs";
+import { KnowledgeDocumentChip } from "@/components/knowledge-document-chip";
 import { getKnowledgeIntakeSnapshot, getKnowledgeItem, getKnowledgeItems, getKnowledgeUsageSnapshot } from "@/lib/services/knowledge";
 import {
   approveKnowledgeCandidate,
@@ -18,8 +19,6 @@ import {
   toggleKnowledgeItem,
 } from "./actions";
 import { AdminClearKnowledgeRecordsButton } from "@/components/admin-clear-knowledge-records-button";
-import { AdminDeleteKnowledgeDocumentButton } from "@/components/admin-delete-knowledge-document-button";
-import { AdminRetryKnowledgeJobButton } from "@/components/admin-retry-knowledge-job-button";
 import { AdminToast } from "@/components/admin-toast";
 import { CandidateReviewActions } from "@/components/knowledge-candidate-review-actions";
 import { KnowledgeUploadForm } from "@/components/knowledge-upload-form";
@@ -41,6 +40,11 @@ type SearchParams = {
   candidateCount?: string;
   deduped?: string;
   documentDeleted?: string;
+  cq?: string;
+  cstatus?: string;
+  ccategory?: string;
+  uq?: string;
+  ukind?: string;
 };
 
 const GENRES = ["hardcore", "emotion", "horror", "funny", "mechanism"] as const;
@@ -52,18 +56,37 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
     getKnowledgeItems(params),
     params.itemId ? getKnowledgeItem(params.itemId) : Promise.resolve(null),
     getKnowledgeUsageSnapshot(),
-    getKnowledgeIntakeSnapshot(),
+    getKnowledgeIntakeSnapshot({
+      q: params.cq,
+      reviewStatus: params.cstatus,
+      category: params.ccategory,
+    }),
   ]);
   const modalOpen = params.mode === "new" || Boolean(selectedItem);
   const hasUsageRecords = usageSnapshot.usages.length > 0 || usageSnapshot.reports.length > 0;
-  const pendingCandidates = intakeSnapshot.candidates.filter((candidate) => candidate.reviewStatus === "pending");
-  const visibleJobs = [
-    ...intakeSnapshot.jobs.filter((job) => job.status === "failed"),
-    ...intakeSnapshot.jobs.filter((job) => job.status !== "failed"),
-  ]
-    .filter((job, index, list) => list.findIndex((item) => item.id === job.id) === index)
-    .slice(0, 5);
   const activeTab: KnowledgeTab = params.tab === "intake" || params.tab === "usage" ? params.tab : "items";
+  const intakeFilters = {
+    q: params.cq?.trim() ?? "",
+    reviewStatus: params.cstatus ?? "all",
+    category: params.ccategory ?? "all",
+  };
+  const usageFilters = {
+    q: (params.uq?.trim() ?? "").toLowerCase(),
+    kind: params.ukind === "usage" || params.ukind === "report" ? params.ukind : "all",
+  };
+  const matchesUsage = (fields: Array<string | null | undefined>) =>
+    !usageFilters.q || fields.join("\n").toLowerCase().includes(usageFilters.q);
+  const filteredUsages = usageSnapshot.usages.filter(
+    (usage) =>
+      (usageFilters.kind === "all" || usageFilters.kind === "usage") &&
+      matchesUsage([usage.creatorName, usage.creatorEmail, usage.scriptTitle, usage.knowledgeTitle, usage.usageReason]),
+  );
+  const filteredReports = usageSnapshot.reports.filter(
+    (report) =>
+      (usageFilters.kind === "all" || usageFilters.kind === "report") &&
+      matchesUsage([report.creatorName, report.creatorEmail, report.scriptTitle]),
+  );
+  const hasFilteredUsageRecords = filteredUsages.length > 0 || filteredReports.length > 0;
 
   return (
     <div className="page-stack">
@@ -174,52 +197,51 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         }
         intake={
           <section key="intake" className="admin-card">
-        <div className="admin-card-head knowledge-usage-head knowledge-intake-head">
-          <div>
-            <div className="admin-card-title">二阶段资料抽取</div>
-            <div className="admin-card-sub">资料解析和候选知识默认不进入生成链路，需人工批准后才写入正式知识库。</div>
-          </div>
-          <div className="knowledge-intake-summary">
-            <span>资料 {intakeSnapshot.documents.length}</span>
-            <span>任务 {intakeSnapshot.jobs.length}</span>
-            <span>待审 {pendingCandidates.length}</span>
-          </div>
-        </div>
-        <div className="knowledge-upload-panel">
-          <KnowledgeUploadForm />
-          <div className="admin-card-sub">当前支持 txt/md；PDF/DOCX 先转纯文本，避免未清洗原文污染知识库。</div>
-        </div>
         {(intakeSnapshot.documents.length > 0 || intakeSnapshot.jobs.length > 0) && (
           <div className="knowledge-intake-meta">
             {intakeSnapshot.documents.slice(0, 3).map((document) => (
-              <span className="knowledge-job" key={document.id}>
-                资料：{document.title} / {parseStatusLabel(document.parseStatus)}
-                {document.promptCharLimit > 0 && document.charCount > document.promptCharLimit && (
-                  <span
-                    className="knowledge-doc-warn"
-                    title={`原文共 ${document.charCount.toLocaleString("zh-CN")} 字，超出单次抽取上限，仅前 ${document.promptCharLimit.toLocaleString("zh-CN")} 字参与抽取`}
-                  >
-                    截断 { (document.charCount - document.promptCharLimit).toLocaleString("zh-CN") } 字
-                  </span>
-                )}
-                <AdminDeleteKnowledgeDocumentButton documentId={document.id} title={document.title} />
-              </span>
-            ))}
-            {visibleJobs.map((job) => (
-              <span className="knowledge-job" key={job.id}>
-                任务：{job.documentTitle} / {jobStatusLabel(job.status)}
-                {job.status === "failed" && (
-                  <>
-                    {job.errorMessage && (
-                      <span className="knowledge-job-error" title={job.errorMessage}>{job.errorMessage}</span>
-                    )}
-                    <AdminRetryKnowledgeJobButton jobId={job.id} />
-                  </>
-                )}
-              </span>
+              <KnowledgeDocumentChip
+                key={document.id}
+                documentId={document.id}
+                title={document.title}
+                statusLabel={parseStatusLabel(document.parseStatus)}
+                warning={
+                  document.promptCharLimit > 0 && document.charCount > document.promptCharLimit
+                    ? `截断 ${(document.charCount - document.promptCharLimit).toLocaleString("zh-CN")} 字`
+                    : undefined
+                }
+              />
             ))}
           </div>
         )}
+        <div className="knowledge-candidate-bar">
+          <AdminFilterForm action="/knowledge">
+            <input type="hidden" name="tab" value="intake" />
+            <div className="toolbar-left">
+              <input
+                className="input input-wide"
+                name="cq"
+                placeholder="搜索候选标题或内容"
+                defaultValue={intakeFilters.q}
+              />
+              <select className="select" name="ccategory" defaultValue={intakeFilters.category}>
+                <option value="all">全部类型</option>
+                {KNOWLEDGE_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>{categoryLabel(category)}</option>
+                ))}
+              </select>
+              <select className="select" name="cstatus" defaultValue={intakeFilters.reviewStatus}>
+                <option value="all">全部状态</option>
+                <option value="pending">待审核</option>
+                <option value="approved">已入库</option>
+                <option value="rejected">已驳回</option>
+              </select>
+              <button className="admin-btn primary" type="submit">查询</button>
+              <Link className="admin-btn" href="/knowledge?tab=intake">重置</Link>
+            </div>
+          </AdminFilterForm>
+          <KnowledgeUploadForm />
+        </div>
         <div className="table-wrap knowledge-candidate-wrap">
           <table className="table knowledge-candidate-table">
             <thead>
@@ -307,11 +329,25 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
         }
         usage={
           <section key="usage" className="admin-card">
-        <div className="admin-card-head knowledge-usage-head">
-          <div>
-            <div className="admin-card-title">最近引用和质检</div>
-            <div className="admin-card-sub">确认生成阶段实际使用了哪些规则。</div>
-          </div>
+        <div className="knowledge-candidate-bar knowledge-usage-bar">
+          <AdminFilterForm action="/knowledge">
+            <input type="hidden" name="tab" value="usage" />
+            <div className="toolbar-left">
+              <input
+                className="input input-wide"
+                name="uq"
+                placeholder="搜索创作者、剧本或知识标题"
+                defaultValue={params.uq ?? ""}
+              />
+              <select className="select" name="ukind" defaultValue={usageFilters.kind}>
+                <option value="all">全部记录</option>
+                <option value="usage">仅引用</option>
+                <option value="report">仅质检</option>
+              </select>
+              <button className="admin-btn primary" type="submit">查询</button>
+              <Link className="admin-btn" href="/knowledge?tab=usage">重置</Link>
+            </div>
+          </AdminFilterForm>
           <AdminClearKnowledgeRecordsButton disabled={!hasUsageRecords} />
         </div>
         <div className="table-wrap">
@@ -329,7 +365,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
               </tr>
             </thead>
             <tbody>
-              {usageSnapshot.usages.map((usage) => (
+              {filteredUsages.map((usage) => (
                 <tr key={`usage-${usage.id}`}>
                   <td><Tag tone="info">引用</Tag></td>
                   <td>
@@ -344,7 +380,7 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
                   <td>{formatDateTime(usage.createdAt)}</td>
                 </tr>
               ))}
-              {usageSnapshot.reports.map((report) => (
+              {filteredReports.map((report) => (
                 <tr key={`report-${report.id}`}>
                   <td><Tag tone={report.rewriteRequired ? "warning" : "success"}>质检</Tag></td>
                   <td>
@@ -366,9 +402,11 @@ export default async function KnowledgePage({ searchParams }: { searchParams: Pr
                   <td>{formatDateTime(report.createdAt)}</td>
                 </tr>
               ))}
-              {!hasUsageRecords && (
+              {!hasFilteredUsageRecords && (
                 <tr>
-                  <td className="table-empty" colSpan={8}>暂无引用或质检记录</td>
+                  <td className="table-empty" colSpan={8}>
+                    {hasUsageRecords ? "没有匹配筛选条件的记录" : "暂无引用或质检记录"}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -559,16 +597,6 @@ function parseStatusLabel(status: string) {
     parsed: "已解析",
     failed: "解析失败",
     needs_cleanup: "需清洗",
-  };
-  return labels[status] ?? status;
-}
-
-function jobStatusLabel(status: string) {
-  const labels: Record<string, string> = {
-    pending: "等待中",
-    running: "抽取中",
-    completed: "已完成",
-    failed: "失败",
   };
   return labels[status] ?? status;
 }
