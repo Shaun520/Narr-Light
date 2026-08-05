@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export type IllustrationTaskType = "cover" | "scene" | "clue" | "public" | "char" | "poster";
@@ -139,73 +141,80 @@ const TASK_SELECT_WITH_QUALITY =
 const TASK_SELECT_BASE =
   "id,script_id,asset_id,market_item_id,task_key,task_type,source_type,source_id,title,subtitle,prompt,status,progress_percent,sort_order,selected_model,selected_ratio,selected_count,result_image_url,error_message,started_at,completed_at,created_at,updated_at";
 
-export async function getAdminIllustrationTasks(
-  filters: AdminIllustrationTaskFilters,
-): Promise<AdminIllustrationTaskResult> {
-  const supabase = createAdminSupabaseClient();
+export const getAdminIllustrationTasks = unstable_cache(
+  async function (
+    filters: AdminIllustrationTaskFilters,
+  ): Promise<AdminIllustrationTaskResult> {
+    const supabase = createAdminSupabaseClient();
 
-  if (!supabase) {
-    return {
-      tasks: [],
-      total: 0,
-      selectedTask: null,
-      stats: emptyStats(),
-      error: "未配置 Supabase service role，无法读取真实插画任务数据。",
-    };
-  }
-
-  const keyword = normalizeKeyword(filters.q);
-  const matchingScriptIds = keyword ? await getMatchingScriptIds(keyword) : [];
-
-  let { data, error, count, hasQualityColumns } = await queryTasks(
-    filters,
-    keyword,
-    matchingScriptIds,
-    true,
-  );
-
-  if (error && isMissingQualityColumnError(error.message)) {
-    if (filters.quality && filters.quality !== "all") {
+    if (!supabase) {
       return {
         tasks: [],
         total: 0,
         selectedTask: null,
         stats: emptyStats(),
-        error: "当前数据库未应用插画质检迁移，无法按质检状态筛选。请应用 supabase/migrations/013_illustration_quality_and_templates.sql。",
+        error: "未配置 Supabase service role，无法读取真实插画任务数据。",
       };
     }
 
-    const fallback = await queryTasks(filters, keyword, matchingScriptIds, false);
-    data = fallback.data;
-    error = fallback.error;
-    count = fallback.count;
-    hasQualityColumns = fallback.hasQualityColumns;
-  }
+    const keyword = normalizeKeyword(filters.q);
+    const matchingScriptIds = keyword ? await getMatchingScriptIds(keyword) : [];
 
-  if (error) {
+    let { data, error, count, hasQualityColumns } = await queryTasks(
+      filters,
+      keyword,
+      matchingScriptIds,
+      true,
+    );
+
+    if (error && isMissingQualityColumnError(error.message)) {
+      if (filters.quality && filters.quality !== "all") {
+        return {
+          tasks: [],
+          total: 0,
+          selectedTask: null,
+          stats: emptyStats(),
+          error: "当前数据库未应用插画质检迁移，无法按质检状态筛选。请应用 supabase/migrations/013_illustration_quality_and_templates.sql。",
+        };
+      }
+
+      const fallback = await queryTasks(filters, keyword, matchingScriptIds, false);
+      data = fallback.data;
+      error = fallback.error;
+      count = fallback.count;
+      hasQualityColumns = fallback.hasQualityColumns;
+    }
+
+    if (error) {
+      return {
+        tasks: [],
+        total: 0,
+        selectedTask: null,
+        stats: emptyStats(),
+        error: `读取插画任务失败：${error.message}`,
+      };
+    }
+
+    const rows = data ?? [];
+    const [tasks, rpcStats] = await Promise.all([
+      hydrateTasks(rows),
+      fetchStatsRpc(filters, keyword, matchingScriptIds),
+    ]);
+    const stats = rpcStats ?? composeStats(tasks);
+
     return {
-      tasks: [],
-      total: 0,
-      selectedTask: null,
-      stats: emptyStats(),
-      error: `读取插画任务失败：${error.message}`,
+      tasks,
+      total: count ?? tasks.length,
+      selectedTask: resolveSelectedTask(tasks, filters.selectedTaskId),
+      stats,
+      error: hasQualityColumns
+        ? undefined
+        : "当前数据库未应用插画质检迁移，质检状态已临时按「未检查」展示。",
     };
-  }
-
-  const rows = data ?? [];
-  const tasks = await hydrateTasks(rows);
-  const stats = await buildStats(filters, keyword, matchingScriptIds, tasks);
-
-  return {
-    tasks,
-    total: count ?? tasks.length,
-    selectedTask: resolveSelectedTask(tasks, filters.selectedTaskId),
-    stats,
-    error: hasQualityColumns
-      ? undefined
-      : "当前数据库未应用插画质检迁移，质检状态已临时按“未检查”展示。",
-  };
-}
+  },
+  ["admin-illustration-tasks"],
+  { revalidate: 15 },
+);
 
 async function queryTasks(
   filters: AdminIllustrationTaskFilters,
@@ -428,17 +437,13 @@ function resolveSelectedTask(tasks: AdminIllustrationTaskRow[], selectedTaskId?:
   return tasks.find((task) => task.id === selectedTaskId) ?? null;
 }
 
-async function buildStats(
+async function fetchStatsRpc(
   filters: AdminIllustrationTaskFilters,
   keyword: string,
   matchingScriptIds: string[],
-  currentPageTasks: AdminIllustrationTaskRow[],
-): Promise<AdminIllustrationTaskStats> {
-  // 优先调用 RPC admin_get_illustration_task_stats 一次 SQL 聚合返回 4 个指标，
-  // 替代原来 composeStats 基于当前页 20 条 reduce 的方案（统计值不准确）。
-  // RPC 缺失（migration 024 未应用）时回退到当前页 reduce，保证向前兼容。
+): Promise<AdminIllustrationTaskStats | null> {
   const supabase = createAdminSupabaseClient();
-  if (!supabase) return composeStats(currentPageTasks);
+  if (!supabase) return null;
 
   const rpcParams = {
     p_task_type: filters.taskType && filters.taskType !== "all" ? filters.taskType : null,
@@ -468,7 +473,7 @@ async function buildStats(
     );
   }
 
-  return composeStats(currentPageTasks);
+  return null;
 }
 
 function composeStats(tasks: AdminIllustrationTaskRow[]): AdminIllustrationTaskStats {

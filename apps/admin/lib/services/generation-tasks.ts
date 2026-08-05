@@ -1,5 +1,7 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
+
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export type GenerationTaskStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -110,67 +112,77 @@ type UserRecord = {
 const PAGE_SIZE = 20;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export async function getAdminGenerationTasks(
-  filters: AdminGenerationTaskFilters,
-): Promise<AdminGenerationTaskListResult> {
-  const supabase = createAdminSupabaseClient();
+export const getAdminGenerationTasks = unstable_cache(
+  async function (
+    filters: AdminGenerationTaskFilters,
+  ): Promise<AdminGenerationTaskListResult> {
+    const supabase = createAdminSupabaseClient();
 
-  if (!supabase) {
+    if (!supabase) {
+      return {
+        tasks: [],
+        total: 0,
+        selectedTask: null,
+        stats: { running: 0, completed: 0, failed: 0, chargedCredits: 0 },
+        taskTypes: [],
+        error: "未配置 Supabase service role，无法读取真实生成任务数据。",
+      };
+    }
+
+    const keyword = normalizeKeyword(filters.q);
+    const [matchedScriptIds, matchedAuthorScriptIds] = keyword
+      ? await Promise.all([
+          getMatchingScriptIds(keyword),
+          getMatchingAuthorScriptIds(keyword),
+        ])
+      : [[], []];
+    const matchedIds = [...new Set([...matchedScriptIds, ...matchedAuthorScriptIds])];
+    const page = Math.max(1, filters.page ?? 1);
+    const rangeFrom = (page - 1) * PAGE_SIZE;
+    const rangeTo = rangeFrom + PAGE_SIZE - 1;
+
+    let query = supabase
+      .from("generation_tasks")
+      .select(
+        "id,script_id,task_type,status,params,progress_percent,result_data,error_message,quality_status,retry_of_task_id,retry_count,max_retries,charged_credits,refund_credits,failure_reason,user_feedback,started_at,completed_at,created_at",
+        { count: "exact" },
+      )
+      .order("created_at", { ascending: false })
+      .range(rangeFrom, rangeTo);
+
+    query = applyFilters(query, filters, keyword, matchedIds);
+
+    const { data, error, count } = await query.returns<TaskRecord[]>();
+
+    if (error) {
+      return {
+        tasks: [],
+        total: 0,
+        selectedTask: null,
+        stats: { running: 0, completed: 0, failed: 0, chargedCredits: 0 },
+        taskTypes: [],
+        error: `读取生成任务列表失败：${error.message}`,
+      };
+    }
+
+    const [taskTypes, tasks, stats] = await Promise.all([
+      getTaskTypes(),
+      hydrateTasks(data ?? []),
+      buildStats(filters, keyword, matchedIds),
+    ]);
+    const selectedTask = await resolveSelectedTask(tasks, filters.selectedTaskId);
+
     return {
-      tasks: [],
-      total: 0,
-      selectedTask: null,
-      stats: { running: 0, completed: 0, failed: 0, chargedCredits: 0 },
-      taskTypes: [],
-      error: "未配置 Supabase service role，无法读取真实生成任务数据。",
+      tasks,
+      total: count ?? tasks.length,
+      selectedTask,
+      stats,
+      taskTypes,
     };
-  }
-
-  const keyword = normalizeKeyword(filters.q);
-  const matchedScriptIds = keyword ? await getMatchingScriptIds(keyword) : [];
-  const matchedAuthorScriptIds = keyword ? await getMatchingAuthorScriptIds(keyword) : [];
-  const matchedIds = [...new Set([...matchedScriptIds, ...matchedAuthorScriptIds])];
-  const page = Math.max(1, filters.page ?? 1);
-  const rangeFrom = (page - 1) * PAGE_SIZE;
-  const rangeTo = rangeFrom + PAGE_SIZE - 1;
-
-  let query = supabase
-    .from("generation_tasks")
-    .select(
-      "id,script_id,task_type,status,params,progress_percent,result_data,error_message,quality_status,retry_of_task_id,retry_count,max_retries,charged_credits,refund_credits,failure_reason,user_feedback,started_at,completed_at,created_at",
-      { count: "exact" },
-    )
-    .order("created_at", { ascending: false })
-    .range(rangeFrom, rangeTo);
-
-  query = applyFilters(query, filters, keyword, matchedIds);
-
-  const { data, error, count } = await query.returns<TaskRecord[]>();
-
-  if (error) {
-    return {
-      tasks: [],
-      total: 0,
-      selectedTask: null,
-      stats: { running: 0, completed: 0, failed: 0, chargedCredits: 0 },
-      taskTypes: [],
-      error: `读取生成任务列表失败：${error.message}`,
-    };
-  }
-
-  const taskTypes = await getTaskTypes();
-  const tasks = await hydrateTasks(data ?? []);
-  const selectedTask = await resolveSelectedTask(tasks, filters.selectedTaskId);
-  const stats = await buildStats(filters, keyword, matchedIds);
-
-  return {
-    tasks,
-    total: count ?? tasks.length,
-    selectedTask,
-    stats,
-    taskTypes,
-  };
-}
+  },
+  ["admin-generation-tasks"],
+  { revalidate: 15 },
+);
 
 type FilterableQuery<T> = {
   eq: (column: string, value: string | number | boolean) => T;
