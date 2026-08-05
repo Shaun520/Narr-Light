@@ -18,9 +18,10 @@
 'use client';
 
 import { use, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { RotateCcw, Download } from 'lucide-react';
+import { RotateCcw, Download, Eye, EyeOff, Maximize, Menu, X } from 'lucide-react';
 import RelationGraph, {
   type RelationLayout,
+  type RelationGraphRef,
 } from '@/components/visualization/relation-graph';
 import RelationDetailPanel from '@/components/visualization/relation-detail-panel';
 import RelationEditor from '@/components/visualization/relation-editor';
@@ -136,17 +137,22 @@ export default function RelationsPage({ params }: PageProps) {
   const [showLight, setShowLight] = useState(true);
   const [showDark, setShowDark] = useState(true);
   const [showLabel, setShowLabel] = useState(true);
+  const [playerView, setPlayerView] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('edit');
   const [editorEdge, setEditorEdge] = useState<RelationEdge | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
 
   const [graphData, setGraphData] = useState<RelationGraphData>({ nodes: [], edges: [] });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  // 关系图容器引用：用于导出
+  // 关系图容器引用：用于导出；图实例引用：用于重置/聚焦
   const graphContainerRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<RelationGraphRef>(null);
+  const hintTimerRef = useRef<number | null>(null);
 
   const loadRelations = async () => {
     setLoading(true);
@@ -181,6 +187,17 @@ export default function RelationsPage({ params }: PageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scriptId]);
 
+  // 初始操作提示
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      showHint('点击人物节点查看详情 · 拖拽调整位置 · 滚轮缩放');
+    }, 600);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  // 玩家视角下强制隐藏暗线
+  const effectiveShowDark = showDark && !playerView;
+
   // ===== 派生：根据 VIEW / FILTER 计算可见节点 =====
   const visibleData = useMemo(() => {
     // 1. 按 FILTER chip 筛选节点
@@ -211,7 +228,7 @@ export default function RelationsPage({ params }: PageProps) {
     let edges = graphData.edges.filter(
       (e) => nodeIds.has(e.source) && nodeIds.has(e.target),
     );
-    if (activeView === 'light') {
+    if (activeView === 'light' || playerView) {
       edges = edges.filter((e) => e.isVisible);
     } else if (activeView === 'dark') {
       edges = edges.filter((e) => e.isHiddenRelation);
@@ -219,7 +236,7 @@ export default function RelationsPage({ params }: PageProps) {
     // camp / affinity / all：保留全部边
 
     return { nodes, edges };
-  }, [graphData, activeFilter, activeView]);
+  }, [graphData, activeFilter, activeView, playerView]);
 
   // ===== 派生：选中节点对象 =====
   const selectedNode = useMemo<RelationNode | null>(() => {
@@ -264,9 +281,22 @@ export default function RelationsPage({ params }: PageProps) {
     };
   }, [graphData]);
 
+  // ===== 操作提示 =====
+  const showHint = (text: string) => {
+    setHint(text);
+    if (hintTimerRef.current) window.clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = window.setTimeout(() => {
+      setHint(null);
+    }, 2200);
+  };
+
   // ===== 事件：节点选中 =====
   const handleNodeSelect = (node: RelationNode) => {
     setSelectedNodeId(node.id);
+    // 移动端自动打开侧栏
+    if (window.innerWidth <= 768) {
+      setSidebarOpen(true);
+    }
   };
 
   // ===== 事件：边双击编辑 =====
@@ -315,6 +345,7 @@ export default function RelationsPage({ params }: PageProps) {
   // ===== 事件：AI 快捷指令 =====
   const handleQuickPrompt = (prompt: string) => {
     // TODO: 接入 AI 关系调整服务
+    showHint('已收到调整建议：' + prompt);
     console.log('[RelationsPage] AI quick prompt:', prompt);
   };
 
@@ -324,6 +355,38 @@ export default function RelationsPage({ params }: PageProps) {
     const target = activeLayout;
     setActiveLayout('force');
     setTimeout(() => setActiveLayout(target), 50);
+    showHint('已重置布局');
+  };
+
+  // ===== 事件：重置视图（缩放/平移） =====
+  const handleResetZoom = () => {
+    graphRef.current?.resetZoom();
+    showHint('已重置视图');
+  };
+
+  // ===== 事件：玩家视角切换 =====
+  const handleTogglePlayerView = () => {
+    const next = !playerView;
+    setPlayerView(next);
+    showHint(next ? '已切换为玩家视角，暗线关系已隐藏' : '已恢复完整视角');
+  };
+
+  // ===== 事件：聚焦节点 =====
+  const handleFocusNode = (nodeId: string) => {
+    graphRef.current?.focusNode(nodeId);
+    showHint('已聚焦到选中人物');
+  };
+
+  // ===== 事件：跳转剧本（当前仅提示） =====
+  const handleJumpToScript = (nodeId: string) => {
+    showHint('正在跳转至人物剧本原文位置…');
+    console.log('[RelationsPage] jump to script:', nodeId);
+  };
+
+  // ===== 事件：背景点击取消选中 =====
+  const handleBackgroundClick = () => {
+    setSelectedNodeId(null);
+    setSidebarOpen(false);
   };
 
   // ===== 事件：导出图谱 =====
@@ -357,7 +420,8 @@ export default function RelationsPage({ params }: PageProps) {
       <div className="page-head">
         <div>
           <h1 className="page-title">
-            人物关系图谱 <span className="seal">{graphData.nodes.length} 人</span>
+            人物关系图
+            <span className="seal">{graphData.nodes.length} 人</span>
           </h1>
           <div className="page-desc">
             {loading
@@ -380,6 +444,24 @@ export default function RelationsPage({ params }: PageProps) {
           <button
             type="button"
             className="btn btn-ghost btn-sm"
+            onClick={handleResetZoom}
+            title="重置视图"
+          >
+            <Maximize size={14} />
+            重置视图
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${playerView ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={handleTogglePlayerView}
+            title="隐藏玩家不可见的暗线关系"
+          >
+            {playerView ? <EyeOff size={14} /> : <Eye size={14} />}
+            玩家视角
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
             onClick={() => handleExport('pdf')}
             disabled={exporting}
             title="导出 PDF"
@@ -396,6 +478,15 @@ export default function RelationsPage({ params }: PageProps) {
           >
             <Download size={14} />
             导出图谱
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm rel-mobile-toggle"
+            onClick={() => setSidebarOpen(true)}
+            title="打开详情"
+            aria-label="打开详情侧栏"
+          >
+            <Menu size={14} />
           </button>
         </div>
       </div>
@@ -459,24 +550,28 @@ export default function RelationsPage({ params }: PageProps) {
           </div>
           <div className="rel-line-toggle">
             {LINE_TOGGLES.map((tgl) => {
+              const isDark = tgl.key === 'dark';
+              const disabled = isDark && playerView;
               const checked =
                 tgl.key === 'light'
                   ? showLight
-                  : tgl.key === 'dark'
+                  : isDark
                     ? showDark
                     : showLabel;
               const setChecked = (v: boolean) => {
+                if (disabled) return;
                 if (tgl.key === 'light') setShowLight(v);
-                else if (tgl.key === 'dark') setShowDark(v);
+                else if (isDark) setShowDark(v);
                 else setShowLabel(v);
               };
               return (
-                <div key={tgl.key} className="line-toggle">
+                <div key={tgl.key} className={`line-toggle ${disabled ? 'disabled' : ''}`}>
                   <span className="lt-label">{tgl.label}</span>
                   <label className="tgl">
                     <input
                       type="checkbox"
-                      checked={checked}
+                      checked={disabled ? false : checked}
+                      disabled={disabled}
                       onChange={(e) => setChecked(e.target.checked)}
                     />
                     <span className="slider" />
@@ -497,29 +592,70 @@ export default function RelationsPage({ params }: PageProps) {
           style={{ padding: 0, overflow: 'hidden', minHeight: 540, position: 'relative' }}
         >
           <RelationGraph
+            ref={graphRef}
             data={visibleData}
             layout={activeLayout}
             showLight={showLight}
-            showDark={showDark}
+            showDark={effectiveShowDark}
             showLabel={showLabel}
             selectedNodeId={selectedNodeId}
             onNodeSelect={handleNodeSelect}
             onEdgeEdit={handleEdgeEdit}
+            onBackgroundClick={handleBackgroundClick}
           />
+
+          {/* 图例 */}
+          <div className="rel-graph-legend" aria-label="关系图例">
+            <div className="rel-legend-title">关系图例</div>
+            <div className="rel-legend-item">
+              <span className="rel-legend-line light" />
+              <span>明线 · 玩家可见</span>
+            </div>
+            <div className="rel-legend-item">
+              <span className="rel-legend-line dark" />
+              <span>暗线 · 真相复盘</span>
+            </div>
+          </div>
+
+          {/* 操作提示 */}
+          <div className={`rel-graph-hint ${hint ? 'show' : ''}`} aria-live="polite">
+            {hint ?? '点击人物节点查看详情 · 拖拽调整位置 · 滚轮缩放'}
+          </div>
         </div>
 
         {/* 右：详情面板 */}
-        <RelationDetailPanel
-          node={selectedNode}
-          edges={graphData.edges}
-          nodes={graphData.nodes}
-          onRelationClick={(edge) => {
-            setEditorEdge(edge);
-            setEditorMode('edit');
-            setEditorOpen(true);
-          }}
-          onQuickPrompt={handleQuickPrompt}
-        />
+        <aside className={`side-panel ${sidebarOpen ? 'open' : ''}`}>
+          <button
+            type="button"
+            className="rel-sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="关闭详情"
+          >
+            <X size={16} />
+          </button>
+          <RelationDetailPanel
+            node={selectedNode}
+            edges={graphData.edges}
+            nodes={graphData.nodes}
+            onRelationClick={(edge) => {
+              setEditorEdge(edge);
+              setEditorMode('edit');
+              setEditorOpen(true);
+            }}
+            onQuickPrompt={handleQuickPrompt}
+            onJumpToScript={handleJumpToScript}
+            onFocusNode={handleFocusNode}
+          />
+        </aside>
+
+        {/* 移动端侧栏遮罩 */}
+        {sidebarOpen ? (
+          <div
+            className="rel-sidebar-backdrop"
+            role="presentation"
+            onClick={() => setSidebarOpen(false)}
+          />
+        ) : null}
       </div>
 
       {/* ===== 关系编辑 Modal ===== */}

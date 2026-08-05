@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>人物关系图 · 叙光 NARRLIGHT</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&family=Ma+Shan+Zheng&family=Noto+Serif+SC:wght@400;600;700&family=ZCOOL+XiaoWei&display=swap" rel="stylesheet">
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --paper: #eaddcf;
+      --paper-dark: #c9b8a4;
+      --ink: #1a120b;
+      --blood: #8a1c1c;
+      --blood-bright: #b91c1c;
+      --char: #2b2118;
+      --charcoal: #1f1f1f;
+      --sepia: #7a5c3a;
+      --noir-bg: #1c1915;
+      --noir-text: #e8e0d0;
+      --gold: #b8860b;
+      --gold-light: #d4a853;
+      --cyan: #2d6a4f;
+      --cyan-light: #40916c;
+      --purple: #5d2e5d;
+      --purple-light: #8b4d8b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #0d0a08;
+      color: var(--ink);
+      font-family: "Noto Serif SC", "Songti SC", "SimSun", serif;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+      background:
+        radial-gradient(circle at 15% 10%, rgba(138,28,28,0.10) 0%, transparent 30%),
+        radial-gradient(circle at 85% 90%, rgba(43,33,24,0.45) 0%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(234,221,207,0.06) 0%, transparent 55%),
+        repeating-linear-gradient(90deg, rgba(0,0,0,0.03) 0 1px, transparent 1px 4px),
+        repeating-linear-gradient(0deg, rgba(0,0,0,0.025) 0 1px, transparent 1px 4px),
+        linear-gradient(135deg, #eaddcf 0%, #d4c4b0 45%, #c9b8a4 100%);
+      filter: sepia(0.15) contrast(1.05);
+      position: relative;
+    }
+
+    .app::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.12'/%3E%3C/svg%3E");
+      opacity: 0.4;
+      pointer-events: none;
+      mix-blend-mode: multiply;
+      z-index: 0;
+    }
+
+    .app::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      box-shadow: inset 0 0 140px rgba(0,0,0,0.5), inset 0 0 50px rgba(74,36,24,0.3);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Header */
+    .header {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(180deg, rgba(26,18,11,0.92) 0%, rgba(26,18,11,0.82) 100%);
+      border-bottom: 1px solid rgba(122,92,58,0.45);
+      box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      border: 2px solid var(--gold-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Ma Shan Zheng", cursive;
+      font-size: 1.1rem;
+      color: var(--gold-light);
+      background: rgba(0,0,0,0.3);
+      box-shadow: 0 0 12px rgba(212,168,83,0.25);
+    }
+
+    .brand-title {
+      font-family: "ZCOOL XiaoWei", serif;
+      font-size: 1.25rem;
+      color: var(--paper);
+      letter-spacing: 0.08em;
+    }
+
+    .brand-title span {
+      color: var(--gold-light);
+      font-size: 0.85rem;
+      margin-left: 0.5rem;
+      opacity: 0.85;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.9rem;
+      border: 1px solid rgba(122,92,58,0.55);
+      border-radius: 4px;
+      background: rgba(26,18,11,0.65);
+      color: var(--paper);
+      font-family: "Noto Serif SC", serif;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      background: rgba(138,28,28,0.25);
+      border-color: rgba(212,168,83,0.6);
+      box-shadow: 0 0 10px rgba(138,28,28,0.2);
+    }
+
+    .btn.active {
+      background: rgba(138,28,28,0.45);
+      border-color: var(--blood-bright);
+      color: #fff;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .layout-group {
+      display: flex;
+      border: 1px solid rgba(122,92,58,0.55);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .layout-group .btn {
+      border: none;
+      border-radius: 0;
+      border-right: 1px solid rgba(122,92,58,0.35);
+    }
+
+    .layout-group .btn:last-child { border-right: none; }
+
+    /* Main content */
+    .main {
+      flex: 1;
+      display: flex;
+      position: relative;
+      z-index: 5;
+      overflow: hidden;
+    }
+
+    .canvas-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #graph {
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+    }
+
+    #graph:active { cursor: grabbing; }
+
+    /* Legend */
+    .legend {
+      position: absolute;
+      left: 1.25rem;
+      bottom: 1.25rem;
+      z-index: 20;
+      background: rgba(26,18,11,0.88);
+      border: 1px solid rgba(122,92,58,0.5);
+      border-radius: 6px;
+      padding: 0.75rem 1rem;
+      box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+      backdrop-filter: blur(6px);
+    }
+
+    .legend-title {
+      font-family: "ZCOOL XiaoWei", serif;
+      font-size: 0.85rem;
+      color: var(--gold-light);
+      margin-bottom: 0.5rem;
+      letter-spacing: 0.1em;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.8rem;
+      color: var(--paper);
+      margin: 0.35rem 0;
+    }
+
+    .legend-line {
+      width: 28px;
+      height: 2px;
+      position: relative;
+    }
+
+    .legend-line.public {
+      background: var(--cyan-light);
+      box-shadow: 0 0 4px rgba(64,145,108,0.5);
+    }
+
+    .legend-line.hidden {
+      background: transparent;
+      border-top: 2px dashed var(--purple-light);
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 340px;
+      flex-shrink: 0;
+      background: rgba(26,18,11,0.9);
+      border-left: 1px solid rgba(122,92,58,0.5);
+      box-shadow: -6px 0 24px rgba(0,0,0,0.3);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      transform: translateX(0);
+      transition: transform 0.3s ease;
+    }
+
+    .sidebar.empty {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .sidebar.empty .empty-state {
+      color: rgba(234,221,207,0.45);
+    }
+
+    .sidebar.empty .empty-state svg {
+      width: 64px;
+      height: 64px;
+      stroke: rgba(234,221,207,0.35);
+      fill: none;
+      stroke-width: 1.5;
+      margin-bottom: 1rem;
+    }
+
+    .sidebar-header {
+      padding: 1.25rem;
+      border-bottom: 1px solid rgba(122,92,58,0.4);
+      position: relative;
+    }
+
+    .sidebar-header::after {
+      content: "";
+      position: absolute;
+      bottom: -1px;
+      left: 1.25rem;
+      right: 1.25rem;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold-light), transparent);
+      opacity: 0.5;
+    }
+
+    .character-avatar {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      border: 2px solid var(--gold-light);
+      padding: 3px;
+      margin-bottom: 0.75rem;
+      box-shadow: 0 0 18px rgba(212,168,83,0.25);
+      background: #0d0a08;
+    }
+
+    .character-avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      filter: sepia(0.35) contrast(1.1) brightness(0.92);
+    }
+
+    .character-name {
+      font-family: "Ma Shan Zheng", cursive;
+      font-size: 1.6rem;
+      color: var(--paper);
+      margin-bottom: 0.25rem;
+    }
+
+    .character-role {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      background: rgba(138,28,28,0.25);
+      border: 1px solid rgba(138,28,28,0.5);
+      border-radius: 3px;
+      color: var(--gold-light);
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+    }
+
+    .sidebar-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.25rem;
+    }
+
+    .sidebar-body::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .sidebar-body::-webkit-scrollbar-track {
+      background: rgba(0,0,0,0.2);
+    }
+
+    .sidebar-body::-webkit-scrollbar-thumb {
+      background: var(--sepia);
+      border-radius: 3px;
+    }
+
+    .section-title {
+      font-family: "ZCOOL XiaoWei", serif;
+      font-size: 0.85rem;
+      color: var(--gold-light);
+      letter-spacing: 0.12em;
+      margin: 1.25rem 0 0.6rem;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid rgba(122,92,58,0.35);
+    }
+
+    .section-title:first-child { margin-top: 0; }
+
+    .info-row {
+      display: flex;
+      margin: 0.5rem 0;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+
+    .info-label {
+      color: rgba(234,221,207,0.55);
+      width: 4.5rem;
+      flex-shrink: 0;
+    }
+
+    .info-value {
+      color: var(--paper);
+      flex: 1;
+    }
+
+    .secret-box {
+      background: rgba(138,28,28,0.12);
+      border-left: 3px solid var(--blood);
+      padding: 0.75rem 1rem;
+      border-radius: 0 4px 4px 0;
+      margin-top: 0.5rem;
+    }
+
+    .secret-label {
+      font-size: 0.75rem;
+      color: var(--blood-bright);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.1em;
+    }
+
+    .secret-text {
+      font-size: 0.85rem;
+      color: var(--paper);
+      line-height: 1.6;
+    }
+
+    .relation-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .relation-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 0.75rem;
+      background: rgba(234,221,207,0.06);
+      border: 1px solid rgba(122,92,58,0.3);
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+
+    .relation-item:hover {
+      background: rgba(234,221,207,0.1);
+    }
+
+    .relation-target {
+      color: var(--paper);
+      font-size: 0.85rem;
+    }
+
+    .relation-type {
+      font-size: 0.75rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+    }
+
+    .relation-type.public {
+      background: rgba(64,145,108,0.2);
+      color: #7dd3c0;
+      border: 1px solid rgba(64,145,108,0.4);
+    }
+
+    .relation-type.hidden {
+      background: rgba(139,77,139,0.2);
+      color: #d8b4d8;
+      border: 1px solid rgba(139,77,139,0.4);
+    }
+
+    .sidebar-footer {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid rgba(122,92,58,0.35);
+      display: flex;
+      gap: 0.6rem;
+    }
+
+    .sidebar-footer .btn {
+      flex: 1;
+      justify-content: center;
+    }
+
+    /* Graph styles */
+    .node-circle {
+      cursor: pointer;
+      transition: filter 0.2s;
+    }
+
+    .node-circle:hover {
+      filter: drop-shadow(0 0 8px rgba(212,168,83,0.6));
+    }
+
+    .node-image {
+      clip-path: circle(50%);
+    }
+
+    .node-ring {
+      fill: none;
+      stroke: var(--gold-light);
+      stroke-width: 2px;
+      pointer-events: none;
+    }
+
+    .node-label {
+      font-family: "Noto Serif SC", serif;
+      font-size: 14px;
+      fill: var(--paper);
+      text-anchor: middle;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 6px rgba(0,0,0,0.8);
+      font-weight: 600;
+    }
+
+    .link {
+      fill: none;
+      stroke-width: 2px;
+      transition: stroke-opacity 0.2s;
+    }
+
+    .link.public {
+      stroke: var(--cyan-light);
+      stroke-opacity: 0.75;
+    }
+
+    .link.hidden {
+      stroke: var(--purple-light);
+      stroke-opacity: 0.7;
+      stroke-dasharray: 6, 4;
+    }
+
+    .link-label-bg {
+      fill: rgba(26,18,11,0.85);
+    }
+
+    .link-label {
+      font-family: "Noto Serif SC", serif;
+      font-size: 12px;
+      fill: rgba(234,221,207,0.85);
+      text-anchor: middle;
+      dominant-baseline: middle;
+      pointer-events: none;
+    }
+
+    .node.selected .node-ring {
+      stroke: var(--blood-bright);
+      stroke-width: 3px;
+      filter: drop-shadow(0 0 6px rgba(185,28,28,0.6));
+    }
+
+    .dimmed {
+      opacity: 0.15 !important;
+    }
+
+    /* Toast / hint */
+    .hint {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(26,18,11,0.9);
+      border: 1px solid rgba(122,92,58,0.5);
+      border-radius: 4px;
+      padding: 0.5rem 1rem;
+      color: var(--paper);
+      font-size: 0.8rem;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .hint.show { opacity: 1; }
+
+    /* Toggle switch */
+    .toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--paper);
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .toggle input { display: none; }
+
+    .toggle-switch {
+      width: 40px;
+      height: 22px;
+      background: rgba(122,92,58,0.4);
+      border-radius: 11px;
+      position: relative;
+      transition: background 0.2s;
+    }
+
+    .toggle-switch::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: var(--paper);
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-switch {
+      background: rgba(138,28,28,0.5);
+    }
+
+    .toggle input:checked + .toggle-switch::after {
+      transform: translateX(18px);
+      background: var(--gold-light);
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .sidebar { width: 300px; }
+    }
+
+    @media (max-width: 768px) {
+      .header { flex-wrap: wrap; gap: 0.75rem; padding: 0.6rem 1rem; }
+      .toolbar { width: 100%; justify-content: flex-start; overflow-x: auto; }
+      .sidebar {
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 85%;
+        max-width: 320px;
+        z-index: 40;
+        transform: translateX(100%);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-toggle {
+        display: inline-flex !important;
+      }
+    }
+
+    .mobile-toggle {
+      display: none;
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="brand-mark">叙</div>
+        <div class="brand-title">人物关系图 <span>RELATIONSHIP GRAPH</span></div>
+      </div>
+      <div class="toolbar">
+        <div class="layout-group">
+          <button class="btn active" data-layout="force" title="力导向布局">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M7 17h4m6 0h-4"/></svg>
+            力导向
+          </button>
+          <button class="btn" data-layout="radial" title="放射状布局">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/></svg>
+            放射状
+          </button>
+          <button class="btn" data-layout="tree" title="树状布局">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="6" cy="12" r="2"/><circle cx="18" cy="12" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/><path d="M12 7v3M8 12h8M6 14v3M18 14v3"/></svg>
+            树状
+          </button>
+        </div>
+        <label class="toggle" title="隐藏玩家不可见的暗线关系">
+          <input type="checkbox" id="playerView">
+          <span class="toggle-switch"></span>
+          玩家视角
+        </label>
+        <button class="btn" id="resetZoom" title="重置视图">
+          <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+        </button>
+        <button class="btn mobile-toggle" id="mobileToggle">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="main">
+      <div class="canvas-area">
+        <svg id="graph"></svg>
+        <div class="legend">
+          <div class="legend-title">关系图例</div>
+          <div class="legend-item">
+            <div class="legend-line public"></div>
+            <span>明线关系（玩家可见）</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-line hidden"></div>
+            <span>暗线关系（隐藏秘密）</span>
+          </div>
+        </div>
+        <div class="hint" id="hint">点击人物节点查看详情 · 拖拽调整位置 · 滚轮缩放</div>
+      </div>
+
+      <aside class="sidebar empty" id="sidebar">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <div style="font-size:0.9rem;">点击图谱中的人物节点</div>
+          <div style="font-size:0.8rem; margin-top:0.25rem; opacity:0.7;">查看身份、秘密与关系详情</div>
+        </div>
+        <div class="sidebar-content" id="sidebarContent" style="display:none; flex-direction:column; height:100%;"></div>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    // Sample data: 6-person murder mystery script
+    const characters = [
+      {
+        id: "shenmo",
+        name: "沈墨",
+        role: "私家侦探",
+        age: "34",
+        identity: "受雇调查周家秘案的私家侦探，表面冷静疏离，实则与周家有旧怨。",
+        secret: "十年前周世昌的商业并购导致沈墨父亲破产自杀，他接近周家另有目的。",
+        image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=200&h=200&fit=crop&crop=face"
+      },
+      {
+        id: "linwaner",
+        name: "林婉儿",
+        role: "周夫人",
+        age: "32",
+        identity: "周世昌的第二任妻子，出身戏曲世家，温婉端庄，是今晚宴会的主人。",
+        secret: "与周世昌的婚姻早已名存实亡，暗中筹划离婚并转移财产。",
+        image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop&crop=face"
+      },
+      {
+        id: "zhoushichang",
+        name: "周世昌",
+        role: "商界巨鳄",
+        age: "58",
+        identity: "周氏集团掌门人，今晚宴会的中心人物，传闻掌握许多人的秘密。",
+        secret: "手握数份足以毁掉在场众人的把柄，正准备公布一份惊人的遗嘱变更。",
+        image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face"
+      },
+      {
+        id: "sumanli",
+        name: "苏曼丽",
+        role: "当红影星",
+        age: "29",
+        identity: "周世昌的地下情人，今晚以嘉宾身份出席，风姿绰约却心事重重。",
+        secret: "怀有周世昌的孩子，欲借腹中胎儿要挟上位，却意外发现更大的阴谋。",
+        image: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop&crop=face"
+      },
+      {
+        id: "chenshaoye",
+        name: "陈少杰",
+        role: "纨绔少爷",
+        age: "26",
+        identity: "周世昌的继子，林婉儿与前夫所生，游手好闲却嗜赌成性。",
+        secret: "欠下巨额赌债，偷取周世昌书房保险柜中的机密文件准备倒卖。",
+        image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face"
+      },
+      {
+        id: "laoguanjia",
+        name: "福伯",
+        role: "老管家",
+        age: "65",
+        identity: "周家三十年老仆，沉默寡言，对周家上下的事了如指掌。",
+        secret: "暗中保护着周世昌原配夫人留下的血脉，对周世昌怀有刻骨恨意。",
+        image: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face"
+      }
+    ];
+
+    const relationships = [
+      { source: "zhoushichang", target: "linwaner", type: "public", label: "夫妻" },
+      { source: "linwaner", target: "chenshaoye", type: "public", label: "母子" },
+      { source: "zhoushichang", target: "chenshaoye", type: "public", label: "继父子" },
+      { source: "zhoushichang", target: "sumanli", type: "hidden", label: "地下情人" },
+      { source: "zhoushichang", target: "laoguanjia", type: "public", label: "主仆" },
+      { source: "shenmo", target: "zhoushichang", type: "hidden", label: "秘密仇人" },
+      { source: "shenmo", target: "linwaner", type: "public", label: "雇佣调查" },
+      { source: "chenshaoye", target: "sumanli", type: "hidden", label: "同谋" },
+      { source: "laoguanjia", target: "linwaner", type: "hidden", label: "暗中保护" },
+      { source: "sumanli", target: "linwaner", type: "hidden", label: "情敌" },
+      { source: "shenmo", target: "laoguanjia", type: "hidden", label: "旧识" }
+    ];
+
+    // Setup SVG
+    const container = document.querySelector('.canvas-area');
+    const svg = d3.select("#graph");
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    svg.attr("viewBox", [0, 0, width, height]);
+
+    // Zoom behavior
+    const g = svg.append("g");
+    const zoom = d3.zoom()
+      .scaleExtent([0.3, 3])
+      .on("zoom", (event) => g.attr("transform", event.transform));
+    svg.call(zoom);
+
+    // State
+    let currentLayout = 'force';
+    let playerView = false;
+    let selectedNodeId = null;
+
+    const nodeRadius = 50;
+    const linkDistance = 260;
+
+    // Prepare data
+    let nodes = characters.map(d => ({ ...d }));
+    let links = relationships.map(d => ({ ...d }));
+
+    // Force simulation
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(linkDistance))
+      .force("charge", d3.forceManyBody().strength(-800))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collide", d3.forceCollide().radius(nodeRadius + 15));
+
+    // Arrow markers
+    const defs = svg.append("defs");
+    defs.append("marker")
+      .attr("id", "arrow-public")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", nodeRadius + 10)
+      .attr("refY", 0)
+      .attr("markerWidth", 6)
+      .attr("markerHeight", 6)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#40916c");
+
+    defs.append("marker")
+      .attr("id", "arrow-hidden")
+      .attr("viewBox", "0 -5 10 10")
+      .attr("refX", nodeRadius + 10)
+      .attr("refY", 0)
+      .attr("markerWidth", 6)
+      .attr("markerHeight", 6)
+      .attr("orient", "auto")
+      .append("path")
+      .attr("d", "M0,-5L10,0L0,5")
+      .attr("fill", "#8b4d8b");
+
+    // Link group
+    const linkGroup = g.append("g").attr("class", "links");
+    const linkLabelGroup = g.append("g").attr("class", "link-labels");
+    const nodeGroup = g.append("g").attr("class", "nodes");
+
+    function renderLinks() {
+      const visibleLinks = playerView
+        ? links.filter(l => l.type === 'public')
+        : links;
+
+      const linkSel = linkGroup.selectAll("line.link")
+        .data(visibleLinks, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
+
+      linkSel.exit().remove();
+
+      const linkEnter = linkSel.enter().append("line")
+        .attr("class", d => `link ${d.type}`)
+        .attr("marker-end", d => `url(#arrow-${d.type})`);
+
+      return linkEnter.merge(linkSel);
+    }
+
+    function renderLinkLabels() {
+      const visibleLinks = playerView
+        ? links.filter(l => l.type === 'public')
+        : links;
+
+      const labelSel = linkLabelGroup.selectAll("g.link-label-group")
+        .data(visibleLinks, d => `${d.source.id || d.source}-${d.target.id || d.target}`);
+
+      labelSel.exit().remove();
+
+      const labelEnter = labelSel.enter().append("g")
+        .attr("class", "link-label-group");
+
+      labelEnter.append("rect")
+        .attr("class", "link-label-bg")
+        .attr("rx", 3)
+        .attr("ry", 3);
+
+      labelEnter.append("text")
+        .attr("class", "link-label")
+        .text(d => d.label);
+
+      return labelEnter.merge(labelSel);
+    }
+
+    function renderNodes() {
+      const nodeSel = nodeGroup.selectAll("g.node")
+        .data(nodes, d => d.id);
+
+      nodeSel.exit().remove();
+
+      const nodeEnter = nodeSel.enter().append("g")
+        .attr("class", "node")
+        .call(d3.drag()
+          .on("start", dragstarted)
+          .on("drag", dragged)
+          .on("end", dragended));
+
+      // Ring
+      nodeEnter.append("circle")
+        .attr("class", "node-ring")
+        .attr("r", nodeRadius + 4);
+
+      // Clip path for image
+      nodeEnter.append("defs").append("clipPath")
+        .attr("id", d => `clip-${d.id}`)
+        .append("circle")
+        .attr("r", nodeRadius);
+
+      // Image
+      nodeEnter.append("image")
+        .attr("class", "node-image node-circle")
+        .attr("xlink:href", d => d.image)
+        .attr("x", -nodeRadius)
+        .attr("y", -nodeRadius)
+        .attr("width", nodeRadius * 2)
+        .attr("height", nodeRadius * 2)
+        .attr("clip-path", d => `url(#clip-${d.id})`)
+        .on("click", (event, d) => selectNode(d))
+        .on("mouseover", function() { d3.select(this).transition().duration(200).attr("width", nodeRadius * 2.15).attr("height", nodeRadius * 2.15).attr("x", -nodeRadius * 1.075).attr("y", -nodeRadius * 1.075); })
+        .on("mouseout", function() { d3.select(this).transition().duration(200).attr("width", nodeRadius * 2).attr("height", nodeRadius * 2).attr("x", -nodeRadius).attr("y", -nodeRadius); });
+
+      // Label
+      nodeEnter.append("text")
+        .attr("class", "node-label")
+        .attr("dy", nodeRadius + 20)
+        .text(d => d.name);
+
+      return nodeEnter.merge(nodeSel);
+    }
+
+    let linkElements = renderLinks();
+    let linkLabelElements = renderLinkLabels();
+    let nodeElements = renderNodes();
+
+    simulation.on("tick", () => {
+      // Constrain nodes within bounds
+      nodes.forEach(d => {
+        d.x = Math.max(nodeRadius, Math.min(width - nodeRadius, d.x));
+        d.y = Math.max(nodeRadius, Math.min(height - nodeRadius, d.y));
+      });
+
+      linkGroup.selectAll("line.link")
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+      linkLabelGroup.selectAll("g.link-label-group")
+        .attr("transform", d => {
+          const x = (d.source.x + d.target.x) / 2;
+          const y = (d.source.y + d.target.y) / 2;
+          return `translate(${x}, ${y})`;
+        })
+        .each(function(d) {
+          const text = d3.select(this).select("text");
+          const bbox = text.node().getBBox();
+          d3.select(this).select("rect")
+            .attr("x", bbox.x - 4)
+            .attr("y", bbox.y - 2)
+            .attr("width", bbox.width + 8)
+            .attr("height", bbox.height + 4);
+        });
+
+      nodeGroup.selectAll("g.node")
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+    });
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+
+    function selectNode(d) {
+      selectedNodeId = d.id;
+      nodeGroup.selectAll("g.node").classed("selected", n => n.id === d.id);
+      renderSidebar(d);
+    }
+
+    function renderSidebar(d) {
+      const sidebar = document.getElementById('sidebar');
+      const emptyState = sidebar.querySelector('.empty-state');
+      const content = document.getElementById('sidebarContent');
+
+      emptyState.style.display = 'none';
+      content.style.display = 'flex';
+      sidebar.classList.remove('empty');
+
+      const related = links.filter(l =>
+        (l.source.id === d.id || l.source === d.id) ||
+        (l.target.id === d.id || l.target === d.id)
+      );
+
+      const relationItems = related.map(l => {
+        const isSource = (l.source.id === d.id || l.source === d.id);
+        const otherId = isSource ? (l.target.id || l.target) : (l.source.id || l.source);
+        const other = nodes.find(n => n.id === otherId);
+        const typeClass = l.type === 'public' ? 'public' : 'hidden';
+        const typeText = l.type === 'public' ? '明线' : '暗线';
+        return `
+          <div class="relation-item">
+            <span class="relation-target">${other ? other.name : otherId}</span>
+            <span class="relation-type ${typeClass}">${typeText} · ${l.label}</span>
+          </div>
+        `;
+      }).join('');
+
+      content.innerHTML = `
+        <div class="sidebar-header">
+          <div class="character-avatar">
+            <img src="${d.image}" alt="${d.name}" onerror="this.src='https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200&h=200&fit=crop&crop=face'">
+          </div>
+          <div class="character-name">${d.name}</div>
+          <span class="character-role">${d.role}</span>
+        </div>
+        <div class="sidebar-body">
+          <div class="section-title">基础信息</div>
+          <div class="info-row">
+            <span class="info-label">年龄</span>
+            <span class="info-value">${d.age} 岁</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">身份</span>
+            <span class="info-value">${d.identity}</span>
+          </div>
+
+          <div class="section-title">核心秘密</div>
+          <div class="secret-box">
+            <div class="secret-label">不可告人</div>
+            <div class="secret-text">${d.secret}</div>
+          </div>
+
+          <div class="section-title">关系网络</div>
+          <div class="relation-list">
+            ${relationItems || '<div class="info-value">暂无关系记录</div>'}
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <button class="btn" onclick="jumpToScript('${d.id}')">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            跳转剧本
+          </button>
+          <button class="btn" onclick="focusNode('${d.id}')">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            聚焦
+          </button>
+        </div>
+      `;
+
+      // Mobile open
+      if (window.innerWidth <= 768) {
+        sidebar.classList.add('open');
+      }
+    }
+
+    window.jumpToScript = function(id) {
+      showHint('正在跳转至人物剧本原文位置...');
+    };
+
+    window.focusNode = function(id) {
+      const node = nodes.find(n => n.id === id);
+      if (!node) return;
+      svg.transition().duration(750).call(
+        zoom.transform,
+        d3.zoomIdentity.translate(width / 2, height / 2).scale(1.5).translate(-node.x, -node.y)
+      );
+    };
+
+    function showHint(text) {
+      const hint = document.getElementById('hint');
+      hint.textContent = text;
+      hint.classList.add('show');
+      setTimeout(() => hint.classList.remove('show'), 2000);
+    }
+
+    // Layout switching
+    document.querySelectorAll('[data-layout]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-layout]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentLayout = btn.dataset.layout;
+        applyLayout(currentLayout);
+      });
+    });
+
+    function applyLayout(layout) {
+      simulation.stop();
+
+      if (layout === 'force') {
+        simulation
+          .force("link", d3.forceLink(links).id(d => d.id).distance(linkDistance))
+          .force("charge", d3.forceManyBody().strength(-800))
+          .force("center", d3.forceCenter(width / 2, height / 2))
+          .force("collide", d3.forceCollide().radius(nodeRadius + 15))
+          .force("r", null)
+          .force("x", null)
+          .force("y", null);
+      } else if (layout === 'radial') {
+        const radius = Math.min(width, height) * 0.32;
+        simulation
+          .force("link", null)
+          .force("charge", d3.forceManyBody().strength(-200))
+          .force("r", d3.forceRadial(radius, width / 2, height / 2).strength(0.8))
+          .force("collide", d3.forceCollide().radius(nodeRadius + 20))
+          .force("center", d3.forceCenter(width / 2, height / 2));
+      } else if (layout === 'tree') {
+        // Simple hierarchical layout: place root at top, others below
+        const root = nodes.find(n => n.id === 'zhoushichang') || nodes[0];
+        const levels = computeTreeLevels(root);
+        const levelHeight = height / (Math.max(...Object.values(levels)) + 1.5);
+        simulation
+          .force("link", d3.forceLink(links).id(d => d.id).distance(linkDistance * 0.8))
+          .force("charge", d3.forceManyBody().strength(-300))
+          .force("x", d3.forceX(d => {
+            const siblings = Object.entries(levels).filter(([_, l]) => l === levels[d.id]).map(([id]) => id);
+            const idx = siblings.indexOf(d.id);
+            const count = siblings.length;
+            return (width / (count + 1)) * (idx + 1);
+          }).strength(0.5))
+          .force("y", d3.forceY(d => levels[d.id] * levelHeight + levelHeight * 0.6).strength(0.5))
+          .force("collide", d3.forceCollide().radius(nodeRadius + 15))
+          .force("center", null)
+          .force("r", null);
+      }
+
+      simulation.alpha(1).restart();
+    }
+
+    function computeTreeLevels(root) {
+      const levels = { [root.id]: 0 };
+      const queue = [root.id];
+      const visited = new Set([root.id]);
+
+      while (queue.length) {
+        const current = queue.shift();
+        links.forEach(l => {
+          const neighborId = (l.source.id === current || l.source === current)
+            ? (l.target.id || l.target)
+            : ((l.target.id === current || l.target === current) ? (l.source.id || l.source) : null);
+          if (neighborId && !visited.has(neighborId)) {
+            visited.add(neighborId);
+            levels[neighborId] = levels[current] + 1;
+            queue.push(neighborId);
+          }
+        });
+      }
+
+      nodes.forEach(n => {
+        if (!(n.id in levels)) levels[n.id] = 2;
+      });
+
+      return levels;
+    }
+
+    // Player view toggle
+    document.getElementById('playerView').addEventListener('change', (e) => {
+      playerView = e.target.checked;
+      linkElements = renderLinks();
+      linkLabelElements = renderLinkLabels();
+      simulation.nodes(nodes);
+      simulation.force("link").links(links.filter(l => !playerView || l.type === 'public'));
+      simulation.alpha(0.3).restart();
+      showHint(playerView ? '已切换为玩家视角，暗线关系已隐藏' : '已恢复完整视角');
+    });
+
+    // Reset zoom
+    document.getElementById('resetZoom').addEventListener('click', () => {
+      svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+      simulation.alpha(0.5).restart();
+    });
+
+    // Mobile sidebar toggle
+    document.getElementById('mobileToggle').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      svg.attr("viewBox", [0, 0, newWidth, newHeight]);
+      simulation.force("center", d3.forceCenter(newWidth / 2, newHeight / 2));
+      simulation.alpha(0.3).restart();
+    });
+
+    // Initial hint
+    setTimeout(() => showHint('点击人物节点查看详情 · 拖拽调整位置 · 滚轮缩放'), 500);
+
+    // Click background to deselect
+    svg.on("click", (event) => {
+      if (event.target.tagName === 'svg') {
+        selectedNodeId = null;
+        nodeGroup.selectAll("g.node").classed("selected", false);
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.add('empty');
+        sidebar.querySelector('.empty-state').style.display = 'block';
+        document.getElementById('sidebarContent').style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -57,6 +57,8 @@ export interface RelationNode {
   radius: number;
   /** 原始排序 */
   sortOrder: number;
+  /** 角色头像（可选，未来可接入插画/上传） */
+  image?: string;
 }
 
 /** 关系边（图谱渲染用） */
@@ -111,6 +113,7 @@ export interface ScriptRelationInput {
     age?: number | null;
     personality?: string;
     sortOrder?: number;
+    image?: string;
   }>;
   /** 已存在的明线关系（可选，避免重复推断） */
   existingRelations?: ExistingRelationRow[];
@@ -235,6 +238,7 @@ export class RelationExtractor {
       color: getRoleColor(c.roleIdentity),
       radius: getRoleRadius(c.roleIdentity),
       sortOrder: c.sortOrder ?? 0,
+      image: c.image,
     }));
 
     // 明线：取已存在的可见关系
