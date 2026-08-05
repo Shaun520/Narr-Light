@@ -17,7 +17,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, use } from 'react';
-import { Eye, FlaskConical, RefreshCw } from 'lucide-react';
+import { Eye, FlaskConical, RefreshCw, ShieldCheck } from 'lucide-react';
 import { EmptyState } from '@/components/common';
 import { VulnItem } from '@/components/validation/vuln-item';
 import { DifficultyCard } from '@/components/validation/difficulty-card';
@@ -86,6 +86,8 @@ export default function ValidationPage({ params }: PageProps) {
   const [fixingIds, setFixingIds] = useState<Set<string>>(new Set());
   const [fixedIds, setFixedIds] = useState<Set<string>>(new Set());
   const [validatedAt, setValidatedAt] = useState<number>(Date.now() - 60 * 60 * 1000); // 1 小时前
+  // 全量校验是否通过（零问题），用于空态区分「已校验通过」与「尚未校验」
+  const [fullValidationPassed, setFullValidationPassed] = useState(false);
 
   // 剧本数据（后续由真实接口填充；当前保持 null）
   const [scriptData] = useState<GeneratedScriptJson | null>(null);
@@ -240,7 +242,7 @@ export default function ValidationPage({ params }: PageProps) {
   };
 
   /**
-   * 全量校验：触发 LOGIC(FULL) Edge Function，重跑伏笔 / 动机 / 诡计 / 时间线 / 难度。
+   * 全量校验：调用本地 /api/validate/logic，重跑伏笔 / 动机 / 诡计 / 时间线 / 难度。
    */
   const handleFullValidate = async () => {
     if (incrementalValidating || fullValidating) return;
@@ -248,7 +250,7 @@ export default function ValidationPage({ params }: PageProps) {
     showToast('全量校验中（伏笔 / 动机 / 诡计 / 时间线 / 难度）…', '◌');
 
     try {
-      const res = await fetch('/functions/validate/logic', {
+      const res = await fetch('/api/validate/logic', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scriptId, reportType: 'FULL' }),
@@ -261,8 +263,11 @@ export default function ValidationPage({ params }: PageProps) {
       setActiveSev('CRITICAL');
       const issueCount = (data.issues ?? []).length;
       const trickCount = (data.tricks ?? []).length;
+      setFullValidationPassed(issueCount === 0);
       showToast(
-        `全量校验完成 · 漏洞 ${issueCount} 条 · 叙诡 ${trickCount} 条 · 难度与叙诡识别已刷新`,
+        issueCount === 0
+          ? '全量校验完成 · 未发现逻辑漏洞，剧本逻辑闭环'
+          : `全量校验完成 · 漏洞 ${issueCount} 条 · 叙诡 ${trickCount} 条 · 难度与叙诡识别已刷新`,
         '✓',
       );
     } catch (err) {
@@ -352,13 +357,21 @@ export default function ValidationPage({ params }: PageProps) {
           </div>
 
           {currentList.length === 0 ? (
-            <EmptyState
-              Icon={FlaskConical}
-              title="暂无校验结果"
-              description="点击全量校验，AI 将分析伏笔回收、动机合理性与诡计可行性"
-              actionText="全量校验"
-              onAction={handleFullValidate}
-            />
+            fullValidationPassed ? (
+              <EmptyState
+                Icon={ShieldCheck}
+                title="逻辑校验通过"
+                description="未发现逻辑漏洞 · 伏笔 / 动机 / 诡计均已闭环，可放心继续创作"
+              />
+            ) : (
+              <EmptyState
+                Icon={FlaskConical}
+                title="暂无校验结果"
+                description="点击全量校验，AI 将分析伏笔回收、动机合理性与诡计可行性"
+                actionText="全量校验"
+                onAction={handleFullValidate}
+              />
+            )
           ) : (
             currentList.map((issue) => (
               <VulnItem
