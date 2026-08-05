@@ -3,11 +3,11 @@
  *
  * 路由：/editor/[scriptId]/timeline
  *
- * 严格参照原型 workbench2.html #view-timeline 结构：
+ * 严格参照原型 docs/prototype/workbench2.html #view-timeline 结构：
  *   1. .page-head         页头（标题 + 印章 + 导出报告 / 重新校验）
- *   2. .timeline-toolbar  角色筛选 .filter-chip + 幕次筛选 + "仅看冲突"开关
- *   3. .timeline-wrap     时间轴（TimelineChart 组件，可横滚 min-width 760px）
- *   4. .conflict-list     冲突列表（TimelineConflictList 组件，含"前往修正"按钮）
+ *   2. .timeline-toolbar  单行：角色筛选 .filter-chip · 「全部幕次」+「仅看冲突」
+ *   3. .timeline-wrap     水平泳道时间轴（TimelineChart 组件）
+ *   4. .conflict-list     冲突列表（含"前往修正"按钮）
  *
  * 数据加载：
  *   - 页面 mount 时 POST /api/validate { scriptId } 加载真实事件与冲突
@@ -17,15 +17,15 @@
  * 手动修正（T150）：
  *   - 点击冲突项"前往修正"按钮 → 跳转到编辑器对应位置
  *     URL: /editor/[scriptId]?act=N&char=charId&event=eventId
- *   - 点击"重新校验"按钮 → 重新调用 Edge Function 拉取最新数据
+ *   - 点击"重新校验"按钮 → 重新调用 /api/validate 拉取最新数据
  *
- * 客户端组件：管理 selectedChars / selectedAct / onlyConflicts 状态。
+ * 客户端组件：管理 selectedChars / onlyConflicts 状态。
  */
 'use client';
 
 import { use, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { RefreshCw, Download, Sparkles, X, MapPin, Users, Clock, AlertCircle, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Download, Sparkles } from 'lucide-react';
 import {
   TimelineChart,
   type TimelineLane,
@@ -40,9 +40,6 @@ import { computeTimeWindow } from '@/lib/validation/timeline/time-window';
 import { exportTimelineReportPdf } from '@/lib/export/timeline-report-pdf';
 import './timeline.css';
 
-/** 时间线维度：按角色 / 按地点 / 按幕次 */
-type TimelineDimension = 'character' | 'location' | 'act';
-
 interface PageProps {
   params: Promise<{ scriptId: string }>;
 }
@@ -54,23 +51,6 @@ interface CharacterMeta {
   id: string;
   name: string;
   color: string;
-}
-
-/** 幕次选项 */
-const ACT_OPTIONS: readonly (number | 'all')[] = ['all', 1, 2, 3];
-
-/** 幕次标签 */
-function actLabel(act: number | 'all'): string {
-  if (act === 'all') return '全部幕次';
-  const labels = ['第一幕', '第二幕', '第三幕'];
-  return labels[act - 1] ?? `第${act}幕`;
-}
-
-/** Toast 提示状态（对齐编辑器页 save-toast 模式） */
-interface ToastState {
-  visible: boolean;
-  message: string;
-  icon: string;
 }
 
 /** /api/validate 成功响应体 */
@@ -113,6 +93,13 @@ interface LoadTimelineResult {
   conflicts: ConflictItem[];
 }
 
+/** Toast 提示状态（对齐编辑器页 save-toast 模式） */
+interface ToastState {
+  visible: boolean;
+  message: string;
+  icon: string;
+}
+
 /**
  * 从 events 派生角色列表（按 characterId 聚合去重）。
  * 保留 events 中的原始 characterColor（已由 TimelineExtractor 按 sort_order 取模生成）。
@@ -137,11 +124,9 @@ export default function TimelinePage({ params }: PageProps) {
   const { scriptId } = use(params);
   const router = useRouter();
 
-  // 状态：选中角色（多选）/ 选中幕次（单选）/ 仅看冲突 / 维度切换
+  // 状态：选中角色（多选）/ 仅看冲突
   const [selectedChars, setSelectedChars] = useState<Set<string>>(new Set());
-  const [selectedAct, setSelectedAct] = useState<number | 'all'>('all');
   const [onlyConflicts, setOnlyConflicts] = useState(false);
-  const [dimension, setDimension] = useState<TimelineDimension>('character');
 
   // 事件数据 / 角色列表 / 剧本标题（由真实接口加载）
   const [events, setEvents] = useState<TimelineEvent[]>([]);
@@ -164,9 +149,6 @@ export default function TimelinePage({ params }: PageProps) {
     message: '',
     icon: '✓',
   });
-
-  // 选中查看详情的事件
-  const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(null);
 
   // ref 同步存储最新加载错误信息，供 handleRevalidate 即时读取
   const loadErrorRef = useRef<string | null>(null);
@@ -196,69 +178,20 @@ export default function TimelinePage({ params }: PageProps) {
     [conflicts],
   );
 
-  // 筛选后的事件（按维度裁剪：角色维度应用角色+幕次筛选；地点维度仅幕次；幕次维度不筛选）
-  const filteredEvents = useMemo(() => {
-    return events.filter((e) => {
-      // 按幕次维度：不应用任何筛选
-      if (dimension === 'act') return true;
-      // 按地点维度：只应用幕次筛选，忽略角色筛选
-      if (dimension === 'location') {
-        if (selectedAct !== 'all' && e.actOrder !== selectedAct) return false;
-        return true;
-      }
-      // 按角色维度：应用角色 + 幕次筛选
-      if (!selectedChars.has(e.characterId)) return false;
-      if (selectedAct !== 'all' && e.actOrder !== selectedAct) return false;
-      return true;
-    });
-  }, [events, dimension, selectedChars, selectedAct]);
-
   // 自适应时间窗口（从全量 events 计算，客户端安全）
   const timeWindow = useMemo(() => computeTimeWindow(events), [events]);
 
-  // 按维度分组成轨道
+  // 按角色分组成轨道（仅过滤选中角色）
   const lanes: TimelineLane[] = useMemo(() => {
-    // 按地点分组：从 filteredEvents 提取唯一 location（非空）
-    if (dimension === 'location') {
-      const locationMap = new Map<string, TimelineEvent[]>();
-      filteredEvents.forEach((e) => {
-        if (!e.location) return;
-        const arr = locationMap.get(e.location) ?? [];
-        arr.push(e);
-        locationMap.set(e.location, arr);
-      });
-      return Array.from(locationMap.entries()).map(([location, evts], idx) => ({
-        characterId: `loc-${idx}`,
-        characterName: location,
-        characterColor: '#666',
-        events: evts,
+    return characters
+      .filter((c) => selectedChars.has(c.id))
+      .map((c) => ({
+        characterId: c.id,
+        characterName: c.name,
+        characterColor: c.color,
+        events: events.filter((e) => e.characterId === c.id),
       }));
-    }
-    // 按幕次分组：从 filteredEvents 提取唯一 actOrder
-    if (dimension === 'act') {
-      const actMap = new Map<number, TimelineEvent[]>();
-      filteredEvents.forEach((e) => {
-        const arr = actMap.get(e.actOrder) ?? [];
-        arr.push(e);
-        actMap.set(e.actOrder, arr);
-      });
-      return Array.from(actMap.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([actOrder, evts]) => ({
-          characterId: `act-${actOrder}`,
-          characterName: `第${actOrder}幕`,
-          characterColor: '#666',
-          events: evts,
-        }));
-    }
-    // 按角色分组（现有逻辑）
-    return characters.filter((c) => selectedChars.has(c.id)).map((c) => ({
-      characterId: c.id,
-      characterName: c.name,
-      characterColor: c.color,
-      events: filteredEvents.filter((e) => e.characterId === c.id),
-    }));
-  }, [filteredEvents, characters, selectedChars, dimension]);
+  }, [events, characters, selectedChars]);
 
   /**
    * 加载时间线数据：POST /api/validate 携带 { scriptId }
@@ -369,11 +302,6 @@ export default function TimelinePage({ params }: PageProps) {
       }
       return next;
     });
-  };
-
-  /** 切换幕次筛选 */
-  const selectAct = (act: number | 'all') => {
-    setSelectedAct(act);
   };
 
   /** 切换仅看冲突 */
@@ -504,22 +432,6 @@ export default function TimelinePage({ params }: PageProps) {
     }
   };
 
-  /** 点击事件块：打开详情弹窗 */
-  const handleSelectEvent = (event: TimelineEvent) => {
-    setSelectedEvent(event);
-  };
-
-  /** 从详情弹窗跳转到编辑器对应位置 */
-  const handleEditEvent = (event: TimelineEvent) => {
-    const params = new URLSearchParams({
-      act: String(event.actOrder),
-      char: event.characterId,
-      event: event.id,
-      from: 'timeline',
-    });
-    router.push(`/editor/${scriptId}?${params.toString()}`);
-  };
-
   return (
     <div className="timeline-page">
       {/* ===== 页头 ===== */}
@@ -529,7 +441,7 @@ export default function TimelinePage({ params }: PageProps) {
             时间线校验 <span className="seal">P1</span>
           </h1>
           <div className="page-desc">
-            全角色时间轴可视化 · 自动标注时序冲突 · 支持手动修正
+            {'// 全角色时间轴可视化 · 自动标注时序冲突 · 支持手动修正'}
           </div>
         </div>
         <div className="page-actions">
@@ -549,82 +461,36 @@ export default function TimelinePage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* ===== 工具栏 ===== */}
+      {/* ===== 工具栏（单行 · 对齐原型） ===== */}
       <div className="timeline-toolbar">
-        {/* 第一行：维度切换 */}
-        <div className="tb-row">
-          <span className="tb-label">视图</span>
-          <div className="tl-dimension-switcher">
-            {([
-              { key: 'character', label: '按角色' },
-              { key: 'location', label: '按地点' },
-              { key: 'act', label: '按幕次' },
-            ] as const).map((opt) => (
-              <button
-                key={opt.key}
-                type="button"
-                className={`filter-chip ${dimension === opt.key ? 'active' : ''}`}
-                onClick={() => setDimension(opt.key)}
-              >
-                {opt.label}
-              </button>
-            ))}
+        <span className="tb-label">按角色筛选：</span>
+        {characters.map((c) => (
+          <div
+            key={c.id}
+            className={`filter-chip ${selectedChars.has(c.id) ? 'active' : ''}`}
+            role="button"
+            tabIndex={0}
+            onClick={() => toggleChar(c.id)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                toggleChar(c.id);
+              }
+            }}
+          >
+            <span className="swatch" style={{ background: c.color }} aria-hidden />
+            {c.name}
           </div>
-        </div>
+        ))}
 
-        {/* 第二行：角色筛选（仅按角色维度显示） */}
-        {dimension === 'character' && characters.length > 0 && (
-          <div className="tb-row">
-            <span className="tb-label">角色</span>
-            <div className="tl-char-filters">
-              {characters.map((c) => (
-                <div
-                  key={c.id}
-                  className={`filter-chip ${selectedChars.has(c.id) ? 'active' : ''}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => toggleChar(c.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      toggleChar(c.id);
-                    }
-                  }}
-                >
-                  <span className="swatch" style={{ background: c.color }} aria-hidden />
-                  {c.name}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* 第三行：幕次筛选 + 仅看冲突 */}
-        <div className="tb-row">
-          <span className="tb-label">过滤</span>
-          {/* 幕次筛选：按幕次维度下不显示 */}
-          {dimension !== 'act' &&
-            ACT_OPTIONS.map((act) => (
-              <div
-                key={String(act)}
-                className={`filter-chip ${selectedAct === act ? 'active' : ''}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => selectAct(act)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    selectAct(act);
-                  }
-                }}
-              >
-                {actLabel(act)}
-              </div>
-            ))}
+        {/* 右侧：全部幕次 + 仅看冲突 */}
+        <div className="tb-right">
+          <div className="filter-chip active" aria-label="全部幕次">全部幕次</div>
           <div
             className={`filter-chip chip-conflict ${onlyConflicts ? 'active' : ''}`}
             role="button"
             tabIndex={0}
+            aria-pressed={onlyConflicts}
             onClick={toggleOnlyConflicts}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
@@ -640,40 +506,34 @@ export default function TimelinePage({ params }: PageProps) {
 
       {/* ===== 主体：根据加载状态条件渲染 ===== */}
       {loading ? (
-        <div
-          className="timeline-wrap"
-          style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--sepia, #7a5c3a)' }}
-        >
-          正在加载时间线…
-        </div>
+        <div className="state-block">正在加载时间线…</div>
       ) : loadError ? (
-        <div className="timeline-wrap" style={{ textAlign: 'center', padding: '40px 20px' }}>
-          <p style={{ color: 'var(--blood, #8a1c1c)', marginBottom: '12px' }}>
-            加载失败：{loadError}
-          </p>
-          <button type="button" className="btn btn-ghost" onClick={handleRetry}>
-            <RefreshCw size={15} />
-            重试
-          </button>
+        <div className="state-block is-err">
+          <p>加载失败：{loadError}</p>
+          <div className="state-actions">
+            <button type="button" className="btn btn-ghost" onClick={handleRetry}>
+              <RefreshCw size={15} />
+              重试
+            </button>
+          </div>
         </div>
       ) : emptyHint ? (
-        <div
-          className="timeline-wrap"
-          style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--sepia, #7a5c3a)' }}
-        >
-          <p style={{ marginBottom: 16 }}>◇ {emptyHint}</p>
-          <button
-            type="button"
-            className={`btn btn-primary ${regenerating ? 'is-loading' : ''}`}
-            onClick={handleRegenerate}
-            disabled={regenerating}
-          >
-            <Sparkles size={15} />
-            {regenerating ? '生成中…' : '生成时间线结构'}
-          </button>
-          <p style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>
+        <div className="state-block">
+          <p>◇ {emptyHint}</p>
+          <div className="state-actions">
+            <button
+              type="button"
+              className={`btn btn-primary ${regenerating ? 'is-loading' : ''}`}
+              onClick={handleRegenerate}
+              disabled={regenerating}
+            >
+              <Sparkles size={15} />
+              {regenerating ? '生成中…' : '生成时间线结构'}
+            </button>
+          </div>
+          <div className="state-hint">
             将从「真相复盘」的 timeline_full 中识别时间点并按角色拆分结构化事件
-          </p>
+          </div>
         </div>
       ) : (
         <>
@@ -682,117 +542,12 @@ export default function TimelinePage({ params }: PageProps) {
             lanes={lanes}
             conflictEventIds={conflictEventIds}
             onlyConflicts={onlyConflicts}
-            onSelectEvent={handleSelectEvent}
             timeWindow={timeWindow}
           />
 
           {/* ===== 冲突列表 ===== */}
           <TimelineConflictList conflicts={conflicts} onJumpToFix={handleJumpToFix} />
         </>
-      )}
-
-      {/* ===== 事件详情弹窗 ===== */}
-      {selectedEvent && (
-        <div
-          className="tl-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setSelectedEvent(null);
-          }}
-        >
-          <div className="tl-modal">
-            <button
-              type="button"
-              className="tl-modal-close"
-              onClick={() => setSelectedEvent(null)}
-              aria-label="关闭"
-            >
-              <X size={16} />
-            </button>
-
-            <div className="tl-modal-head">
-              <span
-                className="tl-modal-color"
-                style={{ background: selectedEvent.characterColor }}
-              />
-              <div>
-                <h3>{selectedEvent.eventName}</h3>
-                <p>
-                  {selectedEvent.characterName} · 第{selectedEvent.actOrder}幕
-                  {selectedEvent.day && selectedEvent.day > 1 ? ` · 第${selectedEvent.day}天` : ''}
-                </p>
-              </div>
-            </div>
-
-            <div className="tl-modal-body">
-              <div className="tl-modal-row">
-                <Clock size={14} />
-                <span className="tl-modal-label">时间</span>
-                <span className="tl-modal-value">
-                  {selectedEvent.startTime} – {selectedEvent.endTime}
-                </span>
-              </div>
-
-              {selectedEvent.location && (
-                <div className="tl-modal-row">
-                  <MapPin size={14} />
-                  <span className="tl-modal-label">地点</span>
-                  <span className="tl-modal-value">{selectedEvent.location}</span>
-                </div>
-              )}
-
-              {selectedEvent.participants && selectedEvent.participants.length > 0 && (
-                <div className="tl-modal-row">
-                  <Users size={14} />
-                  <span className="tl-modal-label">参与人</span>
-                  <span className="tl-modal-value">
-                    {selectedEvent.participants.join('、')}
-                  </span>
-                </div>
-              )}
-
-              {selectedEvent.thread && (
-                <div className="tl-modal-row">
-                  <AlertCircle size={14} />
-                  <span className="tl-modal-label">线索线</span>
-                  <span className="tl-modal-value">{selectedEvent.thread}</span>
-                </div>
-              )}
-
-              {selectedEvent.description && (
-                <div className="tl-modal-desc">
-                  <span className="tl-modal-label">描述</span>
-                  <p>{selectedEvent.description}</p>
-                </div>
-              )}
-
-              {conflictEventIds.has(selectedEvent.id) && (
-                <div className="tl-modal-conflict">
-                  <AlertTriangle size={14} />
-                  <span>该事件存在时间线冲突，请在下方冲突列表中查看详情。</span>
-                </div>
-              )}
-            </div>
-
-            <div className="tl-modal-foot">
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setSelectedEvent(null)}
-              >
-                关闭
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => handleEditEvent(selectedEvent)}
-              >
-                前往编辑
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* ===== Toast ===== */}

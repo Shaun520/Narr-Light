@@ -1,10 +1,9 @@
 /* =========================================================
    时间线校验页样式（视图4 · #view-timeline）
    对齐 docs/prototype/workbench2.html 原型
-   包含：工具栏、筛选 chip、时间轴、轨道、事件块、
+   包含：页头、工具栏、水平泳道时间轴、事件块、
         冲突脉冲动画、冲突列表
    配色变量来自 globals.css (:root)
-   角色列宽 140px，轨道高度 86px，时间轴 min-width 760px 可横滚
    ========================================================= */
 
 /* ===================== 页头 ===================== */
@@ -52,7 +51,7 @@
   flex-shrink: 0;
 }
 
-/* ===================== 通用按钮（与 illustrations.css 一致，确保 Portal 外也生效） ===================== */
+/* ===================== 通用按钮 ===================== */
 .timeline-page .btn {
   display: inline-flex;
   align-items: center;
@@ -95,18 +94,25 @@
   padding: 6px 10px;
   font-size: 12px;
 }
+.timeline-page .btn.is-loading {
+  opacity: 0.7;
+  cursor: progress;
+  pointer-events: none;
+}
+.timeline-page .btn.is-loading svg {
+  animation: tlSpin 0.9s linear infinite;
+}
+@keyframes tlSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
 
-/* ===================== 工具栏 ===================== */
+/* ===================== 工具栏（单行 · 对齐原型）===================== */
 .timeline-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 18px;
-}
-.timeline-toolbar .tb-row {
-  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
 }
 .timeline-toolbar .tb-label {
@@ -116,14 +122,18 @@
   letter-spacing: 0.1em;
   white-space: nowrap;
 }
+.timeline-toolbar .tb-spacer {
+  flex: 1;
+  min-width: 8px;
+}
 .timeline-toolbar .tb-right {
-  margin-left: auto;
   display: flex;
   gap: 8px;
   align-items: center;
+  margin-left: auto;
 }
 
-/* 筛选 chip */
+/* 筛选 chip（对齐原型） */
 .filter-chip {
   padding: 5px 12px;
   font-size: 13px;
@@ -157,7 +167,7 @@
 .filter-chip.active .swatch {
   box-shadow: 0 0 0 2px rgba(243, 233, 219, 0.3);
 }
-/* 仅看冲突 chip */
+/* 仅看冲突 chip（原型：朱砂红边框） */
 .filter-chip.chip-conflict {
   color: var(--blood);
   border-color: var(--blood);
@@ -168,16 +178,185 @@
   border-color: var(--blood);
 }
 
-/* ===================== 垂直时间线容器 ===================== */
+/* ===================== 水平时间线容器 ===================== */
 .timeline-wrap {
   background: rgba(253, 248, 240, 0.7);
   border: 1px solid rgba(122, 92, 58, 0.22);
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: var(--shadow-sm);
-  padding: 24px 28px;
+  padding: 20px;
+  overflow-x: auto;
 }
 
-/* 空状态 */
+/* 2 列网格：120px 角色名 + 1fr 时间轴 */
+.tl-axis {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 0;
+  min-width: 760px;
+}
+
+/* 左上角空格 */
+.tl-corner {
+  /* 高度与 .tl-time-header 保持一致 */
+  height: 30px;
+}
+
+/* 时间刻度行（绝对定位标签） */
+.tl-time-header {
+  position: relative;
+  height: 30px;
+  border-bottom: 1px solid rgba(122, 92, 58, 0.3);
+  margin-bottom: 10px;
+}
+.tl-time-label {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-family: 'Courier Prime', monospace;
+  font-size: 10px;
+  color: var(--sepia);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+/* 第一/最后标签：贴边显示（避免被裁切） */
+.tl-time-label:first-child {
+  transform: translateX(0);
+}
+.tl-time-label:last-child {
+  transform: translateX(-100%);
+}
+
+/* 角色名单元格 */
+.tl-char {
+  padding: 14px 16px 14px 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-right: 1px solid rgba(122, 92, 58, 0.2);
+  font-family: 'Noto Serif SC', serif;
+}
+.tl-char .swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 时间轨道（高度由内联样式根据 sub-row 数量自适应） */
+.tl-track {
+  position: relative;
+  min-height: 58px;
+  border-bottom: 1px dashed rgba(122, 92, 58, 0.18);
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(12.5% - 1px),
+    rgba(122, 92, 58, 0.09) calc(12.5% - 1px),
+    rgba(122, 92, 58, 0.09) 12.5%
+  );
+}
+
+/* 事件块（绝对定位，top/left/width 由内联样式控制） */
+.tl-event {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 5px 10px;
+  color: var(--paper-light);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.16s, box-shadow 0.16s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 72px;
+  min-height: 32px;
+  box-sizing: border-box;
+}
+.tl-event .ev-name {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.tl-event .ev-time {
+  font-size: 10px;
+  font-family: 'Courier Prime', monospace;
+  opacity: 0.82;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 宽度不足时只显示事件名，隐藏时间（避免挤成竖条） */
+.tl-event.is-narrow {
+  padding: 5px 7px;
+  min-width: 48px;
+}
+.tl-event.is-narrow .ev-time {
+  display: none;
+}
+.tl-event.is-narrow .ev-name {
+  font-size: 10px;
+}
+
+/* Hover tooltip（对齐原型 data-tip ::after） */
+.tl-event::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: var(--paper-light);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s;
+  z-index: 20;
+  font-family: 'Noto Serif SC', serif;
+  box-shadow: var(--shadow-md);
+}
+.tl-event:hover::after {
+  opacity: 1;
+}
+.tl-event:hover {
+  transform: translateY(calc(-50% - 2px));
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+
+/* 冲突态：朱砂红脉冲边框 */
+.tl-event.conflict {
+  box-shadow: 0 0 0 2px var(--blood), 0 2px 8px rgba(138, 28, 28, 0.5);
+  animation: conflictPulse 1.6s infinite;
+}
+.tl-event.conflict:hover {
+  box-shadow: 0 0 0 2px var(--blood), 0 4px 12px rgba(138, 28, 28, 0.6);
+  animation: none;
+  transform: translateY(calc(-50% - 2px));
+}
+@keyframes conflictPulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--blood), 0 2px 8px rgba(138, 28, 28, 0.5); }
+  50%      { box-shadow: 0 0 0 4px var(--blood), 0 2px 12px rgba(138, 28, 28, 0.7); }
+}
+
+/* ===================== 空状态 ===================== */
 .timeline-empty {
   min-height: 240px;
   display: flex;
@@ -211,205 +390,13 @@
   font-family: 'Courier Prime', monospace;
 }
 
-/* ===================== 垂直时间线：按天分节 ===================== */
-.vertical-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.vt-day-section {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.vt-day-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.vt-day-badge {
-  font-family: 'Noto Serif SC', serif;
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--sepia);
-  background: rgba(122, 92, 58, 0.1);
-  padding: 4px 12px;
-  border-radius: 12px;
-  white-space: nowrap;
-}
-.vt-day-line {
-  flex: 1;
-  height: 1px;
-  background: rgba(122, 92, 58, 0.2);
-}
-
-/* ===================== 事件卡片 ===================== */
-.vt-events {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding-left: 8px;
-}
-.vt-event-card {
-  display: flex;
-  align-items: stretch;
-  gap: 14px;
-  cursor: pointer;
-  transition: transform 0.16s;
-}
-.vt-event-card:hover {
-  transform: translateX(3px);
-}
-
-/* 左侧时间轴 */
-.vt-event-axis {
-  position: relative;
-  width: 56px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 10px;
-}
-.vt-axis-line {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: rgba(122, 92, 58, 0.18);
-  transform: translateX(-50%);
-}
-.vt-event-node {
-  position: relative;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid;
-  box-shadow: 0 0 0 3px var(--paper-lighter);
-  z-index: 1;
-}
-.vt-event-time {
-  margin-top: 6px;
-  font-family: 'Courier Prime', monospace;
-  font-size: 11px;
-  color: var(--sepia);
-  letter-spacing: 0.02em;
-}
-
-/* 右侧内容卡片 */
-.vt-event-body {
-  flex: 1;
-  min-width: 0;
-  background: var(--paper-lighter);
-  border: 1px solid rgba(122, 92, 58, 0.15);
-  border-left-width: 4px;
-  border-radius: 6px;
-  padding: 14px 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  transition: box-shadow 0.16s, background 0.16s;
-}
-.vt-event-card:hover .vt-event-body {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  background: #fff;
-}
-
-/* 冲突状态 */
-.vt-event-card.conflict .vt-event-body {
-  border-color: rgba(138, 28, 28, 0.35);
-  border-left-color: var(--blood) !important;
-  background: rgba(138, 28, 28, 0.04);
-}
-.vt-event-card.conflict:hover .vt-event-body {
-  background: rgba(138, 28, 28, 0.07);
-}
-
-/* 卡片标题行 */
-.vt-event-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
-}
-.vt-char-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.vt-char-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
-  font-family: 'Noto Serif SC', serif;
-}
-.vt-type-tag {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 7px;
-  border: 1px solid;
-  border-radius: 10px;
-  font-family: 'Noto Serif SC', serif;
-}
-.vt-conflict-tag {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 10px;
-  background: var(--blood);
-  color: var(--paper-light);
-  font-family: 'Courier Prime', monospace;
-  letter-spacing: 0.04em;
-}
-
-/* 事件名 */
-.vt-event-name {
-  margin: 0 0 10px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--ink);
-  font-family: 'Noto Serif SC', serif;
-  line-height: 1.4;
-}
-
-/* 元信息行 */
-.vt-event-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--sepia);
-  font-family: 'Courier Prime', monospace;
-}
-.vt-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.vt-location {
-  color: var(--info);
-}
-.vt-thread {
-  color: var(--gold);
-}
-
-/* 描述 */
-.vt-event-desc {
-  margin: 12px 0 0;
-  padding-top: 12px;
-  border-top: 1px dashed rgba(122, 92, 58, 0.15);
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--char);
-  font-family: 'Noto Serif SC', serif;
-}
-
 /* ===================== 冲突列表 ===================== */
 .conflict-list {
-  margin-top: 18px;
+  margin-top: 22px;
 }
 .conflict-list .card-head {
+  border: none;
+  padding: 0 0 12px;
   display: flex;
   align-items: center;
 }
@@ -429,7 +416,7 @@
   color: var(--blood);
 }
 
-/* 冲突项 */
+/* 冲突项（对齐原型） */
 .conflict-item {
   display: flex;
   align-items: flex-start;
@@ -567,224 +554,51 @@
   font-weight: 700;
 }
 
-/* ===================== 校验中按钮态 ===================== */
-.timeline-page .btn.is-loading {
-  opacity: 0.7;
-  cursor: progress;
-  pointer-events: none;
-}
-.timeline-page .btn.is-loading svg {
-  animation: tlSpin 0.9s linear infinite;
-}
-@keyframes tlSpin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-/* ===================== Toast ===================== */
-.timeline-page .tl-toast {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  z-index: 9999;
-  padding: 12px 20px;
-  background: var(--noir-bg, #1a120b);
-  color: var(--paper-light, #fdf8f0);
-  border: 1px solid var(--gold, #b08d57);
+/* ===================== 加载 / 错误 / 空态卡片 ===================== */
+.timeline-page .state-block {
+  background: rgba(253, 248, 240, 0.7);
+  border: 1px solid rgba(122, 92, 58, 0.22);
   border-radius: 4px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
-  font-family: 'Noto Serif SC', serif;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  transform: translateY(20px);
-  opacity: 0;
-  transition: all 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
-  pointer-events: none;
-  max-width: 360px;
-}
-.timeline-page .tl-toast.show {
-  transform: translateY(0);
-  opacity: 1;
-}
-.timeline-page .tl-toast .toast-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--ok, #4a7c59);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--paper-light, #fdf8f0);
-  font-size: 14px;
-  flex-shrink: 0;
-}
-.timeline-page .tl-toast.t-err .toast-icon {
-  background: var(--blood, #8a1c1c);
-}
-.timeline-page .tl-toast.t-warn .toast-icon {
-  background: var(--warn, #b8841c);
-}
-
-/* ===================== 工具栏布局优化 ===================== */
-.timeline-toolbar .tb-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-.tl-dimension-switcher,
-.tl-char-filters {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-/* ===================== 事件详情弹窗 ===================== */
-.tl-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(26, 18, 11, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  padding: 20px;
-}
-.tl-modal {
-  position: relative;
-  background: var(--paper-lighter);
-  border: 1px solid rgba(122, 92, 58, 0.25);
-  border-radius: 6px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
-  width: 100%;
-  max-width: 460px;
-  max-height: 80vh;
-  overflow-y: auto;
+  box-shadow: var(--shadow-sm);
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--sepia);
   font-family: 'Noto Serif SC', serif;
 }
-.tl-modal-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
-  color: var(--sepia);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.16s;
-}
-.tl-modal-close:hover {
-  background: rgba(122, 92, 58, 0.12);
-  color: var(--ink);
-}
-.tl-modal-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid rgba(122, 92, 58, 0.18);
-}
-.tl-modal-color {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.tl-modal-head h3 {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--ink);
-}
-.tl-modal-head p {
-  margin: 4px 0 0;
-  font-size: 12px;
-  color: var(--sepia);
-}
-.tl-modal-body {
-  padding: 16px 20px;
-}
-.tl-modal-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px dashed rgba(122, 92, 58, 0.15);
-  font-size: 13px;
-}
-.tl-modal-row:last-of-type {
-  border-bottom: none;
-}
-.tl-modal-row svg {
-  color: var(--sepia-soft);
-  flex-shrink: 0;
-}
-.tl-modal-label {
-  color: var(--sepia-soft);
-  width: 56px;
-  flex-shrink: 0;
-}
-.tl-modal-value {
-  color: var(--ink);
-  flex: 1;
-  min-width: 0;
-  word-break: break-word;
-}
-.tl-modal-desc {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed rgba(122, 92, 58, 0.15);
-}
-.tl-modal-desc .tl-modal-label {
-  display: block;
-  margin-bottom: 6px;
-  width: auto;
-}
-.tl-modal-desc p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--char);
-}
-.tl-modal-conflict {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 10px 12px;
-  background: rgba(138, 28, 28, 0.08);
-  border: 1px solid rgba(138, 28, 28, 0.25);
-  border-radius: 4px;
-  font-size: 12px;
+.timeline-page .state-block.is-err {
   color: var(--blood);
 }
-.tl-modal-conflict svg {
-  flex-shrink: 0;
-  margin-top: 1px;
+.timeline-page .state-block .state-hint {
+  margin-top: 12px;
+  font-size: 12px;
+  opacity: 0.7;
+  color: var(--sepia);
 }
-.tl-modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 12px 20px 16px;
-  border-top: 1px solid rgba(122, 92, 58, 0.12);
+.timeline-page .state-block .state-actions {
+  margin-top: 14px;
+  display: inline-flex;
+  gap: 8px;
 }
 
 /* ===================== 响应式 ===================== */
 @media (max-width: 900px) {
   .timeline-toolbar {
-    gap: 8px;
+    gap: 10px;
   }
-  .timeline-toolbar .tb-left,
   .timeline-toolbar .tb-right {
     width: 100%;
+  }
+  .tl-axis {
+    grid-template-columns: 96px 1fr;
+  }
+  .tl-char {
+    padding: 10px 8px 10px 0;
+    font-size: 12px;
+  }
+  .tl-event .ev-name {
+    font-size: 10px;
+  }
+  .tl-event .ev-time {
+    font-size: 8px;
   }
 }
