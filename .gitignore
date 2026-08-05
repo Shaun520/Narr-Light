@@ -31,3 +31,6 @@ backend/uploads/
 docs/code-review
 docs/script-example
 tmp/
+.claude/
+promo-video/
+.firecrawl/
