@@ -100,6 +100,7 @@ export class DeepSeekProvider implements AIProvider {
             messages,
             temperature: options.temperature ?? 0.7,
             max_tokens: options.maxTokens,
+            ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
             stream: false,
           }),
           signal,
@@ -154,6 +155,7 @@ export class DeepSeekProvider implements AIProvider {
           messages,
           temperature: options.temperature ?? 0.7,
           max_tokens: options.maxTokens,
+          ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
           stream: true,
         }),
         signal,
@@ -188,6 +190,8 @@ export class DeepSeekProvider implements AIProvider {
             if (chunk) {
               if (chunk.content) {
                 options.onChunk?.(chunk.content);
+              }
+              if (chunk.content || chunk.reasoning) {
                 yield chunk;
               }
               if (chunk.done) {
@@ -284,10 +288,13 @@ export class DeepSeekProvider implements AIProvider {
     }
     try {
       const json = JSON.parse(data) as DeepSeekStreamChunk;
-      const content = json.choices?.[0]?.delta?.content ?? "";
-      const finishReason = json.choices?.[0]?.finish_reason;
+      const choice = json.choices?.[0];
+      const content = choice?.delta?.content ?? "";
+      const reasoning = choice?.delta?.reasoning_content ?? "";
+      const finishReason = choice?.finish_reason;
       return {
         content,
+        reasoning: reasoning || undefined,
         done: finishReason === "stop",
         progress: finishReason === "stop" ? 1 : undefined,
       };
@@ -351,7 +358,7 @@ interface DeepSeekChatResponse {
 
 interface DeepSeekStreamChunk {
   choices?: Array<{
-    delta?: { content?: string };
+    delta?: { content?: string; reasoning_content?: string };
     finish_reason?: string | null;
   }>;
 }

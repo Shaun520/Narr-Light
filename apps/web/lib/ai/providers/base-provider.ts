@@ -20,6 +20,8 @@ export interface GenerateOptions {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  /** reasoning effort for thinking-mode models (low / high / max); provider default applies when omitted */
+  reasoningEffort?: "low" | "high" | "max";
   stream?: boolean;
   onChunk?: (chunk: string) => void; // 流式回调
   signal?: AbortSignal; // 中断信号
@@ -30,6 +32,8 @@ export interface GenerateOptions {
  */
 export interface StreamChunk {
   content: string;
+  /** chain-of-thought text from reasoning models; display only */
+  reasoning?: string;
   done: boolean;
   progress?: number; // 0-1
 }

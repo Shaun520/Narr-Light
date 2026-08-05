@@ -691,6 +691,24 @@
   word-break: break-all;
   color: var(--ink-soft, #666);
 }
+.phased-stream-reasoning {
+  margin: 4px 0 0 24px;
+  padding: 8px;
+  background: rgba(90, 138, 106, 0.06);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ink-soft, #888);
+}
+.phased-stream-reasoning-label {
+  color: var(--jade, #5a8a6a);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
 .phased-stream-empty {
   margin: 4px 0 0 32px;
   padding: 8px;

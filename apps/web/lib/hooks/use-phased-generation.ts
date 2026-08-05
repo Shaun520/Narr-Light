@@ -57,6 +57,8 @@ export interface PhaseState {
   status: PhaseStatus;
   /** 濞翠礁绱＄槐顖溞濋惃鍕瀮閺堫剙鍞寸€圭櫢绱欓悽銊ょ艾 UI 妫板嫯顫嶉敍?*/
   streamedText: string;
+  /** chain-of-thought preview text (reasoning_content), display only */
+  reasoningText: string;
   /** 鏉╂稑瀹抽惂鎯у瀻濮?0-100 */
   percent: number;
   /** 闁挎瑨顕ゆ穱鈩冧紖閿涘澃tatus=failed 閺冭绱?*/
@@ -188,6 +190,7 @@ function createInitialPhases(): Record<PhaseId, PhaseState> {
       id,
       status: 'pending',
       streamedText: '',
+      reasoningText: '',
       percent: 0,
     };
   }
@@ -249,6 +252,7 @@ function updateSubItem(
 
 /** 閺嶈宓?data 鐎涙顔岄幒銊︽焽 SSE 娴滃娆㈢猾璇茬€烽敍鍫濈秼 event 鐎涙顔岀紓鍝勩亼閺冭绱?*/
 function inferSSEEventType(parsed: Record<string, unknown>): string | undefined {
+  if ('reasoning' in parsed) return 'reasoning';
   if ('chunk' in parsed || 'text' in parsed || 'content' in parsed) return 'chunk';
   if ('percent' in parsed) return 'progress';
   if ('result' in parsed || 'storyBible' in parsed) return 'completed';
@@ -323,6 +327,19 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
               return updatePhase(prev, phaseId, {
                 streamedText,
                 percent: estimateStreamingPercent(phase.percent, streamedText.length),
+              });
+            });
+          }
+          break;
+        }
+
+        case 'reasoning': {
+          const reasoning = (parsed.reasoning as string) || '';
+          if (reasoning) {
+            setState((prev) => {
+              const phase = prev.phases[phaseId];
+              return updatePhase(prev, phaseId, {
+                reasoningText: phase.reasoningText + reasoning,
               });
             });
           }
@@ -409,6 +426,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           status: 'running',
           error: undefined,
           streamedText: '',
+          reasoningText: '',
           percent: 0,
         }),
       );
@@ -1038,6 +1056,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           status: 'pending',
           error: undefined,
           streamedText: '',
+          reasoningText: '',
           percent: 0,
         }),
         orchestrationStatus: 'running',
@@ -1070,6 +1089,7 @@ export function usePhasedGeneration(): UsePhasedGenerationResult {
           status: 'pending',
           error: undefined,
           streamedText: '',
+          reasoningText: '',
           percent: 0,
         }),
         orchestrationStatus: 'running',

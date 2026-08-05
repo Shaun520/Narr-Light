@@ -174,8 +174,9 @@ function PhaseRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const hasStreamText = phase.streamedText.length > 0;
+  const hasReasoningText = phase.reasoningText.length > 0;
   const hasSubItems = phase.subItems && phase.subItems.length > 0;
-  const canExpand = phase.status === 'running' || hasStreamText || hasSubItems || Boolean(phase.error);
+  const canExpand = phase.status === 'running' || hasStreamText || hasReasoningText || hasSubItems || Boolean(phase.error);
 
   return (
     <div className="phased-phase-row">
@@ -270,13 +271,22 @@ function PhaseRow({
         )
       )}
 
+      {expanded && hasReasoningText && (
+        <div className="phased-stream-reasoning">
+          {phase.status === 'running' && (
+            <div className="phased-stream-reasoning-label">思考中…</div>
+          )}
+          {phase.reasoningText.slice(-2000)}
+        </div>
+      )}
+
       {expanded && hasStreamText && (
         <pre className="phased-stream-preview">
           {phase.streamedText.slice(-2000)}
         </pre>
       )}
 
-      {expanded && phase.status === 'running' && !hasStreamText && !hasSubItems && (
+      {expanded && phase.status === 'running' && !hasStreamText && !hasReasoningText && !hasSubItems && (
         <div className="phased-stream-empty">正在等待模型返回内容...</div>
       )}
     </div>

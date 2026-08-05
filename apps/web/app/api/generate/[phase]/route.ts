@@ -919,6 +919,7 @@ async function runJsonPhase<T>(
           },
         })) {
           if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (chunk.reasoning) controller.enqueue(encodeSse(encoder, 'reasoning', { reasoning: chunk.reasoning }));
           if (typeof chunk.progress === 'number') {
             controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
           }
@@ -1173,6 +1174,7 @@ async function handleCharacterProfiles(body: GenerateRequestBody): Promise<Respo
           },
         })) {
           if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (chunk.reasoning) controller.enqueue(encodeSse(encoder, 'reasoning', { reasoning: chunk.reasoning }));
           if (typeof chunk.progress === 'number') {
             controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
           }
@@ -1270,6 +1272,7 @@ async function handleActStructure(body: GenerateRequestBody): Promise<Response> 
           },
         })) {
           if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (chunk.reasoning) controller.enqueue(encodeSse(encoder, 'reasoning', { reasoning: chunk.reasoning }));
           if (typeof chunk.progress === 'number') {
             controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
           }
@@ -1354,7 +1357,9 @@ function countCharacterScriptWords(json: CharacterScriptJson): number {
 }
 
 function resolveCharacterScriptMaxTokens(minWords: number): number {
-  return Math.min(32000, Math.max(8000, Math.ceil(minWords * 2.4)));
+  // V4-Flash thinking mode: max_tokens is the shared budget for reasoning + content,
+  // so keep headroom for reasoning tokens (reasoning_effort low for character scripts).
+  return Math.min(64000, Math.max(12000, Math.ceil(minWords * 4)));
 }
 
 async function expandCharacterScriptToMinimum(args: {
@@ -1382,6 +1387,7 @@ async function expandCharacterScriptToMinimum(args: {
     systemPrompt: '你是剧本杀玩家剧本扩写编辑。只返回合法 JSON，不要 markdown，不要解释。',
     prompt,
     temperature: 0.5,
+    reasoningEffort: "low",
     maxTokens: resolveCharacterScriptMaxTokens(minWords),
   });
 
@@ -1955,12 +1961,14 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
           prompt: userPrompt,
           systemPrompt,
           temperature: 0.7,
+          reasoningEffort: "low",
           maxTokens: resolveCharacterScriptMaxTokens(spec.minWordsPerCharacterScriptPiece),
           onChunk: (content) => {
             accumulated += content;
           },
         })) {
           if (chunk.content) controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          if (chunk.reasoning) controller.enqueue(encodeSse(encoder, 'reasoning', { reasoning: chunk.reasoning }));
           if (typeof chunk.progress === 'number') {
             controller.enqueue(encodeSse(encoder, 'progress', { percent: Math.round(chunk.progress * 100) }));
           }
@@ -1968,6 +1976,15 @@ async function handleCharacterScript(body: GenerateRequestBody): Promise<Respons
         }
 
         controller.enqueue(encodeSse(encoder, 'progress', { percent: 100, stage: 'parsing' }));
+        if (!accumulated.trim()) {
+          controller.enqueue(
+            encodeSse(encoder, 'error', {
+              message:
+                '模型未返回正文，可能在思考阶段耗尽了 token 预算。请重试该阶段；若持续失败请联系管理员。',
+            }),
+          );
+          return;
+        }
         let json: CharacterScriptJson;
         try {
           json = normalizeCharacterScript(await parseOrRepairJson<CharacterScriptJson>(accumulated, 'CharacterScriptJson'));
@@ -2433,6 +2450,9 @@ async function handleStoryBible(body: GenerateRequestBody): Promise<Response> {
         })) {
           if (chunk.content) {
             controller.enqueue(encodeSse(encoder, 'chunk', { content: chunk.content }));
+          }
+          if (chunk.reasoning) {
+            controller.enqueue(encodeSse(encoder, 'reasoning', { reasoning: chunk.reasoning }));
           }
           if (typeof chunk.progress === 'number') {
             controller.enqueue(
