@@ -5,13 +5,13 @@
  * （`app/(dashboard)/page.tsx`）渲染。
  *
  * 数据来源：scripts、validation_reports、generation_tasks 三张表。
- * 无剧本时返回空状态数据引导新用户创作；有剧本但局部数据缺失时回落 Mock 数据。
+ * 无剧本时返回空状态数据引导新用户创作；有剧本时基于真实数据聚合。
  *
  * 设计要点：
  * - 服务端方法（getOverviewData）通过动态导入 @/lib/supabase/server
  *   获取客户端，避免 next/headers 被打包进客户端 bundle（对齐
  *   generation-task-service.ts 的写法）；
- * - 当用户无剧本时返回空结构（EMPTY_DATA）；有剧本但聚合局部失败时回落到 Mock 数据。
+ * - 当用户无剧本或聚合失败时返回空结构（EMPTY_DATA），不再使用 Mock 数据占位。
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Json } from '@/lib/supabase/types';
@@ -173,16 +173,12 @@ export interface OverviewData {
 }
 
 /* ============================================================
- * Mock 数据（开发期 / 空库回落）
- * 与原型 docs/prototype/workbench2.html #view-overview 一致
+ * 空状态数据
  * ============================================================ */
-
-/** 空库场景的安全跳转：所有 Mock 编辑器链接统一指向生成页，避免 /editor/mock-* 404 */
-const MOCK_EDITOR_BASE = '/generate';
 
 /**
  * 空状态数据：用户无剧本时返回，引导新用户开始创作。
- * 与 MOCK_DATA 不同，此数据不包含任何虚假剧本信息。
+ * 不包含任何虚假剧本信息。
  */
 const EMPTY_DATA: OverviewData = {
   currentScript: null,
@@ -198,205 +194,10 @@ const EMPTY_DATA: OverviewData = {
   todos: [],
   activities: [],
   aiSuggestion: { tip: '创建你的第一部剧本，开启 AI 辅助创作之旅', applyHref: '/generate' },
-  quickActions: [
-    { icon: 'generate', title: '剧本生成', desc: 'AI 辅助创作', href: '/generate' },
-    { icon: 'timeline', title: '时间线校验', desc: '校验时间逻辑', href: '/generate' },
-    { icon: 'logic', title: '逻辑校验', desc: '检查剧情漏洞', href: '/generate' },
-    { icon: 'clues', title: '线索卡管理', desc: '管理线索卡片', href: '/generate' },
-    { icon: 'illust', title: '插画生成', desc: 'AI 生成插画', href: '/generate' },
-  ],
+  quickActions: [],
 };
 
-const MOCK_DATA: OverviewData = {
-  currentScript: {
-    id: 'mock-current',
-    title: '古镇迷案',
-    genre: '硬核 · 古风 · 6人 · 5h',
-    stage: '第二幕 · 公共搜证',
-    location: '正在编辑：第二幕 · 公共搜证 · 第3段「药铺后院」',
-    lastEditedAt: '14:32',
-    lastEditedTag: '▸ 上次编辑于 14:32 · 自动保存',
-    progress: 68,
-    issuePills: [
-      { kind: 'err', count: 3, label: '时间冲突', href: `${MOCK_EDITOR_BASE}` },
-      { kind: 'err', count: 2, label: '逻辑漏洞', href: `${MOCK_EDITOR_BASE}` },
-      { kind: 'warn', count: 1, label: '伏笔悬挂' },
-      { kind: 'ok', count: 42, label: '线索卡就绪' },
-    ],
-    editorHref: MOCK_EDITOR_BASE,
-    todoHref: `${MOCK_EDITOR_BASE}`,
-  },
-  progress: 68,
-  stats: { errors: 3, warnings: 1, success: 42, info: 0 },
-  statCards: [
-    {
-      icon: 'err',
-      label: '待处理问题',
-      value: '6',
-      unit: '项',
-      trend: '3 时间冲突 · 2 逻辑漏洞 · 1 伏笔',
-      trendDown: true,
-      href: `${MOCK_EDITOR_BASE}`,
-    },
-    {
-      icon: 'warn',
-      label: '今日待办',
-      value: '3',
-      unit: '项',
-      trend: '补全药铺线索 · 修复时序 · 复盘定稿',
-      href: MOCK_EDITOR_BASE,
-    },
-    {
-      icon: 'ok',
-      label: '本月已交付',
-      value: '2',
-      unit: '部',
-      trend: '▲ 雾港夜话 · 长安十二时辰谜',
-      href: MOCK_EDITOR_BASE,
-    },
-    {
-      icon: 'info',
-      label: '平均完成度',
-      value: '64',
-      unit: '%',
-      trend: '▲ 较上周 +12%',
-      href: MOCK_EDITOR_BASE,
-    },
-  ],
-  workflows: [
-    {
-      id: 'mock-1',
-      title: '古镇迷案',
-      genre: '硬核 · 古风',
-      status: 'valid',
-      statusLabel: '校验中',
-      progress: 68,
-      stage: '第二幕 · 公共搜证',
-      issues: { dotClass: 'err', label: '6 待处理' },
-      meta: '6人 / 5h · v3',
-      updatedAt: '14:32',
-      done: false,
-      href: MOCK_EDITOR_BASE,
-    },
-    {
-      id: 'mock-2',
-      title: '第七个房客',
-      genre: '恐怖 · 现代',
-      status: 'gen',
-      statusLabel: '生成中',
-      progress: 42,
-      stage: '第一幕 · 人物剧本',
-      issues: { dotClass: 'warn', label: '1 待确认' },
-      meta: '6人 / 4.5h · v2',
-      updatedAt: '1 周前',
-      done: false,
-      href: MOCK_EDITOR_BASE,
-    },
-    {
-      id: 'mock-3',
-      title: '雨夜来客',
-      genre: '欢乐 · 现代',
-      status: 'draft',
-      statusLabel: '草稿',
-      progress: 18,
-      stage: '参数设定',
-      issues: { dotClass: 'ok', label: '无待办' },
-      meta: '7人 / 4h · v1',
-      updatedAt: '3 周前',
-      done: false,
-      href: MOCK_EDITOR_BASE,
-    },
-    {
-      id: 'mock-4',
-      title: '雾港夜话',
-      genre: '情感 · 民国',
-      status: 'done',
-      statusLabel: '已完成',
-      progress: 100,
-      stage: '已交付店家',
-      issues: { dotClass: 'ok', label: '无待办' },
-      meta: '5人 / 4h · v1',
-      updatedAt: '5 天前',
-      done: true,
-      href: MOCK_EDITOR_BASE,
-    },
-    {
-      id: 'mock-5',
-      title: '长安十二时辰谜',
-      genre: '机制 · 古风',
-      status: 'done',
-      statusLabel: '已完成',
-      progress: 100,
-      stage: '已交付店家',
-      issues: { dotClass: 'ok', label: '无待办' },
-      meta: '8人 / 6h · v4',
-      updatedAt: '2 周前',
-      done: true,
-      href: MOCK_EDITOR_BASE,
-    },
-  ],
-  todos: [
-    {
-      kind: 'time',
-      label: '时间冲突',
-      dotClass: 'err',
-      count: 3,
-      items: [
-        { scriptTitle: '古镇迷案', description: '沈墨白分身两地', href: `${MOCK_EDITOR_BASE}` },
-        { scriptTitle: '古镇迷案', description: '沈墨尘时序倒置', href: `${MOCK_EDITOR_BASE}` },
-        { scriptTitle: '古镇迷案', description: '柳如烟行踪矛盾', href: `${MOCK_EDITOR_BASE}` },
-      ],
-    },
-    {
-      kind: 'logic',
-      label: '逻辑漏洞',
-      dotClass: 'err',
-      count: 2,
-      items: [
-        { scriptTitle: '古镇迷案', description: '朱砂私章未回收', href: `${MOCK_EDITOR_BASE}` },
-        { scriptTitle: '古镇迷案', description: '乌头碱手法硬伤', href: `${MOCK_EDITOR_BASE}` },
-      ],
-    },
-    {
-      kind: 'foreshadow',
-      label: '伏笔悬挂',
-      dotClass: 'warn',
-      count: 1,
-      items: [
-        { scriptTitle: '第七个房客', description: '204 房客身份未揭示', href: `${MOCK_EDITOR_BASE}` },
-      ],
-    },
-  ],
-  activities: [
-    { kind: 'edit', textBefore: '编辑了 ', bold: '古镇迷案 · 第二幕', textAfter: '', time: '今日 14:32 · 自动保存 v3' },
-    { kind: 'ai', textBefore: 'AI 补全 ', bold: '柳如烟童年背景', textAfter: '', time: '昨日 21:08 · v2 → v3' },
-    { kind: 'check', textBefore: '时间线校验发现 ', bold: '3 处冲突', textAfter: '', time: '昨日 20:46' },
-    { kind: 'done', textBefore: '交付 ', bold: '雾港夜话', textAfter: ' 至店家', time: '5 天前' },
-    { kind: 'gen', textBefore: 'AI 生成 ', bold: '第七个房客', textAfter: ' 初版', time: '1 周前 · 18,420 字' },
-  ],
-  aiSuggestion: {
-    tip: '检测到「药铺后院」线索密度偏低，建议补充周半仙深夜目击沈墨尘的口供，强化凶手行为链与时间线闭环。',
-    applyHref: MOCK_EDITOR_BASE,
-  },
-  quickActions: [
-    { icon: 'generate', title: '一键生成全本', desc: '题材参数 → 完整结构化剧本', href: '/generate' },
-    { icon: 'timeline', title: '时间线冲突排查', desc: '可视化时间轴 · 自动标注矛盾', href: MOCK_EDITOR_BASE },
-    { icon: 'logic', title: '逻辑闭环校验', desc: '伏笔回收 · 动机 · 诡计可行性', href: MOCK_EDITOR_BASE },
-    { icon: 'clues', title: '导出线索卡 PDF', desc: '批量出图 · 店家可直接打印开本', href: MOCK_EDITOR_BASE },
-    { icon: 'illust', title: '生成场景插画', desc: '多模型对比 · 自动套用视觉基调', href: MOCK_EDITOR_BASE },
-  ],
-};
 
-/**
- * 快捷入口子路径映射：真实数据场景下与 editorBase 拼接为完整编辑器子页地址。
- * generate 不依赖 scriptId，单独处理；其余四项对应编辑器四个子功能页。
- */
-const QA_SUB_PATH: Record<Exclude<QuickActionIcon, 'generate'>, string> = {
-  timeline: '/timeline',
-  logic: '/validation',
-  clues: '/clues',
-  illust: '/illustrations',
-};
 
 /* ============================================================
  * 工具：DB 行映射
@@ -424,6 +225,15 @@ interface ValidationReportRow {
   issue_count_severe: number;
   issue_count_warning: number;
   issue_count_hint: number;
+  result_data: Json | null;
+  created_at: string;
+}
+
+interface VersionSnapshotRow {
+  id: string;
+  script_id: string;
+  version_number: number;
+  change_summary: string;
   created_at: string;
 }
 
@@ -433,6 +243,7 @@ interface GenerationTaskRow {
   task_type: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   progress_percent: number;
+  error_message: string | null;
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -498,6 +309,46 @@ function estimateProgress(wordCount: number, target = 30000): number {
   return Math.max(0, Math.min(100, Math.round((wordCount / target) * 100)));
 }
 
+/** 判断 ISO 时间是否为今日 */
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+/** 从 validation_reports.result_data 解析时间线冲突条目 */
+function extractTimelineConflicts(report: ValidationReportRow): { title: string; desc: string }[] {
+  if (report.report_type !== 'TIMELINE' || !report.result_data) return [];
+  const data = report.result_data as Record<string, unknown>;
+  const conflicts = data.conflicts;
+  if (!Array.isArray(conflicts)) return [];
+  return conflicts
+    .filter((c) => c && typeof c === 'object')
+    .map((c) => ({
+      title: String((c as Record<string, unknown>).title ?? '时间冲突'),
+      desc: String((c as Record<string, unknown>).desc ?? ''),
+    }));
+}
+
+/** 从 validation_reports.result_data 解析逻辑校验问题条目 */
+function extractLogicIssues(report: ValidationReportRow): { title: string; desc: string; type: string }[] {
+  if (!report.result_data || (report.report_type !== 'LOGIC' && report.report_type !== 'FULL')) return [];
+  const data = report.result_data as Record<string, unknown>;
+  const issues = data.issues;
+  if (!Array.isArray(issues)) return [];
+  return issues
+    .filter((i) => i && typeof i === 'object')
+    .map((i) => ({
+      title: String((i as Record<string, unknown>).title ?? '逻辑问题'),
+      desc: String((i as Record<string, unknown>).description ?? ''),
+      type: String((i as Record<string, unknown>).type ?? ''),
+    }));
+}
+
 /* ============================================================
  * Service
  * ============================================================ */
@@ -506,8 +357,8 @@ export class OverviewService {
   /**
    * 聚合概览页数据
    *
-   * 当前实现：尝试读取用户最新剧本，若库为空或读取失败则回落到 Mock 数据。
-   * 实际聚合（统计 / 待办 / 活动流）在数据落地后扩展，目前以 Mock 占位。
+   * 基于 scripts、validation_reports、generation_tasks 真实数据聚合；
+   * 库为空或读取失败时返回 EMPTY_DATA，不再使用 Mock 数据占位。
    *
    * @param userId  当前登录用户 ID
    * @param scripts 可选：外部已加载的剧本列表（如来自 layout / Context）。
@@ -553,58 +404,60 @@ export class OverviewService {
 
       const current = scriptRows[0];
 
-      // 2) 并行读取校验报告与生成任务
+      // 2) 并行读取校验报告、生成任务与版本快照
       const scriptIds = scriptRows.map((s) => s.id);
-      const [validationRes, taskRes] = await Promise.all([
+      const [validationRes, taskRes, snapshotRes] = await Promise.all([
         supabase
           .from('validation_reports')
-          .select('id, script_id, report_type, status, issue_count_severe, issue_count_warning, issue_count_hint, created_at')
+          .select(
+            'id, script_id, report_type, status, issue_count_severe, issue_count_warning, issue_count_hint, result_data, created_at',
+          )
           .in('script_id', scriptIds)
           .order('created_at', { ascending: false }),
         supabase
           .from('generation_tasks')
-          .select('id, script_id, task_type, status, progress_percent, started_at, completed_at, created_at, result_data')
+          .select('id, script_id, task_type, status, progress_percent, error_message, started_at, completed_at, created_at, result_data')
           .in('script_id', scriptIds)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('version_snapshots')
+          .select('id, script_id, version_number, change_summary, created_at')
+          .in('script_id', scriptIds)
+          .order('created_at', { ascending: false })
+          .limit(20),
       ]);
 
       const reports = (validationRes.data ?? []) as unknown as ValidationReportRow[];
       const tasks = (taskRes.data ?? []) as unknown as GenerationTaskRow[];
+      const snapshots = (snapshotRes.data ?? []) as unknown as VersionSnapshotRow[];
 
-      return this.compose(current, scriptRows, reports, tasks);
+      return this.compose(current, scriptRows, reports, tasks, snapshots);
     } catch {
-      // 任意异常回落 Mock，保证页面可渲染
-      return MOCK_DATA;
+      // 异常时返回空状态，避免展示虚假 Mock 数据
+      return EMPTY_DATA;
     }
   }
 
-  /** 由原始行组装 OverviewData；当前剧本无校验/任务信息时仍回落 Mock 占位 */
+  /** 由原始行组装 OverviewData；缺失项以空结构或默认值填充，不再使用 Mock 占位 */
   private compose(
     current: ScriptRow,
     scripts: ScriptRow[],
     reports: ValidationReportRow[],
     tasks: GenerationTaskRow[],
+    snapshots: VersionSnapshotRow[],
   ): OverviewData {
     const editorBase = `/editor/${current.id}`;
 
     // 当前剧本的进度估算
     const progress = estimateProgress(current.word_count);
 
-    // 当前剧本的校验报告聚合（取最新一份）
+    // 当前剧本的校验报告聚合
     const currentReports = reports.filter((r) => r.script_id === current.id);
-    const latestReport = currentReports[0];
-    const errors = latestReport ? latestReport.issue_count_severe : 0;
-    const warnings = latestReport ? latestReport.issue_count_warning : 0;
-    const hints = latestReport ? latestReport.issue_count_hint : 0;
-
-    // ri-pill: 时间冲突（TIMELINE severe）/ 逻辑漏洞（LOGIC severe）/ 伏笔悬挂（warning）/ 线索卡就绪（占位）
-    const timelineErrors = currentReports
-      .filter((r) => r.report_type === 'TIMELINE')
-      .reduce((s, r) => s + r.issue_count_severe, 0);
-    const logicErrors = currentReports
-      .filter((r) => r.report_type === 'LOGIC')
-      .reduce((s, r) => s + r.issue_count_severe, 0);
-    const foreshadows = currentReports.reduce((s, r) => s + r.issue_count_warning, 0);
+    const currentTimelineReports = currentReports.filter((r) => r.report_type === 'TIMELINE');
+    const currentLogicReports = currentReports.filter((r) => r.report_type === 'LOGIC' || r.report_type === 'FULL');
+    const timelineErrors = currentTimelineReports.reduce((s, r) => s + r.issue_count_severe, 0);
+    const logicErrors = currentLogicReports.reduce((s, r) => s + r.issue_count_severe, 0);
+    const foreshadows = currentLogicReports.reduce((s, r) => s + r.issue_count_warning, 0);
 
     const currentScript: OverviewCurrentScript = {
       id: current.id,
@@ -618,7 +471,7 @@ export class OverviewService {
       issuePills: [
         { kind: 'err', count: timelineErrors, label: '时间冲突', href: `${editorBase}/timeline` },
         { kind: 'err', count: logicErrors, label: '逻辑漏洞', href: `${editorBase}/validation` },
-        { kind: 'warn', count: foreshadows, label: '伏笔悬挂' },
+        { kind: 'warn', count: foreshadows, label: '伏笔悬挂', href: `${editorBase}/validation` },
       ],
       editorHref: editorBase,
       todoHref: `${editorBase}/validation`,
@@ -652,8 +505,16 @@ export class OverviewService {
       };
     });
 
-    // 统计卡：待处理问题、今日待办、本月已交付、平均完成度
-    const totalIssues = errors + warnings;
+    // 统计卡：跨剧本真实聚合，并指向对应子模块
+    const allSevere = reports.reduce((s, r) => s + r.issue_count_severe, 0);
+    const allWarning = reports.reduce((s, r) => s + r.issue_count_warning, 0);
+    const allHint = reports.reduce((s, r) => s + r.issue_count_hint, 0);
+    const totalIssues = allSevere + allWarning;
+    const todayRunningTasks = tasks.filter(
+      (t) => isToday(t.created_at) && (t.status === 'pending' || t.status === 'running'),
+    ).length;
+    const todayInProgressReports = reports.filter((r) => isToday(r.created_at) && r.status === 'in_progress').length;
+    const todayTodoCount = todayRunningTasks + todayInProgressReports;
     const completedThisMonth = scripts.filter((s) => {
       if (s.status !== 'completed') return false;
       const d = new Date(s.updated_at);
@@ -670,131 +531,197 @@ export class OverviewService {
         label: '待处理问题',
         value: String(totalIssues),
         unit: '项',
-        trend: `${timelineErrors} 时间冲突 · ${logicErrors} 逻辑漏洞 · ${foreshadows} 伏笔`,
+        trend: `${allSevere} 严重 · ${allWarning} 警告 · ${allHint} 提示`,
         trendDown: totalIssues > 0,
-        href: `${editorBase}/validation`,
+        href: '/scripts',
       },
       {
         icon: 'warn',
         label: '今日待办',
-        value: String(totalIssues),
+        value: String(todayTodoCount),
         unit: '项',
-        trend: '补全线索 · 修复时序 · 复盘定稿',
-        href: editorBase,
+        trend:
+          todayRunningTasks > 0 || todayInProgressReports > 0
+            ? `${todayRunningTasks} 生成/校验中 · ${todayInProgressReports} 校验待完成`
+            : '暂无今日待处理任务',
+        href: '/scripts',
       },
       {
         icon: 'ok',
         label: '本月已交付',
         value: String(completedThisMonth),
         unit: '部',
-        trend: completedThisMonth > 0 ? '▲ 本月新交付' : '暂无交付',
-        href: editorBase,
+        trend: completedThisMonth > 0 ? '本月新交付' : '暂无交付',
+        href: '/scripts',
       },
       {
         icon: 'info',
         label: '平均完成度',
         value: String(avgProgress),
         unit: '%',
-        trend: '▲ 较上周',
-        href: editorBase,
+        trend: avgProgress > 0 ? `${workflows.filter((w) => w.progress > 0).length} 部进行中` : '暂无进度',
+        href: '/scripts',
       },
     ];
 
-    // 待办汇总：按时间冲突 / 逻辑漏洞 / 伏笔悬挂 分组（仅展示当前剧本的项）
-    const todoItems: OverviewTodoItem[] = [];
-    if (timelineErrors > 0) {
-      todoItems.push({ scriptTitle: current.title, description: '时间线存在冲突', href: `${editorBase}/timeline` });
-    }
-    if (logicErrors > 0) {
-      todoItems.push({ scriptTitle: current.title, description: '逻辑存在漏洞', href: `${editorBase}/validation` });
-    }
-    if (foreshadows > 0) {
-      todoItems.push({ scriptTitle: current.title, description: '伏笔悬挂未回收', href: `${editorBase}/validation` });
+    // 待办汇总：解析具体校验问题，跨剧本聚合，点击跳转到对应校验子页
+    const timeItems: OverviewTodoItem[] = [];
+    const logicItems: OverviewTodoItem[] = [];
+    const foreshadowItems: OverviewTodoItem[] = [];
+
+    for (const s of scripts) {
+      const sReports = reports.filter((r) => r.script_id === s.id);
+      const sEditorHref = `/editor/${s.id}`;
+      for (const r of sReports) {
+        if (r.report_type === 'TIMELINE') {
+          for (const c of extractTimelineConflicts(r).slice(0, 3)) {
+            timeItems.push({
+              scriptTitle: s.title,
+              description: c.title,
+              href: `${sEditorHref}/timeline`,
+            });
+          }
+        }
+        if (r.report_type === 'LOGIC' || r.report_type === 'FULL') {
+          const issues = extractLogicIssues(r);
+          const criticalLogic = issues.filter((i) => !/伏笔/.test(i.type)).slice(0, 3);
+          const foreshadowIssues = issues.filter((i) => /伏笔/.test(i.type)).slice(0, 3);
+          for (const i of criticalLogic) {
+            logicItems.push({
+              scriptTitle: s.title,
+              description: i.title,
+              href: `${sEditorHref}/validation`,
+            });
+          }
+          for (const i of foreshadowIssues) {
+            foreshadowItems.push({
+              scriptTitle: s.title,
+              description: i.title,
+              href: `${sEditorHref}/validation`,
+            });
+          }
+        }
+      }
     }
 
-    const todos: OverviewTodoGroup[] = todoItems.length
-      ? [
-          {
-            kind: 'time',
-            label: '时间冲突',
-            dotClass: 'err',
-            count: timelineErrors,
-            items: timelineErrors
-              ? [{ scriptTitle: current.title, description: '时间线存在冲突', href: `${editorBase}/timeline` }]
-              : [],
-          },
-          {
-            kind: 'logic',
-            label: '逻辑漏洞',
-            dotClass: 'err',
-            count: logicErrors,
-            items: logicErrors
-              ? [{ scriptTitle: current.title, description: '逻辑存在漏洞', href: `${editorBase}/validation` }]
-              : [],
-          },
-          {
-            kind: 'foreshadow',
-            label: '伏笔悬挂',
-            dotClass: 'warn',
-            count: foreshadows,
-            items: foreshadows
-              ? [{ scriptTitle: current.title, description: '伏笔悬挂未回收', href: `${editorBase}/validation` }]
-              : [],
-          },
-        ]
-      : MOCK_DATA.todos;
+    const todos: OverviewTodoGroup[] = [
+      { kind: 'time' as const, label: '时间冲突', dotClass: 'err' as const, count: timeItems.length, items: timeItems.slice(0, 5) },
+      { kind: 'logic' as const, label: '逻辑漏洞', dotClass: 'err' as const, count: logicItems.length, items: logicItems.slice(0, 5) },
+      {
+        kind: 'foreshadow' as const,
+        label: '伏笔悬挂',
+        dotClass: 'warn' as const,
+        count: foreshadowItems.length,
+        items: foreshadowItems.slice(0, 5),
+      },
+    ].filter((g) => g.count > 0);
 
-    // 活动流：基于最近生成任务与校验报告生成；不足时回落 Mock
-    const activities: OverviewActivity[] = [];
-    for (const t of tasks.slice(0, 5)) {
+    // 活动流：合并版本快照、生成任务、校验报告，按时间倒序取前 6 条
+    type ActivityCandidate = OverviewActivity & { at: string };
+    const candidates: ActivityCandidate[] = [];
+
+    for (const sn of snapshots.slice(0, 10)) {
+      const script = scripts.find((s) => s.id === sn.script_id);
+      candidates.push({
+        kind: 'edit',
+        textBefore: '编辑保存 ',
+        bold: script?.title ?? '剧本',
+        textAfter: sn.change_summary ? ` · ${sn.change_summary}` : '',
+        time: `v${sn.version_number} · ${formatUpdatedAt(sn.created_at)}`,
+        at: sn.created_at,
+      });
+    }
+
+    for (const t of tasks.slice(0, 10)) {
       const script = scripts.find((s) => s.id === t.script_id);
       const scriptTitle = script?.title ?? '剧本';
+      const time = formatUpdatedAt(t.completed_at ?? t.started_at ?? t.created_at);
       if (t.status === 'completed' && t.task_type === 'FULL_SCRIPT') {
-        activities.push({
+        candidates.push({
           kind: 'gen',
           textBefore: 'AI 生成 ',
           bold: scriptTitle,
           textAfter: ' 初版',
-          time: `${formatUpdatedAt(t.completed_at ?? t.created_at)} · ${script?.word_count ?? 0} 字`,
+          time: `${time} · ${script?.word_count ?? 0} 字`,
+          at: t.completed_at ?? t.created_at,
         });
-      } else if (t.status === 'running') {
-        activities.push({
+      } else if (t.status === 'running' || t.status === 'pending') {
+        candidates.push({
           kind: 'ai',
           textBefore: 'AI 处理中 ',
           bold: scriptTitle,
           textAfter: ` · ${t.progress_percent}%`,
-          time: formatUpdatedAt(t.started_at ?? t.created_at),
+          time,
+          at: t.started_at ?? t.created_at,
+        });
+      } else if (t.status === 'failed') {
+        candidates.push({
+          kind: 'ai',
+          textBefore: 'AI 任务失败 ',
+          bold: scriptTitle,
+          textAfter: t.error_message ? ` · ${t.error_message}` : '',
+          time,
+          at: t.completed_at ?? t.created_at,
         });
       }
     }
-    if (latestReport) {
-      activities.unshift({
-        kind: 'check',
-        textBefore: '校验发现 ',
-        bold: `${errors + warnings + hints} 处问题`,
-        textAfter: '',
-        time: formatUpdatedAt(latestReport.created_at),
-      });
+
+    for (const r of reports.slice(0, 10)) {
+      const script = scripts.find((s) => s.id === r.script_id);
+      const scriptTitle = script?.title ?? '剧本';
+      const issueTotal = r.issue_count_severe + r.issue_count_warning + r.issue_count_hint;
+      if (r.report_type === 'TIMELINE') {
+        candidates.push({
+          kind: 'check',
+          textBefore: '时间线校验 ',
+          bold: `${issueTotal} 处冲突`,
+          textAfter: ` · ${scriptTitle}`,
+          time: formatUpdatedAt(r.created_at),
+          at: r.created_at,
+        });
+      } else if (r.report_type === 'LOGIC' || r.report_type === 'FULL') {
+        candidates.push({
+          kind: 'check',
+          textBefore: '逻辑校验 ',
+          bold: `${issueTotal} 处问题`,
+          textAfter: ` · ${scriptTitle}`,
+          time: formatUpdatedAt(r.created_at),
+          at: r.created_at,
+        });
+      }
     }
-    if (activities.length === 0) activities.push(...MOCK_DATA.activities);
+
+    const activities = candidates
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
+      .slice(0, 6)
+      .map((c) => ({
+        kind: c.kind,
+        textBefore: c.textBefore,
+        bold: c.bold,
+        textAfter: c.textAfter,
+        time: c.time,
+      }));
+
+    // AI 建议：基于当前剧本真实校验数据
+    const currentIssueTotal = timelineErrors + logicErrors + foreshadows;
+    const aiSuggestion: OverviewAiSuggestion = {
+      tip:
+        currentIssueTotal > 0
+          ? `《${current.title}》还有 ${currentIssueTotal} 处待处理问题（${timelineErrors} 时间冲突、${logicErrors} 逻辑漏洞、${foreshadows} 伏笔悬挂），建议优先修复。`
+          : `《${current.title}》当前进展顺利，继续完善剧本结构与细节吧。`,
+      applyHref: `${editorBase}/validation`,
+    };
 
     return {
       currentScript,
       progress,
-      stats: { errors, warnings, success: 42, info: hints },
+      stats: { errors: allSevere, warnings: allWarning, success: 0, info: allHint },
       statCards,
-      workflows: workflows.length ? workflows : MOCK_DATA.workflows,
+      workflows,
       todos,
       activities,
-      aiSuggestion: {
-        tip: MOCK_DATA.aiSuggestion.tip,
-        applyHref: editorBase,
-      },
-      quickActions: MOCK_DATA.quickActions.map((qa) =>
-        qa.icon === 'generate'
-          ? qa
-          : { ...qa, href: `${editorBase}${QA_SUB_PATH[qa.icon] ?? ''}` },
-      ),
+      aiSuggestion,
+      quickActions: [],
     };
   }
 

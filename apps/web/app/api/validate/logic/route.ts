@@ -400,9 +400,17 @@ export async function POST(request: Request) {
 
   const { scriptId, reportType } = body;
 
+  // 优先使用 service role admin 客户端绕过 RLS（与 TimelineExtractor 一致；
+  // 002_rls_policies 中 script_id 子查询策略在服务端读取时可能返回空集）。
+  // 不可用则回退到会话客户端。
+  let supabase: ReturnType<typeof createAdminClient> | SupabaseClient;
   try {
-    const supabase = await createClient();
+    supabase = createAdminClient();
+  } catch {
+    supabase = await createClient();
+  }
 
+  try {
     // 1. 加载剧本完整数据
     const { data: scriptData, playerCount } = await loadScriptValidationData(
       scriptId,
@@ -471,13 +479,8 @@ export async function POST(request: Request) {
     // 6. 写入 validation_reports 表（容错：失败不阻塞返回）
     let reportId: string | null = null;
     try {
-      let persistClient: ReturnType<typeof createAdminClient> | SupabaseClient;
-      try {
-        persistClient = createAdminClient();
-      } catch {
-        persistClient = await createClient();
-      }
-
+      const persistClient: ReturnType<typeof createAdminClient> | SupabaseClient =
+        createAdminClient();
       const id = crypto.randomUUID();
       const resultData = {
         issues: flatIssues,

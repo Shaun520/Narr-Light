@@ -5,7 +5,7 @@
  *   1. .resume-hero  继续创作英雄区（SVG 环形进度 + ri-pill + CTA + AI 建议）
  *   2. .stat-grid    4 张行动型统计卡
  *   3. .overview-grid 主区（工作流 + 侧栏待办/活动流）
- *   4. .quick-row    5 个快捷入口
+ *   快捷入口行已移除，避免展示未落地的生成/校验入口。
  *
  * 服务端组件：调用 OverviewService 聚合数据，渲染子组件。
  * Layout 已注入 <div className="view active"> 包裹，本页直接输出概览结构。
@@ -27,7 +27,6 @@ import { StatCardList } from '@/components/overview/stat-card';
 import { WorkflowList } from '@/components/overview/workflow-list';
 import { TodoPanel } from '@/components/overview/todo-panel';
 import { ActivityStream } from '@/components/overview/activity-stream';
-import { QuickActions } from '@/components/overview/quick-actions';
 import './overview.css';
 
 /** 工作流 tabs：基于数据进行中/已完成/草稿计数 */
@@ -81,8 +80,6 @@ export default async function OverviewPage() {
         </div>
       </div>
 
-      {/* ===== 快捷操作 ===== */}
-      <QuickActions actions={data.quickActions} />
     </>
   );
 }
