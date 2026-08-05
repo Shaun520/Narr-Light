@@ -5,7 +5,8 @@
  *
  * 对齐原型 #view-community，瀑布流 + 侧栏布局。
  * 客户端组件，管理视角（creator/player）、分类、筛选 chips 状态；
- * 数据由 CommunityService 提供（开发期 Mock）。
+ * 动态流数据由服务端 actions 提供（真实 community_posts，仅展示已上架内容），
+ * 侧栏话题/作者榜/统计仍为开发期 Mock。
  *
  * 结构：
  * 1. .page-head —— 标题 + .perspective-switch + 双套按钮（.for-creator/.for-player）
@@ -15,7 +16,7 @@
  * 5. .xhs-layout —— 瀑布流 .xhs-feed + 侧栏 .xhs-sidebar
  * 6. .xhs-fab —— 右下悬浮发布按钮
  */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { App as AntApp } from "antd";
 import { Plus, Play, MessageCircle, Search } from "lucide-react";
 import { communityService } from "@/lib/services/community-service";
@@ -28,6 +29,11 @@ import type {
   RankScript,
   RecommendedAuthor,
 } from "@/lib/services/community-service";
+import {
+  createCommunityPostAction,
+  getCommunityFeedAction,
+  type CreateCommunityPostInput,
+} from "./actions";
 import PerspectiveSwitch from "@/components/community/perspective-switch";
 import CategoryTabs from "@/components/community/category-tabs";
 import PulseStats from "@/components/community/pulse-stats";
@@ -41,6 +47,60 @@ import "./community.css";
 /** 搜索框热门标签 */
 const HOT_TAGS = ["#雾港夜话", "#长安十二时辰谜"];
 
+/** 题材 value → 中文标签（与 publish-modal 的 GENRE_OPTIONS 对齐） */
+const GENRE_LABELS: Record<string, string> = {
+  hardcore: "硬核",
+  emotion: "情感",
+  horror: "惊悚",
+  funny: "欢乐",
+  mechanism: "机制",
+};
+
+/** 把发布弹窗表单数据映射为创建帖子入参（4 种发布类型） */
+function buildPublishInput(
+  type: PublishType,
+  data: Record<string, string>,
+): CreateCommunityPostInput {
+  switch (type) {
+    case "submit":
+      return {
+        postType: "talk",
+        title: data.title ?? "",
+        content: data.content ?? "",
+        tags: ["投稿"],
+      };
+    case "publish": {
+      const tags = [
+        data.genre ? GENRE_LABELS[data.genre] ?? data.genre : "",
+        data.playerCount ? `${data.playerCount}人` : "",
+        data.duration ? `${data.duration}小时` : "",
+      ].filter(Boolean);
+      return {
+        postType: "rec",
+        title: data.scriptName ?? "",
+        content: data.intro ?? "",
+        tags,
+      };
+    }
+    case "carpool": {
+      const playerCount = Math.max(0, Number(data.playerCount) || 0);
+      return {
+        postType: "carpool",
+        title: [data.time, data.location, data.scriptName].filter(Boolean).join(" · "),
+        content: data.remark ?? "",
+        seatTotal: playerCount,
+      };
+    }
+    case "request":
+      return {
+        postType: "ask",
+        title: data.scriptName ?? "",
+        content: data.description ?? "",
+        tags: data.expectedCount ? [`${data.expectedCount}人`] : [],
+      };
+  }
+}
+
 export default function CommunityPage() {
   // ---- antd message（用于发布成功 Toast 反馈）----
   const { message } = AntApp.useApp();
@@ -52,6 +112,8 @@ export default function CommunityPage() {
 
   // ---- 数据 ----
   const [posts, setPosts] = useState<CommunityPost[]>([]);
+  const [feedLoading, setFeedLoading] = useState(true);
+  const [feedError, setFeedError] = useState("");
   const [topics, setTopics] = useState<CommunityTopic[]>([]);
   const [authors, setAuthors] = useState<RecommendedAuthor[]>([]);
   const [rank, setRank] = useState<RankScript[]>([]);
@@ -67,40 +129,48 @@ export default function CommunityPage() {
     type: PublishType;
   }>({ open: false, type: "submit" });
 
+  /** 防止快速切分类时旧请求覆盖新结果 */
+  const feedRequestIdRef = useRef(0);
+
   /** 打开发布弹窗 */
   const openPublish = (type: PublishType) => {
     setPublishModal({ open: true, type });
   };
 
-  /** 首次挂载拉取全部数据（Mock 即时返回） */
+  /** 拉取真实动态流（仅已上架内容），支持分类过滤 */
+  const loadFeed = useCallback(async (cat: CategoryKey) => {
+    const requestId = ++feedRequestIdRef.current;
+    setFeedLoading(true);
+    setFeedError("");
+    const result = await getCommunityFeedAction({ category: cat });
+    if (requestId !== feedRequestIdRef.current) return;
+    setPosts(result.posts);
+    setFeedError(result.error ?? "");
+    setFeedLoading(false);
+  }, []);
+
+  /** 首次挂载：拉取动态流 + 侧栏聚合数据（侧栏仍为 Mock） */
   useEffect(() => {
-    let active = true;
+    void loadFeed("recommend");
     void (async () => {
-      const [p, t, a, r, pl] = await Promise.all([
-        communityService.getPosts({ category, chip, perspective }),
+      const [t, a, r, pl] = await Promise.all([
         communityService.getTopics(),
         communityService.getRecommendedAuthors(),
         communityService.getHotScripts(),
         communityService.getPulseStats(),
       ]);
-      if (!active) return;
-      setPosts(p);
       setTopics(t);
       setAuthors(a);
       setRank(r);
       setPulse(pl);
     })();
-    return () => {
-      active = false;
-    };
-    // 仅首次挂载拉取；分类/筛选为前端 UI 状态，Mock 数据不变
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadFeed]);
 
-  /** 切换分类：重置 chip 为 "全部" */
+  /** 切换分类：重置 chip 为 "全部" 并重新拉取动态流 */
   const handleCategoryChange = (cat: CategoryKey) => {
     setCategory(cat);
     setChip("全部");
+    void loadFeed(cat);
   };
 
   /** FAB：脉冲动画 + 滚动聚焦搜索框 */
@@ -112,6 +182,18 @@ export default function CommunityPage() {
       input.focus();
       input.scrollIntoView({ behavior: "smooth", block: "center" });
     }
+  };
+
+  /** 发布提交：写入 community_posts 并进入待审，由 Admin 审核后展示 */
+  const handlePublish = async (type: PublishType, data: Record<string, string>) => {
+    const input = buildPublishInput(type, data);
+    const result = await createCommunityPostAction(input);
+    if (result.error) {
+      message.error(result.error);
+      return;
+    }
+    setPublishModal({ ...publishModal, open: false });
+    message.success("已提交，审核通过后展示");
   };
 
   return (
@@ -194,9 +276,20 @@ export default function CommunityPage() {
       {/* ===== 瀑布流 + 侧栏 ===== */}
       <div className="xhs-layout">
         <div className="xhs-feed">
-          {posts.map((post) => (
-            <FeedCard key={post.id} post={post} />
-          ))}
+          {feedLoading ? (
+            <div className="xhs-feed-state">动态加载中…</div>
+          ) : feedError ? (
+            <div className="xhs-feed-state error">
+              <span>{feedError}</span>
+              <button type="button" onClick={() => void loadFeed(category)}>
+                重试
+              </button>
+            </div>
+          ) : posts.length === 0 ? (
+            <div className="xhs-feed-state">暂无内容</div>
+          ) : (
+            posts.map((post) => <FeedCard key={post.id} post={post} />)
+          )}
         </div>
 
         <SidebarWidgets topics={topics} authors={authors} rank={rank} />
@@ -218,12 +311,7 @@ export default function CommunityPage() {
         open={publishModal.open}
         type={publishModal.type}
         onClose={() => setPublishModal({ ...publishModal, open: false })}
-        onSubmit={(data) => {
-          // Mock 提交成功
-          console.log("发布数据:", data);
-          setPublishModal({ ...publishModal, open: false });
-          message.success("发布成功！");
-        }}
+        onSubmit={(data) => void handlePublish(publishModal.type, data)}
       />
     </section>
   );

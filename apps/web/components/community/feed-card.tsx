@@ -67,6 +67,13 @@ export default function FeedCard({ post, onCardClick }: FeedCardProps) {
     ? { bottom: 36 }
     : undefined;
 
+  /** 有真实封面图时覆盖 CSS 渐变兜底，保留底部压暗渐变以保证标题可读 */
+  const coverImageStyle: CSSProperties | undefined = post.coverImageUrl
+    ? {
+        backgroundImage: `linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, 0.78) 100%), url("${post.coverImageUrl}")`,
+      }
+    : undefined;
+
   return (
     <div
       className={`xhs-card${isTextCard ? " text-card" : ""}`}
@@ -74,7 +81,10 @@ export default function FeedCard({ post, onCardClick }: FeedCardProps) {
     >
       {/* 封面（纯文字卡无封面） */}
       {post.cover ? (
-        <div className={`xc-cover ${post.cover.variant} ${post.cover.height}`}>
+        <div
+          className={`xc-cover ${post.cover.variant} ${post.cover.height}${post.coverImageUrl ? " has-image" : ""}`}
+          style={coverImageStyle}
+        >
           <span className={`xc-badge ${post.badge.variant}`}>{post.badge.label}</span>
           {post.stamp ? <span className="xc-stamp">{post.stamp}</span> : null}
           {post.cover.title ? (

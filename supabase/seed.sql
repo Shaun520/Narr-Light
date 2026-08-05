@@ -36,10 +36,11 @@ INSERT INTO auth.users (
 )
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.users (id, phone, nickname, free_quota_used, free_quota_limit, plan_type)
+-- 注意：004_email_auth.sql 已将 users.phone 改名为 users.email，这里使用 email 列
+INSERT INTO public.users (id, email, nickname, free_quota_used, free_quota_limit, plan_type)
 VALUES (
   '00000000-0000-0000-0000-000000000001',
-  '13800138000',
+  'test_author@narrlight.demo',
   '测试作者',
   3,
   10,
@@ -821,9 +822,211 @@ INSERT INTO public.difficulty_assessments (
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
+-- 创作社区示例帖子（依赖 033_community_posts.sql）
+-- 作者复用「测试作者」，覆盖 已上架/待审 状态供联调
+-- ============================================================
+INSERT INTO public.community_posts (
+  id, author_id, script_id, post_type, title, content, tags,
+  cover_variant, cover_title, seat_filled, seat_total,
+  like_count, comment_count, status
+) VALUES
+  (
+    'd1000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
+    'a0000000-0000-0000-0000-000000000001',
+    'rec',
+    '古镇迷案：清末江南古镇的一夜迷局',
+    '沈家一夜间家主暴毙，六位身份各异之人齐聚沈府，看似平静的水面下暗流涌动。',
+    ARRAY['硬核','古风','6人'],
+    'c1',
+    '古镇迷案',
+    0, 0,
+    128, 24,
+    'published'
+  ),
+  (
+    'd1000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'carpool',
+    '周六 19:00 · 上海徐汇 · 古镇迷案',
+    '已有 2 人，求 4 位车友，DM 经验丰富，新手友好。',
+    ARRAY['同城','上海','6人'],
+    'c5',
+    '上海 · 周末拼车',
+    2, 6,
+    18, 6,
+    'published'
+  ),
+  (
+    'd1000000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'review',
+    '古镇迷案测评：核心诡计惊艳，时序仍需打磨',
+    '整体体验在线，线索链完整，但第二幕节奏稍慢，期待正式版优化。',
+    ARRAY['测评','硬核'],
+    'c2',
+    '古镇迷案',
+    0, 0,
+    56, 12,
+    'published'
+  ),
+  (
+    'd1000000-0000-0000-0000-000000000004',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'ask',
+    '新手作者求助：古风本的伏笔应该埋多深？',
+    '第一本写到第二幕卡住了，担心线索太明显玩家秒破，又怕太隐晦复盘时被骂强行反转。',
+    ARRAY['创作','古风','新手作者'],
+    'c6',
+    '创作求助',
+    0, 0,
+    0, 0,
+    'reviewing'
+  )
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
+-- 小红书热门剧本杀推荐帖（依赖 033_community_posts.sql + 034_community_post_cover_image.sql）
+-- 内容与口碑摘录自小红书公开笔记（通过搜索引擎索引获取）；
+-- 封面图来自千岛剧本杀（treasure.qiandaocdn.com）对应剧本 spu 详情页主视觉，
+-- 已上传到 Supabase Storage 公开桶 community-covers（千岛 CDN 有 Referer 防盗链，
+-- 不能直接热链；Supabase 公开 URL 无此限制），图片版权归各剧本发行方/千岛所有。
+-- ============================================================
+INSERT INTO public.community_posts (
+  id, author_id, script_id, post_type, title, content, tags,
+  cover_variant, cover_title, cover_image_url, seat_filled, seat_total,
+  like_count, comment_count, status
+) VALUES
+  (
+    'd2000000-0000-0000-0000-000000000001',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '雪乡连环杀人事件',
+    '年三十，北道河，村里出了个杀人魔，杀了一个又一个。前期欢乐破冰，中间高能不断，最后的演绎还原让人汗毛竖立——小红书新手入坑必玩神作。',
+    ARRAY['现代','推理','惊悚','6人','★4.5'],
+    'c1',
+    '雪乡连环杀人事件',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/xuexiang.jpg',
+    0, 0,
+    326, 58,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000002',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '告别诗',
+    '「那些没说出口的告别，最后都成了扎进心脏的倒刺。」青春疼痛文学天花板，3男3女多线情感核弹，小红书口碑常青树，打完容易哭崩。',
+    ARRAY['情感','青春','6人','3.5h','★4.6'],
+    'c2',
+    '告别诗',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/gaobie.jpg',
+    0, 0,
+    412, 96,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000003',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '病娇男孩的精分日记',
+    '通过案件与主人公的日记串联全部剧情，微恐还原本，阅读量对新手友好；封闭本设定，凶手自己都不知道自己是凶手。',
+    ARRAY['惊悚','微恐','还原','新手','★4.5'],
+    'c3',
+    '病娇男孩的精分日记',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/bingjiao.jpg',
+    0, 0,
+    264, 47,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000004',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '猫岛谋杀循环',
+    '日式推理还原经典，开放式平行解答，反转沉浸结局。整座岛上没有一个正常人，小红书玩家评价：打完直呼变态。',
+    ARRAY['推理','日式','还原','★4.6'],
+    'c4',
+    '猫岛谋杀循环',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/maodao.jpg',
+    0, 0,
+    289, 61,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000005',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '年轮',
+    '盒装硬核本的看门之作，几乎没有赘语，每一句话都暗藏联系。福尔摩斯式的复古探案感，被称作硬核新手的毕业考试。',
+    ARRAY['硬核','变格','推凶','★4.5'],
+    'c5',
+    '年轮',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/nianlun.jpg',
+    0, 0,
+    238, 39,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000006',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '月落洼',
+    '豪门惊情系列口碑神作。「我宁可相信这世上有鬼，也不相信这种闻所未闻的事。」还原部分极其精彩，老本里依然能打。',
+    ARRAY['民国','豪门','还原','★4.6'],
+    'c6',
+    '月落洼',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/yueluowa.jpg',
+    0, 0,
+    305, 72,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000007',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '马丁内斯死在惊奇馆',
+    '三大密室建筑诡计天花板，巨人馆旋转坠亡案堪称惊艳。惊奇之卷预知未来，候选人选拔全程高能，硬核玩家必打。',
+    ARRAY['硬核','建筑诡计','密室','★4.4'],
+    'c7',
+    '马丁内斯死在惊奇馆',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/madineisi.jpg',
+    0, 0,
+    197, 33,
+    'published'
+  ),
+  (
+    'd2000000-0000-0000-0000-000000000008',
+    '00000000-0000-0000-0000-000000000001',
+    NULL,
+    'rec',
+    '流氓叙事',
+    '2025 上半年单月票房破百万的城限情感本。沉浸式互动剧场 + 宿命虐恋 + 全员立体人设，小红书玩家反馈打完后劲超大。',
+    ARRAY['情感','城限','演绎','虐恋','★4.6'],
+    'c8',
+    '流氓叙事',
+    'https://icztftifjqxytlghdubx.supabase.co/storage/v1/object/public/community-covers/liumang.jpg',
+    0, 0,
+    358, 84,
+    'published'
+  )
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================================
 -- 演示数据结束
 -- 共插入：1 用户 + 1 剧本 + 6 角色 + 3 幕 + 7 场景 + 13 线索
 --         + 9 人物关系 + 11 时间线事件 + 1 版本快照
 --         + 1 生成任务 + 1 校验报告 + 1 难度评估
+--         + 12 社区帖子（含已上架与待审、小红书热门剧本推荐）
 -- 以上为「古镇迷案」完整演示数据，可用于前端联调与功能验证。
 -- ============================================================

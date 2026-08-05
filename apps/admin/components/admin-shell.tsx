@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Library,
   LogOut,
+  MessagesSquare,
   Settings,
   ShieldAlert,
   Users,
@@ -40,7 +41,10 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
   },
   {
     title: "审核运营",
-    items: [{ href: "/moderation", label: "社区审核", Icon: ShieldAlert }],
+    items: [
+      { href: "/moderation", label: "社区审核", Icon: ShieldAlert },
+      { href: "/moderation/posts", label: "社区内容", Icon: MessagesSquare },
+    ],
   },
   {
     title: "系统",
@@ -73,7 +77,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             <div className="admin-nav-section" key={section.title}>
               <div className="admin-nav-title">{section.title}</div>
               {section.items.map(({ href, label, Icon }) => {
-                const active = pathname === href || pathname.startsWith(`${href}/`);
+                const active = pathname === href;
                 return (
                   <Link
                     className={`admin-nav-item${active ? " active" : ""}`}

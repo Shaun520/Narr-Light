@@ -151,6 +151,33 @@ export interface Database {
         Insert: Omit<Database["public"]["Tables"]["characters"]["Row"], "created_at"> & { created_at?: string };
         Update: Partial<Database["public"]["Tables"]["characters"]["Row"]>;
       };
+      community_posts: {
+        Row: {
+          id: string;
+          author_id: string;
+          script_id: string | null;
+          post_type: "carpool" | "review" | "guide" | "rec" | "ask" | "talk";
+          title: string;
+          content: string;
+          tags: string[];
+          cover_variant: "c1" | "c2" | "c3" | "c4" | "c5" | "c6" | "c7" | "c8";
+          cover_title: string;
+          cover_image_url: string | null;
+          seat_filled: number;
+          seat_total: number;
+          like_count: number;
+          comment_count: number;
+          status: "draft" | "reviewing" | "published" | "hidden" | "rejected";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Omit<Database["public"]["Tables"]["community_posts"]["Row"], "id" | "created_at" | "updated_at"> & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["community_posts"]["Row"]>;
+      };
       player_packages: {
         Row: {
           id: string;

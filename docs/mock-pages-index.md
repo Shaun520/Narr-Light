@@ -33,7 +33,7 @@
 | `/scripts` | 剧本列表 | 卡片网格 + 状态/进度展示 | 无剧本时显示空状态引导 |
 | `/scripts/new` | 新建剧本 | 双栏布局 + 创建方式选择 + 9 字段表单 + 参数预览 | 表单提交需登录态；UI 可直接预览 |
 | `/generate` | 剧本 AI 生成 | 参数表单 + 流式生成面板 | Mock 流式输出（`MOCK_LINES` 逐行推送） |
-| `/community` | 创作社区 | 7 分类 tab + 瀑布流 + 侧栏榜单 + 脉搏统计 | `community-service` 返回 `MOCK_POSTS`/`MOCK_TOPICS` 等 |
+| `/community` | 创作社区 | 7 分类 tab + 瀑布流 + 侧栏榜单 + 脉搏统计 | 动态流来自真实 `community_posts`（仅已上架），侧栏话题/榜单仍为 Mock |
 
 ### 2.2 编辑器主页面
 
@@ -186,7 +186,7 @@ http://localhost:3000/editor/<scriptId>/illustrations
 | 人物关系 | 编辑器子页组件 | `character_relations` 数据接入仍待补齐 |
 | 插画生成 | 编辑器子页组件 | 生成任务服务仍待接入 |
 | 生成页 | `app/(dashboard)/generate/page.tsx` | `DEFAULT_PARAMS` / `MOCK_LINES` |
-| 社区 | `lib/services/community-service.ts` | `MOCK_POSTS` / `MOCK_TOPICS` / `MOCK_AUTHORS` / `MOCK_RANK` / `MOCK_PULSE` |
+| 社区 | `app/(dashboard)/community/actions.ts` + `lib/services/community-service.ts` | 动态流：真实 `community_posts`（审核制）；侧栏话题/作者榜/剧本榜/统计：Mock |
 | 通知 | `lib/services/notification-service.ts` | 内联 Mock 通知列表 |
 | 账号设置 | `app/(dashboard)/settings/page.tsx` | 开发期 Mock 保存 |
 | 额度管理 | `app/(dashboard)/settings/quota/page.tsx` | 开发期 Mock 套餐数据 |

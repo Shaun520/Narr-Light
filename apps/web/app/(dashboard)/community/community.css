@@ -267,6 +267,10 @@
   display: block;
   overflow: hidden;
 }
+.xc-cover.has-image {
+  background-size: cover;
+  background-position: center;
+}
 .xc-cover.c1 {
   background: linear-gradient(180deg, transparent 35%, rgba(0, 0, 0, 0.78) 100%),
     linear-gradient(135deg, rgba(58, 42, 26, 0.5), rgba(26, 20, 16, 0.7)),
@@ -914,4 +918,29 @@
     width: 48px;
     height: 48px;
   }
+}
+
+/* ===================== 动态流加载 / 空态 / 错误态 ===================== */
+.xhs-feed-state {
+  column-span: all;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 180px;
+  color: var(--muted, #8a8a8a);
+  font-size: 14px;
+}
+
+.xhs-feed-state.error {
+  color: var(--blood, #8a1c1c);
+}
+
+.xhs-feed-state button {
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 4px 14px;
+  cursor: pointer;
 }
