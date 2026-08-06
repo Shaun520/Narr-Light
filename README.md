@@ -4,6 +4,10 @@
 
 这是一个**AI 驱动的剧本杀全生命周期一站式平台**，覆盖「创作辅助 - 内容生产 - 分发变现 - 用户社区」全链路，核心是用 AI 解决剧本杀行业「创作门槛高、生产周期长、美术成本高、逻辑校验难」四大痛点。
 
+### 产品宣传片
+
+<video src="https://raw.githubusercontent.com/Shaun520/Narr-Light/assets/promo-video/project/out/promo.mp4" controls width="100%"></video>
+
 ---
 
 ## 多端架构
