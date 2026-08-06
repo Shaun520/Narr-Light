@@ -6,7 +6,7 @@
 
 ### 产品宣传片
 
-<video src="https://raw.githubusercontent.com/Shaun520/Narr-Light/assets/promo-video/project/out/promo.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/c5a54340-7b81-4ee4-803f-bac46d26f0e4
 
 ---
 
