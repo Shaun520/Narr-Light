@@ -4,11 +4,21 @@ import { getCachedUser } from '@/lib/queries/dashboard-queries';
 import { ManualPaymentService } from '@/lib/services/manual-payment-service';
 import './admin.css';
 
-async function approveOrder(formData: FormData) {
-  'use server';
-  if (String(formData.get('token') ?? '') !== process.env.MANUAL_PAYMENT_ADMIN_TOKEN) {
+const DEFAULT_ADMIN_TOKEN = 'change-me-in-local-dev';
+
+function assertAdminToken(input: string): void {
+  const configured = process.env.MANUAL_PAYMENT_ADMIN_TOKEN?.trim() ?? '';
+  if (!configured || configured === DEFAULT_ADMIN_TOKEN || configured.length < 16) {
+    throw new Error('审核口令未正确配置，请联系管理员');
+  }
+  if (input !== configured) {
     throw new Error('invalid token');
   }
+}
+
+async function approveOrder(formData: FormData) {
+  'use server';
+  assertAdminToken(String(formData.get('token') ?? ''));
   const orderId = String(formData.get('orderId') ?? '');
   const service = new ManualPaymentService();
   await service.approveOrder({
@@ -20,9 +30,7 @@ async function approveOrder(formData: FormData) {
 
 async function rejectOrder(formData: FormData) {
   'use server';
-  if (String(formData.get('token') ?? '') !== process.env.MANUAL_PAYMENT_ADMIN_TOKEN) {
-    throw new Error('invalid token');
-  }
+  assertAdminToken(String(formData.get('token') ?? ''));
   const orderId = String(formData.get('orderId') ?? '');
   const reason = String(formData.get('reason') ?? '未说明');
   const service = new ManualPaymentService();
