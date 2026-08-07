@@ -88,47 +88,140 @@ NarrLight/
 
 ## 快速开始
 
-### 环境要求
+### 1. 环境要求
 
-- Node.js 20+
-- pnpm 10.12.1+
-- Supabase CLI（本地开发）
+| 依赖 | 版本 | 安装方式 |
+|------|------|----------|
+| **Node.js** | 20+ | `nvm install 20 && nvm use 20` |
+| **pnpm** | 10.12.1+ | `corepack enable && corepack prepare pnpm@10.12.1 --activate` |
+| **Supabase CLI** | 最新 | `npm i -g supabase`（数据库迁移用） |
 
-### 安装依赖
+### 2. 克隆并安装依赖
 
 ```bash
+git clone https://github.com/<your-org>/NarrLight.git
+cd NarrLight
 pnpm install
 ```
 
-### 启动开发服务器
+### 3. 配置环境变量
+
+项目使用 **Supabase Cloud** 作为后端，需要先在 [supabase.com](https://supabase.com) 创建一个免费项目。
+
+#### 3.1 获取 Supabase 凭据
+
+登录 Supabase Dashboard → 选择你的项目 → 左侧 **Project Settings → API**，复制以下三个值：
+
+| 变量 | 说明 | 位置 |
+|------|------|------|
+| `NEXT_PUBLIC_SUPABASE_URL` | 项目 API 地址 | `Settings → API → Project URL` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | 匿名公钥（前端用） | `Settings → API → anon public` |
+| `SUPABASE_SERVICE_ROLE_KEY` | 服务密钥（后端用，**保密**） | `Settings → API → service_role` |
+
+#### 3.2 创建 Web 端环境变量
 
 ```bash
-# Web 端
+cp apps/web/.env.example apps/web/.env.local
+```
+
+编辑 `apps/web/.env.local`，**必填项**如下：
+
+```bash
+# ============ Supabase（必填）============
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+
+# ============ AI 生成模式 ============
+# mock = 本地占位数据，无需 API Key 即可跑通
+# real = 调用真实 AI Provider，需配置下方对应 Key
+AI_GENERATION_MODE=mock
+```
+
+**可选项**（`AI_GENERATION_MODE=real` 时按需配置）：
+
+```bash
+# DeepSeek（主力文本模型）
+DEEPSEEK_API_KEY=sk-xxx
+
+# Kimi / Moonshot
+KIMI_API_KEY=xxx
+KIMI_BASE_URL=https://api.moonshot.ai/v1
+KIMI_MODEL_ID=kimi-k3
+
+# OpenAI（图片生成）
+OPENAI_API_KEY=sk-xxx
+OPENAI_IMAGE_MODEL=gpt-image-1.5
+OPENAI_BASE_URL=https://api.openai.com/v1
+
+# 应用地址（可选，有默认值）
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+#### 3.3 创建 Admin 端环境变量
+
+```bash
+cp apps/admin/.env.example apps/admin/.env.local
+```
+
+编辑 `apps/admin/.env.local`：
+
+```bash
+NEXT_PUBLIC_ADMIN_APP_URL=http://localhost:3001
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...
+DEEPSEEK_API_KEY=sk-xxx
+NEXT_PUBLIC_WEB_APP_URL=http://localhost:3000
+```
+
+> **提示**：Web 端和 Admin 端共享同一个 Supabase 项目，`SUPABASE_URL` 和 `SUPABASE_SERVICE_ROLE_KEY` 保持一致。
+
+#### 3.4 初始化数据库
+
+确保 Supabase CLI 已安装，然后执行迁移：
+
+```bash
+# 链接到你的 Supabase 项目（首次执行）
+supabase link --project-ref <your-project-ref>
+
+# 运行数据库迁移
+supabase db push
+```
+
+> 项目引用 ID（`project-ref`）在 Supabase Dashboard → **Settings → General** 中查看。
+
+### 4. 启动开发服务器
+
+```bash
+# 终端 1：Web 端（创作者工作台） → http://localhost:3000
 pnpm dev:web
 
-# Admin 端
+# 终端 2：Admin 端（运营后台） → http://localhost:3001
 pnpm dev:admin
 ```
 
-### 构建生产版本
+### 5. 构建与检查
 
 ```bash
-# Web 端
-pnpm build:web
+# 构建生产版本
+pnpm build:web    # Web 端
+pnpm build:admin  # Admin 端
 
-# Admin 端
-pnpm build:admin
+# 代码检查
+pnpm lint:web     # Web 端
+pnpm lint:admin   # Admin 端
 ```
 
-### 代码检查
+### 6. 常见问题
 
-```bash
-# Web 端
-pnpm lint:web
-
-# Admin 端
-pnpm lint:admin
-```
+| 问题 | 原因 & 解决方案 |
+|------|----------------|
+| `supabase: command not found` | 未安装 Supabase CLI：`npm i -g supabase` |
+| `Invalid API key` | `.env.local` 中的 Supabase Key 不正确，回 Dashboard 重新复制 |
+| 端口 3000/3001 被占用 | `PORT=3002 pnpm dev:web` 或关闭占用进程 |
+| AI 调用报错 | 先设 `AI_GENERATION_MODE=mock` 跑通流程，再切 `real` |
+| 数据库表不存在 | 执行 `supabase db push` 完成迁移 |
+| Admin 端无法登录 | 确认 `admin_users` 表中已添加你的邮箱 |
 
 ---
 
