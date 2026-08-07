@@ -14,17 +14,12 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
-  Clock,
-  CreditCard,
   FileText,
-  FlaskConical,
-  Image as ImageIcon,
   LayoutDashboard,
   LogOut,
   Menu,
   MessageCircle,
   Sparkles,
-  Users,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import {
@@ -36,7 +31,7 @@ import {
   DashboardProvider,
 } from '@/lib/contexts/dashboard-context';
 import { GlobalSearch } from '@/components/common/global-search';
-import { NavItem } from '@/components/common/nav-item';
+import { EditorNavLinks } from '@/components/common/editor-nav-links';
 import { NotificationPanel } from '@/components/common/notification-panel';
 import { ScriptSwitcher } from '@/components/common/script-switcher';
 import { SettingsMenu } from '@/components/common/settings-menu';
@@ -92,10 +87,6 @@ export default async function DashboardLayout({
     // 新创作点表未迁移时，保留旧额度展示，避免开发环境侧栏白屏。
   }
   const currentScript = scriptsTyped[0] ?? null;
-  // 无剧本时，编辑器子功能统一引导到生成页；有剧本时指向当前剧本对应子页。
-  const hasScript = currentScript != null;
-  const editorBase = hasScript ? `/editor/${currentScript.id}` : '/generate';
-  const navHref = (sub: string) => (hasScript ? `${editorBase}/${sub}` : '/generate');
 
   return (
     <div className="app">
@@ -131,39 +122,7 @@ export default async function DashboardLayout({
             <span>剧本编辑</span>
           </Link>
 
-          <div className="nav-section-title">校验</div>
-          <NavItem
-            href={navHref('timeline')}
-            icon={<Clock />}
-            label="时间线校验"
-            disabled={!hasScript}
-          />
-          <NavItem
-            href={navHref('validation')}
-            icon={<FlaskConical />}
-            label="逻辑校验"
-            disabled={!hasScript}
-          />
-
-          <div className="nav-section-title">物料</div>
-          <NavItem
-            href={navHref('clues')}
-            icon={<CreditCard />}
-            label="线索卡管理"
-            disabled={!hasScript}
-          />
-          <NavItem
-            href={navHref('relations')}
-            icon={<Users />}
-            label="人物关系"
-            disabled={!hasScript}
-          />
-          <NavItem
-            href={navHref('illustrations')}
-            icon={<ImageIcon />}
-            label="插画生成"
-            disabled={!hasScript}
-          />
+          <EditorNavLinks fallbackScriptId={currentScript?.id} />
 
           <div className="nav-section-title">社区</div>
           <Link href="/community" className="nav-item" data-tooltip="创作社区" aria-label="创作社区" title="创作社区">
