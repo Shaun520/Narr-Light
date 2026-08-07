@@ -265,31 +265,16 @@ async function handleRequest(request: Request): Promise<Response> {
           return;
         }
 
-        // 5. 入库：清空旧人物 + 插入新人物 + 插入 generation_tasks 记录
-        // a. 清空旧人物
-        const { error: deleteError } = await supabase
-          .from('characters')
-          .delete()
-          .eq('script_id', scriptId);
-        if (deleteError) throw new Error(`清空旧人物失败: ${deleteError.message}`);
-
-        // b. 插入新人物
-        const charactersToInsert = json.characters.map((c: CharacterProfile, index: number) => ({
-          script_id: scriptId,
-          name: c.name,
-          role_identity: c.roleIdentity,
-          gender: c.gender,
-          age: c.age,
-          personality: c.personality,
-          background_story: c.backgroundStory,
-          personal_task: c.personalTask,
-          is_murderer: c.isMurderer,
-          sort_order: index,
-        }));
-        const { error: insertError } = await supabase
-          .from('characters')
-          .insert(charactersToInsert);
-        if (insertError) throw new Error(`人物入库失败: ${insertError.message}`);
+        // 5. 入库：通过 RPC 在单个数据库事务内"清空旧人物 + 插入新人物"，
+        //    避免删除成功后插入失败导致的中间态数据丢失。
+        const { error: replaceError } = await supabase.rpc(
+          'narr_replace_characters',
+          {
+            p_script_id: scriptId,
+            p_characters: json.characters,
+          },
+        );
+        if (replaceError) throw new Error(`人物入库失败: ${replaceError.message}`);
 
         // c. 插入 generation_tasks 记录
         const { error: taskError } = await supabase

@@ -314,32 +314,16 @@ async function handleRequest(request: Request): Promise<Response> {
           return;
         }
 
-        // 5. 入库：清空旧线索 + 插入新线索 + 插入 generation_tasks 记录
-        // a. 清空旧线索
-        const { error: deleteError } = await supabase
-          .from('clues')
-          .delete()
-          .eq('script_id', scriptId);
-        if (deleteError) throw new Error(`清空旧线索失败: ${deleteError.message}`);
-
-        // b. 插入新线索（遍历 json.clues，映射字段到 clues 表的 snake_case）
-        const cluesToInsert = json.clues.map((clue: Clue, index: number) => ({
-          script_id: scriptId,
-          title: clue.title,
-          content: clue.content,
-          clue_type: clue.clueType,
-          search_round: clue.searchRound,
-          location: clue.location,
-          related_character_names: clue.relatedCharacterNames,
-          is_distractor: clue.isDistractor,
-          is_key_clue: clue.isKeyClue,
-          unlock_condition: clue.unlockCondition,
-          sort_order: index,
-        }));
-        const { error: insertError } = await supabase
-          .from('clues')
-          .insert(cluesToInsert);
-        if (insertError) throw new Error(`线索入库失败: ${insertError.message}`);
+        // 5. 入库：通过 RPC 在单个数据库事务内"清空旧线索 + 插入新线索"，
+        //    避免删除成功后插入失败导致的中间态数据丢失。
+        const { error: replaceError } = await supabase.rpc(
+          'narr_replace_clues',
+          {
+            p_script_id: scriptId,
+            p_clues: json.clues,
+          },
+        );
+        if (replaceError) throw new Error(`线索入库失败: ${replaceError.message}`);
 
         // c. 插入 generation_tasks 记录
         const { error: taskError } = await supabase

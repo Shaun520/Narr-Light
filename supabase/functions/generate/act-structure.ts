@@ -254,44 +254,19 @@ async function handleRequest(request: Request): Promise<Response> {
           return;
         }
 
-        // 5. 入库：清空旧 acts（级联删除 scenes）+ 插入新 acts + scenes + 任务记录
-        // a. 清空旧 acts（scenes 通过外键 ON DELETE CASCADE 自动级联删除）
-        const { error: deleteActsError } = await supabase
-          .from('acts')
-          .delete()
-          .eq('script_id', scriptId);
-        if (deleteActsError) throw new Error(`清空旧幕次失败: ${deleteActsError.message}`);
-
-        // b. 逐幕插入 acts + 关联 scenes（scenes 需要外键 act_id，必须先插入 act 获取 id）
+        // 5. 入库：通过 RPC 在单个数据库事务内"清空旧 acts（级联删除 scenes）+ 插入新 acts + scenes"，
+        //    避免删除成功后插入失败导致的中间态数据丢失。
+        const { error: replaceError } = await supabase.rpc(
+          'narr_replace_act_structure',
+          {
+            p_script_id: scriptId,
+            p_acts: json.acts,
+          },
+        );
+        if (replaceError) throw new Error(`分幕结构入库失败: ${replaceError.message}`);
         let totalScenes = 0;
         for (const act of json.acts) {
-          // 插入 act
-          const { data: actData, error: actInsertError } = await supabase
-            .from('acts')
-            .insert({
-              script_id: scriptId,
-              title: act.title,
-              sort_order: act.sortOrder,
-              content: act.content,
-            })
-            .select('id')
-            .single();
-          if (actInsertError) throw new Error(`幕次入库失败: ${actInsertError.message}`);
-          const actId = actData?.id as string;
-
-          // 插入该 act 的所有 scenes
-          const scenesToInsert = act.scenes.map(scene => ({
-            act_id: actId,
-            title: scene.title,
-            location: scene.location,
-            content: scene.content,
-            sort_order: scene.sortOrder,
-          }));
-          const { error: sceneInsertError } = await supabase
-            .from('scenes')
-            .insert(scenesToInsert);
-          if (sceneInsertError) throw new Error(`场景入库失败: ${sceneInsertError.message}`);
-          totalScenes += scenesToInsert.length;
+          totalScenes += Array.isArray(act.scenes) ? act.scenes.length : 0;
         }
 
         // c. 插入 generation_tasks 记录
