@@ -34,3 +34,5 @@ tmp/
 .claude/
 promo-video/
 .firecrawl/
+.agents/
+video-shotcraft/
