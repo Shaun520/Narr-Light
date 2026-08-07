@@ -13,13 +13,20 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background-color: #eaddcf;
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(138, 28, 28, 0.04), transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(92, 66, 38, 0.06), transparent 50%),
+    repeating-linear-gradient(90deg, transparent, transparent 2px, rgba(26, 18, 11, 0.015) 2px, rgba(26, 18, 11, 0.015) 4px),
+    linear-gradient(135deg, #eaddcf 0%, #c9b8a4 100%);
+  background-attachment: fixed;
 }
 
 /* ===================== 认证卡片 ===================== */
 .auth-card {
   width: 100%;
   max-width: 380px;
-  background: var(--paper-light);
+  background: #f3e9db;
   border: 1px solid rgba(122, 92, 58, 0.28);
   border-radius: 6px;
   box-shadow: var(--shadow-md);
@@ -88,7 +95,7 @@
   padding: 0 12px;
   font-size: 14px;
   color: var(--ink);
-  background: var(--paper-lighter);
+  background: #fdf8f0;
   border: 1px solid rgba(122, 92, 58, 0.35);
   border-radius: 4px;
   outline: none;
@@ -173,7 +180,7 @@
   border: 1px solid rgba(122, 92, 58, 0.35);
   border-radius: 4px;
   overflow: hidden;
-  background: var(--paper-lighter);
+  background: #fdf8f0;
   transition: border-color 0.18s, box-shadow 0.18s;
 }
 .phone-input:focus-within {
@@ -223,7 +230,7 @@
   font-size: 14px;
   letter-spacing: 0.18em;
   color: var(--ink);
-  background: var(--paper-lighter);
+  background: #fdf8f0;
   border: 1px solid rgba(122, 92, 58, 0.35);
   border-radius: 4px;
   outline: none;
