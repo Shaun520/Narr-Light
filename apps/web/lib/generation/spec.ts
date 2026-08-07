@@ -31,8 +31,8 @@ export function buildGenerationSpecWithConfig(
   input: GenerationSpecInput,
   config: GenerationSpecConfig,
 ): GenerationSpec {
-  const duration = clamp(input.duration, 2, 8);
-  const players = clamp(input.players, 4, 8);
+  const duration = clampFinite(input.duration, 4, 2, 8);
+  const players = clampFinite(input.players, 6, 4, 8);
   const band =
     config.durationBands.find(
       (item) => duration >= item.minDuration && duration <= item.maxDuration,
@@ -42,8 +42,8 @@ export function buildGenerationSpecWithConfig(
   const targetTotalWords = Math.round(
     duration *
       config.baseWordsPerHour *
-      (config.difficultyMultipliers[input.difficulty] ?? 1) *
-      (config.genreMultipliers[input.genre] ?? 1),
+      finiteOne(config.difficultyMultipliers[input.difficulty]) *
+      finiteOne(config.genreMultipliers[input.genre]),
   );
   const scriptsPerPlayer = resolveScriptsPerPlayer(config, actCount);
   const minCharacterScriptWords = Math.round(
@@ -76,8 +76,13 @@ export function formatGenerationSpec(spec: GenerationSpec): string {
   ].join("\n");
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+function clampFinite(value: number, fallback: number, min: number, max: number): number {
+  const safe = Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, safe));
+}
+
+function finiteOne(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 1;
 }
 
 export const DEFAULT_GENERATION_SPEC_CONFIG: GenerationSpecConfig = {

@@ -105,4 +105,33 @@ describe("buildGenerationSpec", () => {
     expect(spec.scriptsPerPlayer).toBe(3);
     expect(spec.totalCharacterScriptCount).toBe(15);
   });
+
+  it("falls back to sane numbers when duration or players are NaN", () => {
+    const spec = buildGenerationSpec({
+      players: Number.NaN,
+      duration: Number.NaN,
+      genre: "hardcore",
+      difficulty: "advanced",
+    });
+
+    expect(spec.actCount).toBeGreaterThan(0);
+    expect(spec.searchRoundCount).toBeGreaterThan(0);
+    expect(spec.minSceneCount).toBeGreaterThan(0);
+    expect(spec.minClueCount).toBeGreaterThan(0);
+    expect(Number.isFinite(spec.minCharacterScriptWords)).toBe(true);
+    expect(spec.totalCharacterScriptCount).toBeGreaterThan(0);
+  });
+
+  it("clamps out-of-range duration and players instead of returning NaN", () => {
+    const spec = buildGenerationSpec({
+      players: 999,
+      duration: 99,
+      genre: "hardcore",
+      difficulty: "advanced",
+    });
+
+    expect(spec.actCount).toBe(6);
+    expect(spec.searchRoundCount).toBe(6);
+    expect(Number.isFinite(spec.minCharacterScriptWords)).toBe(true);
+  });
 });
