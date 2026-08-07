@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ADMIN_SESSION_COOKIE, ADMIN_SESSION_VALUE } from "@/lib/auth/admin";
+import { ADMIN_SESSION_COOKIE, getAdminSessionValue, hasAdminCredentials } from "@/lib/auth/admin";
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const hasAdminSession =
-    request.cookies.get(ADMIN_SESSION_COOKIE)?.value === ADMIN_SESSION_VALUE;
+    hasAdminCredentials() &&
+    request.cookies.get(ADMIN_SESSION_COOKIE)?.value === getAdminSessionValue();
 
   if (!hasAdminSession && pathname !== "/login") {
     const url = request.nextUrl.clone();
