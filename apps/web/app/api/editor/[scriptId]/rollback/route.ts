@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveAuthenticatedUser, isScriptOwned } from '@/lib/api/auth';
 import { VersionService } from '@/lib/services/version-service';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,6 +59,17 @@ async function invalidateValidationResults(supabase: SupabaseClient, scriptId: s
 
 export async function POST(request: Request, { params }: { params: Promise<{ scriptId: string }> }) {
   const { scriptId } = await params;
+
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录状态已失效' }, { status: 401 });
+  }
+  if (user.isBanned) {
+    return NextResponse.json({ error: '账号已被封禁' }, { status: 403 });
+  }
+  if (!(await isScriptOwned(scriptId, user.id))) {
+    return NextResponse.json({ error: '无权访问该剧本' }, { status: 403 });
+  }
 
   let body: unknown;
   try {

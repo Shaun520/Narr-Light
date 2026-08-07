@@ -22,6 +22,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveAuthenticatedUser, isScriptOwned } from '@/lib/api/auth';
 import { parseJSONWithTolerance } from '@/lib/ai/providers/deepseek-provider';
 import { getTextProviderInstance } from '@/lib/services/ai-config-service';
 import {
@@ -215,6 +216,14 @@ function buildMockTimelineEvents(
 }
 
 export async function POST(request: Request) {
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录状态已失效' }, { status: 401 });
+  }
+  if (user.isBanned) {
+    return NextResponse.json({ error: '账号已被封禁' }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -234,6 +243,10 @@ export async function POST(request: Request) {
   }
 
   const { scriptId } = b as unknown as RegenerateRequestBody;
+
+  if (!(await isScriptOwned(scriptId, user.id))) {
+    return NextResponse.json({ error: '无权访问该剧本' }, { status: 403 });
+  }
 
   try {
     const supabase = createAdminClient();

@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import {
+  resolveAuthenticatedUser,
+  isScriptOwned,
+} from '@/lib/api/auth';
+import {
   deleteVersionResponse,
   getVersionPreviewResponse,
 } from './versions/[versionNumber]/route';
@@ -204,6 +208,18 @@ async function loadVersions(supabase: SupabaseClient, scriptId: string): Promise
 
 export async function GET(request: Request, { params }: { params: Promise<{ scriptId: string }> }) {
   const { scriptId } = await params;
+
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录状态已失效' }, { status: 401 });
+  }
+  if (user.isBanned) {
+    return NextResponse.json({ error: '账号已被封禁' }, { status: 403 });
+  }
+  if (!(await isScriptOwned(scriptId, user.id))) {
+    return NextResponse.json({ error: '无权访问该剧本' }, { status: 403 });
+  }
+
   const previewVersion = new URL(request.url).searchParams.get('previewVersion');
   if (previewVersion) {
     return getVersionPreviewResponse(scriptId, previewVersion);
@@ -545,6 +561,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ scri
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ scriptId: string }> }) {
   const { scriptId } = await params;
+
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录状态已失效' }, { status: 401 });
+  }
+  if (user.isBanned) {
+    return NextResponse.json({ error: '账号已被封禁' }, { status: 403 });
+  }
+  if (!(await isScriptOwned(scriptId, user.id))) {
+    return NextResponse.json({ error: '无权访问该剧本' }, { status: 403 });
+  }
+
   const deleteVersion = new URL(request.url).searchParams.get('deleteVersion');
   if (!deleteVersion) {
     return NextResponse.json({ error: 'Missing deleteVersion' }, { status: 400 });

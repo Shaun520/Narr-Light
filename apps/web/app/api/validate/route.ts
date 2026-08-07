@@ -29,6 +29,7 @@ import {
 import type { TimelineEvent } from '@/lib/validation/timeline/extractor';
 import { createClient as createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveAuthenticatedUser, isScriptOwned } from '@/lib/api/auth';
 
 interface ValidateRequestBody {
   scriptId: string;
@@ -99,6 +100,14 @@ function isMissingTableError(error: { code?: string; message?: string } | null):
 }
 
 export async function POST(request: Request) {
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录状态已失效' }, { status: 401 });
+  }
+  if (user.isBanned) {
+    return NextResponse.json({ error: '账号已被封禁' }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -114,6 +123,10 @@ export async function POST(request: Request) {
   }
 
   const { scriptId } = body;
+
+  if (!(await isScriptOwned(scriptId, user.id))) {
+    return NextResponse.json({ error: '无权访问该剧本' }, { status: 403 });
+  }
 
   try {
     // 1. 提取时间线事件

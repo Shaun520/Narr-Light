@@ -64,6 +64,7 @@ import {
 import type { ScriptGenre, ScriptDifficulty } from '@/types';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resolveAuthenticatedUser, isScriptOwned } from '@/lib/api/auth';
 
 /** 服务端 Supabase 客户端类型 */
 type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -382,6 +383,14 @@ function isMissingTableError(error: { code?: string; message?: string } | null):
 }
 
 export async function POST(request: Request) {
+  const user = await resolveAuthenticatedUser(request);
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录状态已失效' }, { status: 401 });
+  }
+  if (user.isBanned) {
+    return NextResponse.json({ error: '账号已被封禁' }, { status: 403 });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -399,6 +408,10 @@ export async function POST(request: Request) {
   }
 
   const { scriptId, reportType } = body;
+
+  if (!(await isScriptOwned(scriptId, user.id))) {
+    return NextResponse.json({ error: '无权访问该剧本' }, { status: 403 });
+  }
 
   // 优先使用 service role admin 客户端绕过 RLS（与 TimelineExtractor 一致；
   // 002_rls_policies 中 script_id 子查询策略在服务端读取时可能返回空集）。
