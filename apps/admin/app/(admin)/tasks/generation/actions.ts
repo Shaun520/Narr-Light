@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
 
 export async function deleteAdminGenerationTasks(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("generation_tasks:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -93,7 +93,7 @@ function normalizeReturnTo(value: string) {
  * 不在此处触发实际生成（admin 端无 LLM 调用能力），新 pending 任务由用户在前端重新触发或由后续 worker 拉起。
  */
 export async function retryAdminGenerationTask(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("generation_tasks:retry:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -176,7 +176,7 @@ export async function retryAdminGenerationTask(formData: FormData) {
  * 注意：admin 端无法直接中断 web 端正在进行的 SSE 流，状态变更后 web 端下次写入会因状态机校验失败而停止。
  */
 export async function cancelAdminGenerationTask(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("generation_tasks:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {

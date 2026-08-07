@@ -9,7 +9,7 @@ import {
   KNOWLEDGE_STAGES,
   QUALITY_RISK_LEVELS,
 } from "@narrlight/shared";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { extractKnowledgeCandidates, parseKnowledgeUpload } from "@/lib/services/knowledge-intake-extractor";
 import { dedupeCandidates, type DedupeReference } from "@/lib/services/knowledge-intake-sanitize";
@@ -20,7 +20,7 @@ const DIFFICULTIES = ["beginner", "intermediate", "advanced", "expert"] as const
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
 
 export async function saveKnowledgeItem(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法保存知识条目。");
 
@@ -66,7 +66,7 @@ export async function saveKnowledgeItem(formData: FormData) {
 }
 
 export async function toggleKnowledgeItem(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法更新知识条目。");
 
@@ -85,7 +85,7 @@ export async function toggleKnowledgeItem(formData: FormData) {
 }
 
 export async function deleteKnowledgeItem(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法删除知识条目。");
 
@@ -100,7 +100,7 @@ export async function deleteKnowledgeItem(formData: FormData) {
 }
 
 export async function clearKnowledgeUsageRecords() {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法清空引用和质检记录。");
 
@@ -117,7 +117,7 @@ export async function clearKnowledgeUsageRecords() {
 }
 
 export async function uploadKnowledgeDocument(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法上传资料。");
 
@@ -275,7 +275,7 @@ async function loadDedupeReferences(supabase: AdminSupabaseClient, currentJobId:
 }
 
 export async function retryKnowledgeExtraction(id: string) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法重试抽取任务。");
 
@@ -330,7 +330,7 @@ export async function retryKnowledgeExtraction(id: string) {
 }
 
 export async function deleteKnowledgeDocument(id: string) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法删除资料。");
   if (!UUID_PATTERN.test(id)) redirect("/knowledge?tab=intake");
@@ -352,7 +352,7 @@ export async function deleteKnowledgeDocument(id: string) {
 }
 
 export async function approveKnowledgeCandidate(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法批准候选知识。");
 
@@ -372,7 +372,7 @@ export async function approveKnowledgeCandidate(formData: FormData) {
 }
 
 export async function updateKnowledgeCandidate(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法更新候选知识。");
 
@@ -410,7 +410,7 @@ export async function updateKnowledgeCandidate(formData: FormData) {
 }
 
 export async function rejectKnowledgeCandidate(formData: FormData) {
-  await requireAdmin();
+  await requirePermission("knowledge:write");
   const supabase = createAdminSupabaseClient();
   if (!supabase) throw new Error("未配置 Supabase service role，无法驳回候选知识。");
 
@@ -465,7 +465,7 @@ export async function getKnowledgeDocumentContent(
   id: string,
 ): Promise<{ content?: string; error?: string }> {
   try {
-    await requireAdmin();
+    await requirePermission("knowledge:read");
     if (!UUID_PATTERN.test(id)) return { error: "资料 ID 不合法" };
 
     const supabase = createAdminSupabaseClient();

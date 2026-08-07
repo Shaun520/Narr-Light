@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -74,7 +74,7 @@ async function resolveCoverImageUrl(
 
 /** 新增社区帖子：管理员选择作者，写入审计日志。 */
 export async function createCommunityPost(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("moderation:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -149,7 +149,7 @@ export async function createCommunityPost(formData: FormData) {
 
 /** 编辑社区帖子：更新内容字段与状态，写入审计日志。 */
 export async function updateCommunityPost(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("moderation:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -241,7 +241,7 @@ export async function updateCommunityPost(formData: FormData) {
  * 写操作必须携带 reason 字段，并记录到 admin_audit_logs。
  */
 export async function changeCommunityPostStatus(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("moderation:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -304,7 +304,7 @@ export async function changeCommunityPostStatus(formData: FormData) {
 
 /** 删除社区帖子，并记录到 admin_audit_logs。 */
 export async function deleteCommunityPost(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("moderation:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {

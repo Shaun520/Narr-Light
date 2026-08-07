@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -19,7 +19,7 @@ function normalizeReturnTo(value: string) {
  * 不在此处触发实际生成，新 pending 任务由用户在前端重新触发。
  */
 export async function retryAdminIllustrationTask(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("illustrations:retry:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -98,7 +98,7 @@ export async function retryAdminIllustrationTask(formData: FormData) {
  * 仅对 status in ('pending','running') 生效，置为 cancelled 并写入 completed_at。
  */
 export async function cancelAdminIllustrationTask(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("illustrations:retry:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {

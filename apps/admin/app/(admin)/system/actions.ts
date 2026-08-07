@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { updateSystemConfig } from "@/lib/services/system-config";
 import type {
   ContentSafetyConfig,
@@ -31,7 +31,7 @@ export async function saveSystemConfig(
   formData: FormData,
 ): Promise<SaveSystemConfigResult> {
   try {
-    const admin = await requireAdmin();
+    const admin = await requirePermission("system:config:write");
 
     const payloadRaw = String(formData.get("payload") ?? "");
     const reason = String(formData.get("reason") ?? "");

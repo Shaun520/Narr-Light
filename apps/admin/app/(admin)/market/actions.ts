@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import {
   createMarketItem,
   deleteMarketItem,
@@ -22,7 +22,7 @@ const VALID_TYPES: MarketItemType[] = ["cover", "scene", "clue", "public", "char
 
 export async function saveMarketItemAction(formData: FormData): Promise<MarketActionResult> {
   try {
-    await requireAdmin();
+    await requirePermission("scripts:write");
 
     const id = String(formData.get("id") ?? "").trim();
     const title = String(formData.get("title") ?? "").trim();
@@ -72,7 +72,7 @@ export async function saveMarketItemAction(formData: FormData): Promise<MarketAc
 
 export async function deleteMarketItemAction(id: string): Promise<MarketActionResult> {
   try {
-    await requireAdmin();
+    await requirePermission("scripts:write");
     if (!id) return { error: "素材 ID 不能为空" };
 
     const result = await deleteMarketItem(id);
@@ -91,7 +91,7 @@ export async function toggleMarketItemActiveAction(
   isActive: boolean,
 ): Promise<MarketActionResult> {
   try {
-    await requireAdmin();
+    await requirePermission("scripts:write");
     if (!id) return { error: "素材 ID 不能为空" };
 
     const result = await setMarketItemActive(id, isActive);

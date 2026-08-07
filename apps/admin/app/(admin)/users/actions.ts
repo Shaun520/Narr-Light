@@ -3,11 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 export async function toggleUserBanStatus(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("users:ban:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -73,7 +73,7 @@ export async function toggleUserBanStatus(formData: FormData) {
 }
 
 export async function adjustUserCredits(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("users:quota:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {

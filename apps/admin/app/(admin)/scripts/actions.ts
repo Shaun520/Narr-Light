@@ -3,13 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/admin";
+import { requirePermission } from "@/lib/auth/admin";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function deleteAdminScripts(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("scripts:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
@@ -101,7 +101,7 @@ function isReviewStatus(value: string): value is ReviewStatus {
  * 不限制源状态，admin 可从任意状态变更为这 4 个目标状态之一。
  */
 export async function changeScriptStatus(formData: FormData) {
-  const admin = await requireAdmin();
+  const admin = await requirePermission("scripts:takedown:write");
   const supabase = createAdminSupabaseClient();
 
   if (!supabase) {
